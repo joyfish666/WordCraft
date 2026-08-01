@@ -1,7 +1,11 @@
-import type { AxiosError } from 'axios'
 import { containerNodeSchema, sceneModelSchema } from '../schemas/model.schema'
 import type { ContainerNode, ModelNode, SceneModel } from '../types/model'
-import { createApiClient, type ApiClientOptions, type ChatMessage } from './api'
+import {
+  createApiClient,
+  describeAxiosError,
+  type ApiClientOptions,
+  type ChatMessage,
+} from './api'
 
 /** 生成链路中的业务错误，code 供 UI 层区分处理 */
 export class ChatGenerationError extends Error {
@@ -173,10 +177,8 @@ export async function generateModelFromChat(
       temperature: 0.2,
     })
   } catch (error) {
-    const detail = (error as AxiosError<{ error?: { message?: string } }>).response?.data?.error
-      ?.message
     throw new ChatGenerationError(
-      detail ? `模型请求失败：${detail}` : '模型请求失败，请检查 API Key、Base URL 与网络',
+      `模型请求失败：${describeAxiosError(error)}。可在设置页点「检测连通性」定位问题。`,
       'http',
     )
   }
