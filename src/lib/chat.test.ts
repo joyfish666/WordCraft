@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ChatGenerationError, extractModelJson, generateModelFromChat } from './chat'
+import {
+  ChatGenerationError,
+  extractModelJson,
+  generateModelFromChat,
+  normalizeModelPayload,
+} from './chat'
 
 const mockPost = vi.fn()
 
@@ -67,6 +72,39 @@ describe('extractModelJson', () => {
   })
 })
 
+describe('normalizeModelPayload', () => {
+  it('接受标准 { version, root } 结构', () => {
+    const normalized = normalizeModelPayload(JSON.parse(validModelJson()))
+    expect(normalized?.root.name).toBe('小屋')
+  })
+
+  it('接受裸 house 容器（自动包装）', () => {
+    const raw = JSON.parse(validModelJson()).root
+    const normalized = normalizeModelPayload(raw)
+    expect(normalized?.root.name).toBe('小屋')
+    expect(normalized?.version).toBe(1)
+  })
+
+  it('接受 { rooms: [...] } 并推断整屋尺寸', () => {
+    const room = JSON.parse(validModelJson()).root.children[0]
+    const normalized = normalizeModelPayload({ rooms: [room], name: '一居室' })
+    expect(normalized?.root.name).toBe('一居室')
+    expect(normalized?.root.children).toHaveLength(1)
+    expect(normalized?.root.dimensions.length).toBeGreaterThan(0)
+  })
+
+  it('接受顶层数组（多个房间）', () => {
+    const { children } = JSON.parse(validModelJson()).root
+    const normalized = normalizeModelPayload(children)
+    expect(normalized?.root.children).toHaveLength(children.length)
+  })
+
+  it('无法识别时返回 null', () => {
+    expect(normalizeModelPayload({ foo: 'bar' })).toBeNull()
+    expect(normalizeModelPayload(null)).toBeNull()
+  })
+})
+
 describe('generateModelFromChat', () => {
   it('校验通过时返回模型与回复', async () => {
     mockPost.mockResolvedValue({
@@ -83,6 +121,17 @@ describe('generateModelFromChat', () => {
     if (room.type === 'room') {
       expect(room.children[0].type).toBe('furniture')
     }
+  })
+
+  it('模型输出裸容器（无 root 包装）时也能正常生成', async () => {
+    const bareRoot = JSON.parse(validModelJson()).root
+    mockPost.mockResolvedValue({ data: { choices: [{ message: { content: JSON.stringify(bareRoot) } }] } })
+    const result = await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: '设计一个卧室',
+    })
+    expect(result.model.root.name).toBe('小屋')
   })
 
   it('请求体包含系统提示与历史对话', async () => {
