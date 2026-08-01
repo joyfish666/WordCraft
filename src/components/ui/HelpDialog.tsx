@@ -30,13 +30,13 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
             <strong>退出聚焦</strong> — 点击整屋地板、面包屑「房屋」，或点空白处
           </li>
           <li>
-            <strong>移动模块</strong> — 选中模块后，用键盘方向键或状态栏按钮移动
+            <strong>移动视角</strong> — 键盘方向键或状态栏「视角」按钮平移视角
           </li>
           <li>
-            <strong>方向键</strong> — ←/→ 左右（X），↑/↓ 上下（Y），Shift+↑/↓ 前后（Z）
+            <strong>方向键</strong> — ←/→ 左右平移，↑/↓ 上下平移（输入框聚焦时不生效）
           </li>
           <li>
-            <strong>复位位置</strong> — 状态栏「复位」按钮，还原选中模块到初始位置
+            <strong>复位视角</strong> — 状态栏「复位视角」按钮恢复初始视角
           </li>
           <li>
             <strong>层级导航</strong> — 底部面包屑可点击跳转到任意层级

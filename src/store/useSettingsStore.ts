@@ -27,7 +27,8 @@ export const useSettingsStore = create<SettingsState>()(
       defaultModel: 'gpt-3.5-turbo',
       thinking: 'disabled',
       colorMode: 'standard',
-      wireframe: { enabled: true, lineWidth: 1 },
+      // 默认实体色块渲染（关闭线框），家具/房间呈现为有遮挡关系的实心方块
+      wireframe: { enabled: false, lineWidth: 1 },
 
       addApiKey: (entry) => {
         const id = createId()
@@ -59,7 +60,15 @@ export const useSettingsStore = create<SettingsState>()(
       setWireframeLineWidth: (width) =>
         set((state) => ({ wireframe: { ...state.wireframe, lineWidth: width } })),
     }),
-    { name: STORAGE_KEY },
+    {
+      name: STORAGE_KEY,
+      version: 2,
+      // v2 起默认关闭线框，让既有用户也切换到实体色块渲染
+      migrate: (persistedState) => ({
+        ...(persistedState as AppSettings),
+        wireframe: { enabled: false, lineWidth: 1 },
+      }),
+    },
   ),
 )
 

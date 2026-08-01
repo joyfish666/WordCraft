@@ -11,8 +11,12 @@ describe('useSettingsStore', () => {
       defaultModel: 'gpt-3.5-turbo',
       thinking: 'disabled',
       colorMode: 'standard',
-      wireframe: { enabled: true, lineWidth: 1 },
+      wireframe: { enabled: false, lineWidth: 1 },
     })
+  })
+
+  it('默认关闭线框（实体色块渲染）', () => {
+    expect(useSettingsStore.getState().wireframe.enabled).toBe(false)
   })
 
   it('新增 API Key 并自动激活', () => {
@@ -54,6 +58,7 @@ describe('useSettingsStore', () => {
     }
     expect(saved.state.apiKeys[0].name).toBe('DeepSeek')
     expect(saved.state.colorMode).toBe('colorblind')
-    expect(saved.state.wireframe.enabled).toBe(false)
+    // 默认关闭线框，toggle 后开启
+    expect(saved.state.wireframe.enabled).toBe(true)
   })
 })

@@ -11,10 +11,13 @@ import { useModelStore } from '../store/useModelStore'
 import { getActiveApiConfig, useSettingsStore } from '../store/useSettingsStore'
 import type { ModelNode } from '../types/model'
 
+/** 方向键平移视角的位移量（屏幕像素等效） */
+const PAN_STEP = 15
+
 /** 助手消息的展示文本：携带模型时显示摘要，否则显示回复（跳过纯 JSON） */
 function assistantDisplay(m: ChatMessageItem): string {
   if (m.model) {
-    return `已生成「${m.model.root.name}」模型，共 ${countNodes(m.model.root)} 个模块。可点击模块查看尺寸、移动位置，或继续对话调整细节。`
+    return `已生成「${m.model.root.name}」模型，共 ${countNodes(m.model.root)} 个模块。可点击模块查看尺寸，或用方向键移动视角。`
   }
   const content = m.content.trim()
   if (content && !content.startsWith('{')) return content
@@ -25,15 +28,10 @@ export function HomePage() {
   const scene = useModelStore((s) => s.scene)
   const selectedId = useModelStore((s) => s.selectedId)
   const focusId = useModelStore((s) => s.focusId)
-  const stepSize = useModelStore((s) => s.stepSize)
-  const initialPositions = useModelStore((s) => s.initialPositions)
   const setScene = useModelStore((s) => s.setScene)
   const resetScene = useModelStore((s) => s.resetScene)
   const selectNode = useModelStore((s) => s.selectNode)
   const setFocus = useModelStore((s) => s.setFocus)
-  const setStepSize = useModelStore((s) => s.setStepSize)
-  const translateSelected = useModelStore((s) => s.translateSelected)
-  const resetSelectedPosition = useModelStore((s) => s.resetSelectedPosition)
 
   const messages = useChatStore((s) => s.messages)
   const isGenerating = useChatStore((s) => s.isGenerating)
@@ -59,17 +57,6 @@ export function HomePage() {
     [scene, selectedId],
   )
 
-  const isMoved = useMemo(() => {
-    if (!selected) return false
-    const original = initialPositions[selected.id]
-    if (!original) return false
-    return (
-      original.x !== selected.position.x ||
-      original.y !== selected.position.y ||
-      original.z !== selected.position.z
-    )
-  }, [selected, initialPositions])
-
   useEffect(() => {
     const el = logRef.current
     if (el && typeof el.scrollTo === 'function') {
@@ -91,36 +78,33 @@ export function HomePage() {
     return () => window.clearInterval(timer)
   }, [isGenerating])
 
-  // 键盘移动选中模块：←→ X，↑↓ Y，Shift+↑↓ Z
+  // 键盘平移视角：←→ 左右，↑↓ 上下（不干扰输入框/文本框）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!useModelStore.getState().selectedId) return
       const active = document.activeElement
       if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return
-      const { stepSize: step, translateSelected: translate } = useModelStore.getState()
+      const controls = viewportRef.current
+      if (!controls) return
       let dx = 0
       let dy = 0
-      let dz = 0
       switch (e.key) {
         case 'ArrowLeft':
-          dx = -step
+          dx = -PAN_STEP
           break
         case 'ArrowRight':
-          dx = step
+          dx = PAN_STEP
           break
         case 'ArrowUp':
-          if (e.shiftKey) dz = -step
-          else dy = step
+          dy = PAN_STEP
           break
         case 'ArrowDown':
-          if (e.shiftKey) dz = step
-          else dy = -step
+          dy = -PAN_STEP
           break
         default:
           return
       }
       e.preventDefault()
-      translate(dx, dy, dz)
+      controls.pan(dx, dy)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -175,9 +159,6 @@ export function HomePage() {
           </Button>
           <Button variant="ghost" onClick={resetScene} disabled={!scene}>
             清空场景
-          </Button>
-          <Button variant="ghost" onClick={() => viewportRef.current?.resetView()} disabled={!scene}>
-            复位视角
           </Button>
           <Button variant="ghost" onClick={() => setHelpOpen(true)}>
             操作说明
@@ -277,44 +258,44 @@ export function HomePage() {
           </nav>
         )}
 
-        {selected && (
-          <div className="move-controls">
-            <span className="move-controls__title">移动</span>
-            <Button variant="ghost" className="move-controls__btn" title="向左 (←)" onClick={() => translateSelected(-stepSize, 0, 0)}>
-              ◀
-            </Button>
-            <Button variant="ghost" className="move-controls__btn" title="向右 (→)" onClick={() => translateSelected(stepSize, 0, 0)}>
-              ▶
-            </Button>
-            <Button variant="ghost" className="move-controls__btn" title="向上 (↑)" onClick={() => translateSelected(0, stepSize, 0)}>
-              ▲
-            </Button>
-            <Button variant="ghost" className="move-controls__btn" title="向下 (↓)" onClick={() => translateSelected(0, -stepSize, 0)}>
-              ▼
-            </Button>
-            <Button variant="ghost" className="move-controls__btn" title="向前 (Shift+↑)" onClick={() => translateSelected(0, 0, -stepSize)}>
-              前
-            </Button>
-            <Button variant="ghost" className="move-controls__btn" title="向后 (Shift+↓)" onClick={() => translateSelected(0, 0, stepSize)}>
-              后
-            </Button>
-            <span className="move-controls__step">
-              <span className="move-controls__step-label">步长</span>
-              {[0.1, 0.5, 1].map((s) => (
-                <button
-                  key={s}
-                  className={`step-btn ${stepSize === s ? 'step-btn--active' : ''}`}
-                  onClick={() => setStepSize(s)}
-                >
-                  {s}
-                </button>
-              ))}
-            </span>
-            <Button variant="ghost" onClick={resetSelectedPosition} disabled={!isMoved}>
-              复位
-            </Button>
-          </div>
-        )}
+        <div className="move-controls">
+          <span className="move-controls__title">视角</span>
+          <Button
+            variant="ghost"
+            className="move-controls__btn"
+            title="视角左移 (←)"
+            onClick={() => viewportRef.current?.pan(-PAN_STEP, 0)}
+          >
+            ◀
+          </Button>
+          <Button
+            variant="ghost"
+            className="move-controls__btn"
+            title="视角右移 (→)"
+            onClick={() => viewportRef.current?.pan(PAN_STEP, 0)}
+          >
+            ▶
+          </Button>
+          <Button
+            variant="ghost"
+            className="move-controls__btn"
+            title="视角上移 (↑)"
+            onClick={() => viewportRef.current?.pan(0, PAN_STEP)}
+          >
+            ▲
+          </Button>
+          <Button
+            variant="ghost"
+            className="move-controls__btn"
+            title="视角下移 (↓)"
+            onClick={() => viewportRef.current?.pan(0, -PAN_STEP)}
+          >
+            ▼
+          </Button>
+          <Button variant="ghost" onClick={() => viewportRef.current?.resetView()}>
+            复位视角
+          </Button>
+        </div>
 
         <span className="dim-info">
           {selected ? (
