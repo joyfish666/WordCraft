@@ -44,6 +44,28 @@ export function createApiClient({ apiKey, baseUrl }: ApiClientOptions) {
 }
 
 /**
+ * 从任意 axios 错误中提取可读描述：优先取服务商返回的 error.message，
+ * 其次是 HTTP 状态码，最后回退到网络层错误原文（超时 / 连接失败等）。
+ */
+export function describeAxiosError(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status ?? null
+    const data = error.response?.data as
+      | { error?: { message?: unknown }; message?: unknown }
+      | undefined
+    const detail = data?.error?.message ?? data?.message
+    if (typeof detail === 'string' && detail.trim()) {
+      return status ? `HTTP ${status}：${detail}` : detail
+    }
+    if (status) return `HTTP ${status}，无详细错误信息`
+    if (error.code === 'ECONNABORTED') return '请求超时，请检查网络或稍后重试'
+    if (error.message) return `网络错误：${error.message}`
+    return '网络错误，无法连接服务'
+  }
+  return error instanceof Error ? error.message : String(error)
+}
+
+/**
  * 检测 API Key 连通性：发起一次极小的 chat/completions 请求。
  * 对常见的 401/403/404 等错误给出可读提示。
  */
@@ -65,12 +87,8 @@ export async function testConnection(options: ApiClientOptions): Promise<Connect
       if (status === 404) {
         return { ok: false, message: 'API 可达，但模型不存在，请检查模型名与 Base URL' }
       }
-      const detail = error.response?.data?.error?.message
-      return {
-        ok: false,
-        message: detail ? `请求失败：${detail}` : `请求失败（HTTP ${status ?? '未知'}）`,
-      }
+      return { ok: false, message: `请求失败：${describeAxiosError(error)}` }
     }
-    return { ok: false, message: `网络错误：${error instanceof Error ? error.message : String(error)}` }
+    return { ok: false, message: describeAxiosError(error) }
   }
 }
