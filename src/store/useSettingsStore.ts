@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { createId } from '../lib/id'
 import type { ApiKeyEntry, AppSettings, ColorMode } from '../types/settings'
 
 interface SettingsState extends AppSettings {
@@ -8,6 +9,7 @@ interface SettingsState extends AppSettings {
   removeApiKey: (id: string) => void
   setActiveKey: (id: string | null) => void
   setDefaultBaseUrl: (url: string) => void
+  setDefaultModel: (model: string) => void
   setColorMode: (mode: ColorMode) => void
   toggleWireframe: () => void
   setWireframeLineWidth: (width: number) => void
@@ -15,20 +17,13 @@ interface SettingsState extends AppSettings {
 
 const STORAGE_KEY = 'wordcraft.settings'
 
-/** 生成唯一 id，兼容无 crypto.randomUUID 的运行环境 */
-function createId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `key-${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
-
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       apiKeys: [],
       activeKeyId: null,
       defaultBaseUrl: '',
+      defaultModel: 'gpt-3.5-turbo',
       colorMode: 'standard',
       wireframe: { enabled: true, lineWidth: 1 },
 
@@ -52,6 +47,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       setActiveKey: (id) => set({ activeKeyId: id }),
       setDefaultBaseUrl: (url) => set({ defaultBaseUrl: url }),
+      setDefaultModel: (model) => set({ defaultModel: model }),
       setColorMode: (mode) => set({ colorMode: mode }),
 
       toggleWireframe: () =>
@@ -66,9 +62,9 @@ export const useSettingsStore = create<SettingsState>()(
 
 /** 当前激活 API Key 的完整配置；无激活 Key 时返回 null */
 export function getActiveApiConfig(
-  state: Pick<SettingsState, 'apiKeys' | 'activeKeyId' | 'defaultBaseUrl'>,
-): { key: string; baseUrl: string } | null {
+  state: Pick<SettingsState, 'apiKeys' | 'activeKeyId' | 'defaultBaseUrl' | 'defaultModel'>,
+): { key: string; baseUrl: string; model: string } | null {
   const active = state.apiKeys.find((k) => k.id === state.activeKeyId)
   if (!active) return null
-  return { key: active.key, baseUrl: active.baseUrl ?? state.defaultBaseUrl }
+  return { key: active.key, baseUrl: active.baseUrl ?? state.defaultBaseUrl, model: state.defaultModel }
 }

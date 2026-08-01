@@ -14,6 +14,7 @@ export function SettingsPage() {
   const apiKeys = useSettingsStore((s) => s.apiKeys)
   const activeKeyId = useSettingsStore((s) => s.activeKeyId)
   const defaultBaseUrl = useSettingsStore((s) => s.defaultBaseUrl)
+  const defaultModel = useSettingsStore((s) => s.defaultModel)
   const colorMode = useSettingsStore((s) => s.colorMode)
   const wireframe = useSettingsStore((s) => s.wireframe)
 
@@ -21,6 +22,7 @@ export function SettingsPage() {
   const removeApiKey = useSettingsStore((s) => s.removeApiKey)
   const setActiveKey = useSettingsStore((s) => s.setActiveKey)
   const setDefaultBaseUrl = useSettingsStore((s) => s.setDefaultBaseUrl)
+  const setDefaultModel = useSettingsStore((s) => s.setDefaultModel)
   const setColorMode = useSettingsStore((s) => s.setColorMode)
   const toggleWireframe = useSettingsStore((s) => s.toggleWireframe)
   const setWireframeLineWidth = useSettingsStore((s) => s.setWireframeLineWidth)
@@ -43,7 +45,11 @@ export function SettingsPage() {
     const entry = apiKeys.find((k) => k.id === id)
     if (!entry) return
     setTestingId(id)
-    const result = await testConnection({ apiKey: entry.key, baseUrl: entry.baseUrl ?? defaultBaseUrl })
+    const result = await testConnection({
+      apiKey: entry.key,
+      baseUrl: entry.baseUrl ?? defaultBaseUrl,
+      model: defaultModel,
+    })
     setResults((prev) => ({ ...prev, [id]: result }))
     setTestingId(null)
   }
@@ -69,6 +75,18 @@ export function SettingsPage() {
             value={defaultBaseUrl}
             onChange={(e) => setDefaultBaseUrl(e.target.value)}
             placeholder="如 https://api.deepseek.com/v1，留空使用 https://api.openai.com/v1"
+          />
+        </div>
+
+        <div className="field">
+          <label className="field__label" htmlFor="default-model">
+            默认模型名
+          </label>
+          <Input
+            id="default-model"
+            value={defaultModel}
+            onChange={(e) => setDefaultModel(e.target.value)}
+            placeholder="如 gpt-3.5-turbo / deepseek-chat，由你的服务商决定"
           />
         </div>
 

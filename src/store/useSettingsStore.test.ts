@@ -8,6 +8,7 @@ describe('useSettingsStore', () => {
       apiKeys: [],
       activeKeyId: null,
       defaultBaseUrl: '',
+      defaultModel: 'gpt-3.5-turbo',
       colorMode: 'standard',
       wireframe: { enabled: true, lineWidth: 1 },
     })
