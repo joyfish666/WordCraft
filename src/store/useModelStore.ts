@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { findNodeById, updateNodePosition, walk } from '../lib/modelTree'
+import { findNodeById, normalizeContainment, updateNodePosition, walk } from '../lib/modelTree'
 import type { ContainerNode, ModelNode, Position, SceneModel } from '../types/model'
 
 /** 以不可变方式更新场景中某节点位置；root 恒为容器，故在此收窄类型 */
@@ -42,12 +42,13 @@ export const useModelStore = create<ModelState>()(
       initialPositions: {},
 
       setScene: (scene) => {
-        // 快照所有节点初始位置，用于后续复位
+        // 先将家具约束在墙内（避免与墙/门重叠），再快照初始位置用于后续复位
+        const normalized = normalizeContainment(scene)
         const initialPositions: Record<string, Position> = {}
-        walk(scene.root, (n) => {
+        walk(normalized.root, (n) => {
           initialPositions[n.id] = n.position
         })
-        set({ scene, selectedId: null, focusId: null, initialPositions })
+        set({ scene: normalized, selectedId: null, focusId: null, initialPositions })
       },
 
       resetScene: () => set({ scene: null, selectedId: null, focusId: null, initialPositions: {} }),

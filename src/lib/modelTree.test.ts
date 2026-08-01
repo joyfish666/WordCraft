@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createSampleModel } from './sampleModel'
-import { countNodes, findNodeById, getPathToNode, updateNodePosition } from './modelTree'
+import {
+  countNodes,
+  findNodeById,
+  getPathToNode,
+  isContainer,
+  normalizeContainment,
+  updateNodePosition,
+} from './modelTree'
 
 const scene = createSampleModel()
 
@@ -29,5 +36,30 @@ describe('modelTree', () => {
     expect(findNodeById(next, 'sofa-living')?.position).toEqual(
       findNodeById(scene.root, 'sofa-living')?.position,
     )
+  })
+
+  it('normalizeContainment 将越墙的家具拉回房间内', () => {
+    // 把主卧的双人床移到墙外（主卧 x 范围 -3.5~-0.5，内缩墙体 0.15）
+    const sceneOut = {
+      ...scene,
+      root: {
+        ...scene.root,
+        children: scene.root.children.map((r) =>
+          isContainer(r) && r.id === 'room-master'
+            ? {
+                ...r,
+                children: r.children.map((f) =>
+                  f.id === 'bed-master' ? { ...f, position: { ...f.position, x: -3.4 } } : f,
+                ),
+              }
+            : r,
+        ),
+      },
+    }
+    const normalized = normalizeContainment(sceneOut)
+    const bed = findNodeById(normalized.root, 'bed-master')!
+    // 内缩后床可活动范围：x ∈ [-3.35+1, -0.65-1] = [-2.35, -1.65]
+    expect(bed.position.x).toBe(-2.35)
+    expect(bed.position.z).toBe(0)
   })
 })

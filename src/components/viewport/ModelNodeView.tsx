@@ -1,14 +1,11 @@
 import { Edges } from '@react-three/drei'
 import { isContainer } from '../../lib/modelTree'
 import { FURNITURE_COLOR, FURNITURE_COLORBLIND, roomColor } from '../../lib/palette'
-import { doorDirection, isCorridorName } from '../../lib/roomGeometry'
+import { DOOR_WIDTH, WALL_THICKNESS, doorDirection, type DoorDirection } from '../../lib/roomGeometry'
 import { useModelStore } from '../../store/useModelStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
 import type { ContainerNode, ModelNode } from '../../types/model'
 
-const WALL_THICKNESS = 0.15
-const DOOR_WIDTH = 0.9
-const DOOR_HEIGHT = 2.1
 const FLOOR_THICKNESS = 0.05
 
 interface ShellMaterial {
@@ -27,7 +24,10 @@ interface WallSegmentsProps {
   material: ShellMaterial
 }
 
-/** 沿局部 X 轴的一段墙；hasDoor 时在中部留出门洞（左右墙段 + 门楣，缺口为空心） */
+/**
+ * 沿局部 X 轴的一段墙。hasDoor 时在中部开出与墙等高的门洞
+ * （左右墙段，缺口为空心，无门楣——门与墙同等高度）。
+ */
 function WallSegments({ length, height, thickness, hasDoor, material }: WallSegmentsProps) {
   if (!hasDoor) {
     return (
@@ -37,29 +37,19 @@ function WallSegments({ length, height, thickness, hasDoor, material }: WallSegm
       </mesh>
     )
   }
-  const sideLen = Math.max(0, length / 2 - DOOR_WIDTH / 2)
-  const lintelH = Math.max(0, height - DOOR_HEIGHT)
+  const sideLen = length / 2 - DOOR_WIDTH / 2
+  if (sideLen <= 0) return null // 墙比门还窄，整体留空
   const sideCenter = (length / 2 + DOOR_WIDTH / 2) / 2
   return (
     <>
-      {sideLen > 0 && (
-        <>
-          <mesh position={[-sideCenter, height / 2, 0]}>
-            <boxGeometry args={[sideLen, height, thickness]} />
-            <meshStandardMaterial {...material} />
-          </mesh>
-          <mesh position={[sideCenter, height / 2, 0]}>
-            <boxGeometry args={[sideLen, height, thickness]} />
-            <meshStandardMaterial {...material} />
-          </mesh>
-        </>
-      )}
-      {lintelH > 0 && (
-        <mesh position={[0, DOOR_HEIGHT + lintelH / 2, 0]}>
-          <boxGeometry args={[DOOR_WIDTH, lintelH, thickness]} />
-          <meshStandardMaterial {...material} />
-        </mesh>
-      )}
+      <mesh position={[-sideCenter, height / 2, 0]}>
+        <boxGeometry args={[sideLen, height, thickness]} />
+        <meshStandardMaterial {...material} />
+      </mesh>
+      <mesh position={[sideCenter, height / 2, 0]}>
+        <boxGeometry args={[sideLen, height, thickness]} />
+        <meshStandardMaterial {...material} />
+      </mesh>
     </>
   )
 }
@@ -68,37 +58,18 @@ interface RoomShellProps {
   room: ContainerNode
   material: ShellMaterial
   isSelected: boolean
+  doorWalls: DoorDirection[]
 }
 
-/** 房间外壳：实心地板 + 四面实心墙 + 自动门洞；走廊/连廊仅渲染地板（通道） */
-function RoomShell({ room, material, isSelected }: RoomShellProps) {
+/** 房间外壳：实心地板 + 四面实心墙，门洞开在与相邻房间/走廊共用的墙上 */
+function RoomShell({ room, material, isSelected, doorWalls }: RoomShellProps) {
   const { length: L, width: W, height: H } = room.dimensions
   const cx = room.position.x
   const cz = room.position.z
   const baseY = room.position.y - H / 2
   const centerY = baseY + H / 2
+  const dirs = new Set(doorWalls)
 
-  const selectionBox = (
-    <mesh position={[cx, centerY, cz]}>
-      <boxGeometry args={[L, H, W]} />
-      <meshBasicMaterial color="#ffd93d" wireframe transparent opacity={0.7} />
-    </mesh>
-  )
-
-  // 走廊/连廊：无墙通道，仅地板
-  if (isCorridorName(room.name)) {
-    return (
-      <>
-        <mesh position={[cx, baseY + FLOOR_THICKNESS / 2, cz]}>
-          <boxGeometry args={[L, FLOOR_THICKNESS, W]} />
-          <meshStandardMaterial {...material} />
-        </mesh>
-        {isSelected && selectionBox}
-      </>
-    )
-  }
-
-  const dir = doorDirection(room)
   return (
     <>
       {/* 实心地板 */}
@@ -112,7 +83,7 @@ function RoomShell({ room, material, isSelected }: RoomShellProps) {
           length={L}
           height={H}
           thickness={WALL_THICKNESS}
-          hasDoor={dir === 'north'}
+          hasDoor={dirs.has('north')}
           material={material}
         />
       </group>
@@ -121,7 +92,7 @@ function RoomShell({ room, material, isSelected }: RoomShellProps) {
           length={L}
           height={H}
           thickness={WALL_THICKNESS}
-          hasDoor={dir === 'south'}
+          hasDoor={dirs.has('south')}
           material={material}
         />
       </group>
@@ -131,7 +102,7 @@ function RoomShell({ room, material, isSelected }: RoomShellProps) {
           length={W}
           height={H}
           thickness={WALL_THICKNESS}
-          hasDoor={dir === 'east'}
+          hasDoor={dirs.has('east')}
           material={material}
         />
       </group>
@@ -140,11 +111,17 @@ function RoomShell({ room, material, isSelected }: RoomShellProps) {
           length={W}
           height={H}
           thickness={WALL_THICKNESS}
-          hasDoor={dir === 'west'}
+          hasDoor={dirs.has('west')}
           material={material}
         />
       </group>
-      {isSelected && selectionBox}
+      {/* 选中轮廓 */}
+      {isSelected && (
+        <mesh position={[cx, centerY, cz]}>
+          <boxGeometry args={[L, H, W]} />
+          <meshBasicMaterial color="#ffd93d" wireframe transparent opacity={0.7} />
+        </mesh>
+      )}
     </>
   )
 }
@@ -155,15 +132,22 @@ interface ModelNodeViewProps {
   siblingIndex?: number
   /** 祖先节点 id，用于判断是否位于聚焦房间内 */
   ancestors?: string[]
+  /** 各房间的开门方向（由相邻房间/走廊计算得到） */
+  doorWalls?: Map<string, DoorDirection[]>
 }
 
 /**
  * 递归渲染层级模型。
- * - 整屋视图：房间为实心墙体+地板（自动门洞），家具被墙体遮挡
+ * - 整屋视图：房间为实心墙体+地板（门与墙同高），家具被墙体遮挡
  * - 聚焦视图（focusId 指向某房间）：该房间外壳透明化以便查看内部实体家具，
  *   其他房间外壳虚化；家具仍遵循 实体/虚化 两态
  */
-export function ModelNodeView({ node, siblingIndex = 0, ancestors = [] }: ModelNodeViewProps) {
+export function ModelNodeView({
+  node,
+  siblingIndex = 0,
+  ancestors = [],
+  doorWalls,
+}: ModelNodeViewProps) {
   const selectNode = useModelStore((s) => s.selectNode)
   const setFocus = useModelStore((s) => s.setFocus)
   const selectedId = useModelStore((s) => s.selectedId)
@@ -204,7 +188,13 @@ export function ModelNodeView({ node, siblingIndex = 0, ancestors = [] }: ModelN
             <meshBasicMaterial color="#8a93a5" wireframe transparent opacity={0.12} />
           </mesh>
           {node.children.map((child, i) => (
-            <ModelNodeView key={child.id} node={child} siblingIndex={i} ancestors={childAncestors} />
+            <ModelNodeView
+              key={child.id}
+              node={child}
+              siblingIndex={i}
+              ancestors={childAncestors}
+              doorWalls={doorWalls}
+            />
           ))}
         </>
       )
@@ -221,11 +211,22 @@ export function ModelNodeView({ node, siblingIndex = 0, ancestors = [] }: ModelN
       material = { color: fill, transparent: false, opacity: 1, depthWrite: true, wireframe: wireframeEnabled }
     }
 
+    // 开门方向：优先用相邻房间/走廊计算的结果；无相邻房间时兜底朝整屋中心
+    const computed = doorWalls?.get(node.id)
+    const wallDoors =
+      computed && computed.length > 0 ? [...new Set(computed)] : [doorDirection(node)]
+
     return (
       <group onClick={handleClick}>
-        <RoomShell room={node} material={material} isSelected={isSelected} />
+        <RoomShell room={node} material={material} isSelected={isSelected} doorWalls={wallDoors} />
         {node.children.map((child, i) => (
-          <ModelNodeView key={child.id} node={child} siblingIndex={i} ancestors={childAncestors} />
+          <ModelNodeView
+            key={child.id}
+            node={child}
+            siblingIndex={i}
+            ancestors={childAncestors}
+            doorWalls={doorWalls}
+          />
         ))}
       </group>
     )
