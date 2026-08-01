@@ -18,7 +18,8 @@ import { useModelStore } from '../../store/useModelStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
 import type { ContainerNode, ModelNode } from '../../types/model'
 
-const FLOOR_THICKNESS = 0.05
+/** 地板厚度：做成可见的实体板，墙体从地板顶面升起（墙的底部是地板） */
+const FLOOR_THICKNESS = 0.12
 
 interface ShellMaterial {
   color: string
@@ -73,15 +74,16 @@ interface RoomShellProps {
   plan: WallPlan
 }
 
-/** 房间外壳：实心地板 + 四面实心墙（共享墙去重），门洞与墙同高 */
+/** 房间外壳：实体地板（墙脚在其上）+ 四面实心墙（共享墙去重），门洞与墙同高 */
 function RoomShell({ room, material, isSelected, plan }: RoomShellProps) {
   const { length: L, width: W, height: H } = room.dimensions
   const cx = room.position.x
   const cz = room.position.z
   const baseY = room.position.y - H / 2
-  const centerY = baseY + H / 2
+  // 墙体从地板顶面升起
+  const wallBaseY = baseY + FLOOR_THICKNESS
 
-  // 地板：非共享边外扩一个墙厚以覆盖墙脚（墙的底部是地板）；共享边到边界即可（邻居地板接续）
+  // 地板：非共享边外扩一个墙厚（墙体底部落在其上）；共享边到边界即可（邻居地板接续）
   const xmin = plan.west.shared ? cx - L / 2 : cx - L / 2 - WALL_THICKNESS
   const xmax = plan.east.shared ? cx + L / 2 : cx + L / 2 + WALL_THICKNESS
   const zmin = plan.south.shared ? cz - W / 2 : cz - W / 2 - WALL_THICKNESS
@@ -107,23 +109,23 @@ function RoomShell({ room, material, isSelected, plan }: RoomShellProps) {
 
   return (
     <>
-      {/* 实心地板（外扩覆盖墙脚） */}
+      {/* 实体地板：可见的底板，墙体从其上竖起 */}
       <mesh position={[(xmin + xmax) / 2, baseY + FLOOR_THICKNESS / 2, (zmin + zmax) / 2]}>
         <boxGeometry args={[xmax - xmin, FLOOR_THICKNESS, zmax - zmin]} />
         <meshStandardMaterial {...material} />
       </mesh>
 
-      {/* 南北墙（沿 X） */}
-      {plan.north.render && wall('north', [cx, baseY, cz + W / 2], [0, 0, 0], L, plan.north.hasDoor)}
-      {plan.south.render && wall('south', [cx, baseY, cz - W / 2], [0, 0, 0], L, plan.south.hasDoor)}
+      {/* 南北墙（沿 X），底部在地板顶面 */}
+      {plan.north.render && wall('north', [cx, wallBaseY, cz + W / 2], [0, 0, 0], L, plan.north.hasDoor)}
+      {plan.south.render && wall('south', [cx, wallBaseY, cz - W / 2], [0, 0, 0], L, plan.south.hasDoor)}
       {/* 东西墙（绕 Y 旋转 90°，沿 Z） */}
-      {plan.east.render && wall('east', [cx + L / 2, baseY, cz], [0, Math.PI / 2, 0], W, plan.east.hasDoor)}
-      {plan.west.render && wall('west', [cx - L / 2, baseY, cz], [0, Math.PI / 2, 0], W, plan.west.hasDoor)}
+      {plan.east.render && wall('east', [cx + L / 2, wallBaseY, cz], [0, Math.PI / 2, 0], W, plan.east.hasDoor)}
+      {plan.west.render && wall('west', [cx - L / 2, wallBaseY, cz], [0, Math.PI / 2, 0], W, plan.west.hasDoor)}
 
-      {/* 选中轮廓 */}
+      {/* 选中轮廓（含地板厚度） */}
       {isSelected && (
-        <mesh position={[cx, centerY, cz]}>
-          <boxGeometry args={[L, H, W]} />
+        <mesh position={[cx, baseY + (FLOOR_THICKNESS + H) / 2, cz]}>
+          <boxGeometry args={[L, FLOOR_THICKNESS + H, W]} />
           <meshBasicMaterial color="#ffd93d" wireframe transparent opacity={0.7} />
         </mesh>
       )}
@@ -233,11 +235,11 @@ export function ModelNodeView({ node, siblingIndex = 0, ancestors = [], wallPlan
     )
   }
 
-  // 家具 / 墙体：实体 vs 虚化两种状态
+  // 家具 / 墙体：实体 vs 虚化两种状态（y 抬升一个地板厚度，使其立在地板顶面）
   const fill = colorMode === 'colorblind' ? FURNITURE_COLORBLIND : FURNITURE_COLOR
   return (
     <mesh
-      position={[node.position.x, node.position.y, node.position.z]}
+      position={[node.position.x, node.position.y + FLOOR_THICKNESS, node.position.z]}
       onClick={handleClick}
     >
       <boxGeometry args={[node.dimensions.length, node.dimensions.height, node.dimensions.width]} />
