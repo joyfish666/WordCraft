@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ChatGenerationError,
   extractModelJson,
@@ -6,15 +6,34 @@ import {
   normalizeModelPayload,
 } from './chat'
 
-const mockPost = vi.fn()
+const mockFetch = vi.fn()
 
-vi.mock('axios', () => ({
-  default: {
-    create: vi.fn(() => ({ post: mockPost })),
-    isAxiosError: (error: unknown) =>
-      Boolean((error as { isAxiosError?: boolean })?.isAxiosError),
-  },
-}))
+/** 构造一个返回 SSE 流（单条 delta + [DONE]）的 Response */
+function sseResponse(content: string): Response {
+  const data = JSON.stringify({ choices: [{ delta: { content } }] })
+  const body = `data: ${data}\n\ndata: [DONE]\n\n`
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(body))
+      controller.close()
+    },
+  })
+  return new Response(stream, { status: 200 })
+}
+
+/** 构造一个非 2xx 的错误 Response */
+function errorResponse(status: number, body: string): Response {
+  return new Response(body, { status })
+}
+
+/** 让 fetch 每次调用返回全新的成功响应（避免流被消费后复用） */
+function respondWith(content: string) {
+  mockFetch.mockImplementation(() => Promise.resolve(sseResponse(content)))
+}
+
+function respondWithError(status: number, body: string) {
+  mockFetch.mockImplementation(() => Promise.resolve(errorResponse(status, body)))
+}
 
 function validModelJson(): string {
   return JSON.stringify({
@@ -48,7 +67,12 @@ function validModelJson(): string {
 }
 
 beforeEach(() => {
-  mockPost.mockReset()
+  vi.stubGlobal('fetch', mockFetch)
+  mockFetch.mockReset()
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe('extractModelJson', () => {
@@ -106,10 +130,8 @@ describe('normalizeModelPayload', () => {
 })
 
 describe('generateModelFromChat', () => {
-  it('校验通过时返回模型与回复', async () => {
-    mockPost.mockResolvedValue({
-      data: { choices: [{ message: { content: validModelJson() } }] },
-    })
+  it('流式响应校验通过时返回模型', async () => {
+    respondWith(validModelJson())
     const result = await generateModelFromChat({
       apiKey: 'sk-test',
       history: [],
@@ -123,9 +145,39 @@ describe('generateModelFromChat', () => {
     }
   })
 
+  it('请求体启用流式并包含系统提示与历史', async () => {
+    respondWith(validModelJson())
+    await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [{ role: 'user', content: '之前的设计' }],
+      userInput: '再加一张床',
+    })
+    const [url, init] = mockFetch.mock.calls[0] as [string, { body: string }]
+    expect(url).toContain('/chat/completions')
+    const body = JSON.parse(init.body) as {
+      stream: boolean
+      messages: { role: string; content: string }[]
+    }
+    expect(body.stream).toBe(true)
+    expect(body.messages.map((m) => m.role)).toEqual(['system', 'user', 'user'])
+    expect(body.messages[0].content).toContain('house')
+  })
+
+  it('流式回调收到内容增量', async () => {
+    respondWith(validModelJson())
+    const chunks: string[] = []
+    await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: 'x',
+      onChunk: (delta) => chunks.push(delta),
+    })
+    expect(chunks.join('')).toBe(validModelJson())
+  })
+
   it('模型输出裸容器（无 root 包装）时也能正常生成', async () => {
     const bareRoot = JSON.parse(validModelJson()).root
-    mockPost.mockResolvedValue({ data: { choices: [{ message: { content: JSON.stringify(bareRoot) } }] } })
+    respondWith(JSON.stringify(bareRoot))
     const result = await generateModelFromChat({
       apiKey: 'sk-test',
       history: [],
@@ -134,36 +186,15 @@ describe('generateModelFromChat', () => {
     expect(result.model.root.name).toBe('小屋')
   })
 
-  it('请求体包含系统提示与历史对话', async () => {
-    mockPost.mockResolvedValue({
-      data: { choices: [{ message: { content: validModelJson() } }] },
-    })
-    await generateModelFromChat({
-      apiKey: 'sk-test',
-      history: [{ role: 'user', content: '之前的设计' }],
-      userInput: '再加一张床',
-    })
-    const [, body] = mockPost.mock.calls[0] as [
-      string,
-      { messages: { role: string; content: string }[] },
-    ]
-    expect(body.messages.map((m) => m.role)).toEqual(['system', 'user', 'user'])
-    expect(body.messages[0].content).toContain('house')
-  })
-
   it('未找到 JSON 时抛出 no-json 错误', async () => {
-    mockPost.mockResolvedValue({
-      data: { choices: [{ message: { content: '抱歉，我无法完成' } }] },
-    })
+    respondWith('抱歉，我无法完成')
     await expect(
       generateModelFromChat({ apiKey: 'sk', history: [], userInput: 'x' }),
     ).rejects.toMatchObject({ code: 'no-json' })
   })
 
   it('Schema 校验失败时抛出 invalid-schema 错误', async () => {
-    mockPost.mockResolvedValue({
-      data: { choices: [{ message: { content: '{"version":1,"root":{"type":"house"}}' } }] },
-    })
+    respondWith('{"version":1,"root":{"type":"house"}}')
     await expect(
       generateModelFromChat({ apiKey: 'sk', history: [], userInput: 'x' }),
     ).rejects.toBeInstanceOf(ChatGenerationError)
@@ -172,8 +203,18 @@ describe('generateModelFromChat', () => {
     ).rejects.toMatchObject({ code: 'invalid-schema' })
   })
 
-  it('HTTP 错误时抛出 http 错误', async () => {
-    mockPost.mockRejectedValue(new Error('network down'))
+  it('HTTP 错误时透传服务商错误信息', async () => {
+    respondWithError(401, '{"error":{"message":"Auth Fails"}}')
+    await expect(
+      generateModelFromChat({ apiKey: 'sk', history: [], userInput: 'x' }),
+    ).rejects.toMatchObject({ code: 'http' })
+    await expect(
+      generateModelFromChat({ apiKey: 'sk', history: [], userInput: 'x' }),
+    ).rejects.toThrow(/Auth Fails/)
+  })
+
+  it('网络错误时抛出 http 错误', async () => {
+    mockFetch.mockRejectedValue(new TypeError('Failed to fetch'))
     await expect(
       generateModelFromChat({ apiKey: 'sk', history: [], userInput: 'x' }),
     ).rejects.toMatchObject({ code: 'http' })

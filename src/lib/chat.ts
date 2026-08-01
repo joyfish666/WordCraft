@@ -1,8 +1,7 @@
 import { containerNodeSchema, sceneModelSchema } from '../schemas/model.schema'
 import type { ContainerNode, ModelNode, SceneModel } from '../types/model'
 import {
-  createApiClient,
-  describeAxiosError,
+  streamChatCompletion,
   type ApiClientOptions,
   type ChatMessage,
 } from './api'
@@ -155,35 +154,43 @@ export interface GenerateResult {
   model: SceneModel
 }
 
+export interface GenerateOptions extends ApiClientOptions {
+  history: ChatMessage[]
+  userInput: string
+  /** 流式返回时逐段回调（用于展示进度） */
+  onChunk?: (delta: string) => void
+}
+
+/** 生成请求的整体兜底超时（流式连接自身保持活跃，此超时仅防挂死） */
+const GENERATION_TIMEOUT_MS = 180_000
+
 /**
- * 调用大模型生成模型：系统提示 + 多轮历史 + 用户输入 → 校验 → 返回模型。
+ * 调用大模型生成模型：系统提示 + 多轮历史 + 用户输入 → 流式接收 → 校验 → 返回模型。
+ * 使用 SSE 流式请求，兼容推理型模型（如 DeepSeek v4）的长思考时间。
  * 发送前不进行有效性检测，由调用方确保已配置 API Key。
  */
-export async function generateModelFromChat(
-  options: ApiClientOptions & { history: ChatMessage[]; userInput: string },
-): Promise<GenerateResult> {
-  const { history, userInput, ...clientOptions } = options
-  const client = createApiClient(clientOptions)
+export async function generateModelFromChat(options: GenerateOptions): Promise<GenerateResult> {
+  const { history, userInput, onChunk, ...clientOptions } = options
+  const messages: ChatMessage[] = [
+    { role: 'system', content: buildSystemPrompt() },
+    ...history,
+    { role: 'user', content: userInput },
+  ]
 
-  let response
+  let content: string
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS)
   try {
-    response = await client.post('/chat/completions', {
-      model: clientOptions.model ?? 'gpt-3.5-turbo',
-      messages: [
-        { role: 'system', content: buildSystemPrompt() },
-        ...history,
-        { role: 'user', content: userInput },
-      ],
-      temperature: 0.2,
-    })
+    content = await streamChatCompletion(clientOptions, messages, onChunk, controller.signal)
   } catch (error) {
     throw new ChatGenerationError(
-      `模型请求失败：${describeAxiosError(error)}。可在设置页点「检测连通性」定位问题。`,
+      `模型请求失败：${error instanceof Error ? error.message : String(error)}。可在设置页点「检测连通性」定位问题。`,
       'http',
     )
+  } finally {
+    clearTimeout(timer)
   }
 
-  const content: string = response?.data?.choices?.[0]?.message?.content ?? ''
   const json = extractModelJson(content)
   if (!json) {
     throw new ChatGenerationError('模型返回内容中未找到 JSON，请重试', 'no-json')
