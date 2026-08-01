@@ -44,7 +44,8 @@ interface WallSegmentsProps {
 function WallSegments({ length, height, thickness, hasDoor, material }: WallSegmentsProps) {
   if (!hasDoor) {
     return (
-      <mesh>
+      // 整墙：box 中心上移 height/2，使墙底位于组原点（地板顶面），而不是一半埋入地板
+      <mesh position={[0, height / 2, 0]}>
         <boxGeometry args={[length, height, thickness]} />
         <meshStandardMaterial {...material} />
       </mesh>
