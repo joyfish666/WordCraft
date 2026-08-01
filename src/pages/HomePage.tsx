@@ -34,6 +34,7 @@ export function HomePage() {
   const hasApiKey = useSettingsStore((s) => s.activeKeyId != null)
 
   const [draft, setDraft] = useState('')
+  const [elapsed, setElapsed] = useState(0)
   const logRef = useRef<HTMLDivElement>(null)
 
   const selected = useMemo(() => {
@@ -57,6 +58,16 @@ export function HomePage() {
       }
     }
   }, [messages, isGenerating])
+
+  // 生成计时：避免长时间等待时误以为界面卡死
+  useEffect(() => {
+    if (!isGenerating) {
+      setElapsed(0)
+      return
+    }
+    const timer = window.setInterval(() => setElapsed((s) => s + 1), 1000)
+    return () => window.clearInterval(timer)
+  }, [isGenerating])
 
   const send = async () => {
     const input = draft.trim()
@@ -141,7 +152,7 @@ export function HomePage() {
                 {isGenerating && (
                   <li className="chat-msg chat-msg--assistant">
                     <span className="chat-msg__label">言筑</span>
-                    <div className="chat-msg__body">生成中…</div>
+                    <div className="chat-msg__body">正在生成模型…（已 {elapsed} 秒）</div>
                   </li>
                 )}
               </ul>
@@ -161,7 +172,7 @@ export function HomePage() {
               rows={3}
             />
             <Button onClick={() => void send()} disabled={!draft.trim() || isGenerating}>
-              {isGenerating ? '生成中…' : '生成模型'}
+              {isGenerating ? `生成中…（已 ${elapsed}s）` : '生成模型'}
             </Button>
           </div>
         </section>
