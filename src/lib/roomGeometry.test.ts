@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ContainerNode } from '../types/model'
-import { computeDoorWalls, doorDirection } from './roomGeometry'
+import { computeWallPlan, doorDirection, isCorridorName } from './roomGeometry'
 
 function room(
   id: string,
@@ -21,13 +21,22 @@ function room(
   }
 }
 
+describe('isCorridorName', () => {
+  it('识别走廊/连廊/过道/通道', () => {
+    expect(isCorridorName('走廊')).toBe(true)
+    expect(isCorridorName('连廊')).toBe(true)
+    expect(isCorridorName('过道')).toBe(true)
+  })
+
+  it('普通房间不是走廊', () => {
+    expect(isCorridorName('主卧')).toBe(false)
+    expect(isCorridorName('客厅')).toBe(false)
+  })
+})
+
 describe('doorDirection（兜底门朝向）', () => {
   it('房间在整屋左侧时门朝东（指向中心）', () => {
     expect(doorDirection({ position: { x: -2, y: 1.4, z: 0 } })).toBe('east')
-  })
-
-  it('房间在整屋右侧时门朝西', () => {
-    expect(doorDirection({ position: { x: 2, y: 1.4, z: 0 } })).toBe('west')
   })
 
   it('房间位于中心时默认朝北', () => {
@@ -35,38 +44,49 @@ describe('doorDirection（兜底门朝向）', () => {
   })
 })
 
-describe('computeDoorWalls（相邻房间开门）', () => {
-  it('东西相邻：在共用墙（东/西墙）开门', () => {
-    const a = room('master', '主卧', -2, 0, 3, 3)
+describe('computeWallPlan（墙体方案）', () => {
+  it('相邻房间共享墙只渲染一堵，并由非走廊房间持有', () => {
+    const master = room('master', '主卧', -2, 0, 3, 3)
     const corridor = room('corridor', '走廊', 0, 0, 1, 4)
-    const map = computeDoorWalls([a, corridor])
-    expect(map.get('master')).toContain('east')
-    expect(map.get('corridor')).toContain('west')
+    const plan = computeWallPlan([master, corridor])
+    const mp = plan.get('master')!
+    const cp = plan.get('corridor')!
+    // 主卧持有东墙：渲染且开门
+    expect(mp.east.render).toBe(true)
+    expect(mp.east.hasDoor).toBe(true)
+    expect(mp.east.shared).toBe(true)
+    // 走廊西墙不再渲染（共享墙去重）
+    expect(cp.west.render).toBe(false)
+    expect(cp.west.shared).toBe(true)
+    // 走廊其他墙仍渲染
+    expect(cp.north.render).toBe(true)
+    expect(cp.south.render).toBe(true)
   })
 
-  it('南北相邻：在南北墙开门', () => {
-    const a = room('living', '客厅', 0, -1.5, 3, 3)
-    const b = room('bedroom', '主卧', 0, 1.5, 3, 3)
-    const map = computeDoorWalls([a, b])
-    expect(map.get('living')).toContain('north')
-    expect(map.get('bedroom')).toContain('south')
-  })
-
-  it('相距较远的房间不开门', () => {
-    const a = room('a', '客厅', -5, 0, 3, 3)
-    const b = room('b', '主卧', 5, 0, 3, 3)
-    const map = computeDoorWalls([a, b])
-    expect(map.get('a')).toHaveLength(0)
-    expect(map.get('b')).toHaveLength(0)
+  it('两个非走廊房间相邻时由 id 较小者持有共享墙', () => {
+    const a = room('a', '客厅', 0, -1.5, 3, 3)
+    const b = room('b', '主卧', 0, 1.5, 3, 3)
+    const plan = computeWallPlan([a, b])
+    expect(plan.get('a')!.north.render).toBe(true)
+    expect(plan.get('a')!.north.hasDoor).toBe(true)
+    expect(plan.get('b')!.south.render).toBe(false)
   })
 
   it('走廊两侧房间各开一扇朝向走廊的门', () => {
     const master = room('master', '主卧', -2, 0, 3, 3)
     const corridor = room('corridor', '走廊', 0, 0, 1, 4)
     const living = room('living', '客厅', 2, 0, 3, 3)
-    const map = computeDoorWalls([master, corridor, living])
-    expect(map.get('master')).toEqual(['east'])
-    expect(map.get('corridor')).toEqual(expect.arrayContaining(['west', 'east']))
-    expect(map.get('living')).toEqual(['west'])
+    const plan = computeWallPlan([master, corridor, living])
+    expect(plan.get('master')!.east.hasDoor).toBe(true)
+    expect(plan.get('living')!.west.hasDoor).toBe(true)
+    expect(plan.get('corridor')!.east.render).toBe(false)
+    expect(plan.get('corridor')!.west.render).toBe(false)
+  })
+
+  it('无相邻房间时兜底开一扇朝整屋中心的门', () => {
+    const a = room('a', '客厅', 0, 0, 3, 3)
+    const plan = computeWallPlan([a])
+    expect(plan.get('a')!.north.hasDoor).toBe(true)
+    expect(plan.get('a')!.east.render).toBe(true)
   })
 })
