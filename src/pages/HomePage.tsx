@@ -78,7 +78,7 @@ export function HomePage() {
     return () => window.clearInterval(timer)
   }, [isGenerating])
 
-  // 键盘平移视角：←→ 左右，↑↓ 上下（不干扰输入框/文本框）
+  // 键盘平移视角：方向键 + WASD（不干扰输入框/文本框）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const active = document.activeElement
@@ -87,17 +87,21 @@ export function HomePage() {
       if (!controls) return
       let dx = 0
       let dy = 0
-      switch (e.key) {
-        case 'ArrowLeft':
+      switch (e.key.toLowerCase()) {
+        case 'arrowleft':
+        case 'a':
           dx = -PAN_STEP
           break
-        case 'ArrowRight':
+        case 'arrowright':
+        case 'd':
           dx = PAN_STEP
           break
-        case 'ArrowUp':
+        case 'arrowup':
+        case 'w':
           dy = PAN_STEP
           break
-        case 'ArrowDown':
+        case 'arrowdown':
+        case 's':
           dy = -PAN_STEP
           break
         default:

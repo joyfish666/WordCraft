@@ -33,7 +33,7 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
             <strong>移动视角</strong> — 键盘方向键或状态栏「视角」按钮平移视角
           </li>
           <li>
-            <strong>方向键</strong> — ←/→ 左右平移，↑/↓ 上下平移（输入框聚焦时不生效）
+            <strong>方向键 / WASD</strong> — ←/→ 或 A/D 左右平移，↑/↓ 或 W/S 上下平移（输入框聚焦时不生效）
           </li>
           <li>
             <strong>复位视角</strong> — 状态栏「复位视角」按钮恢复初始视角
