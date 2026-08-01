@@ -16,8 +16,8 @@ describe('modelTree', () => {
   })
 
   it('countNodes 统计全部模块', () => {
-    // 整屋 + 2 房间 + 4 家具
-    expect(countNodes(scene.root)).toBe(7)
+    // 整屋 + 3 房间（含走廊） + 4 家具
+    expect(countNodes(scene.root)).toBe(8)
   })
 
   it('updateNodePosition 不可变更新指定节点', () => {
