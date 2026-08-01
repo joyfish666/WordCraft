@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { ThinkingMode } from '../types/settings'
 
 /** 聊天消息 */
 export interface ChatMessage {
@@ -21,6 +22,8 @@ export interface ApiClientOptions {
   baseUrl?: string
   /** 连通性检测所用模型名 */
   model?: string
+  /** 深度思考模式：为 'default' 时不传该字段（跟随服务商默认） */
+  thinking?: ThinkingMode
 }
 
 export interface ConnectionTestResult {
@@ -80,6 +83,10 @@ export async function streamChatCompletion(
     messages,
     temperature: 0.2,
     stream: true,
+    // 深度思考：仅在用户显式选择时透传（如 DeepSeek v4 的 thinking 参数）
+    ...(options.thinking && options.thinking !== 'default'
+      ? { thinking: { type: options.thinking } }
+      : {}),
   }
 
   let response: Response
