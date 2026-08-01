@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { ModelNode, SceneModel } from '../types/model'
 
 interface ModelState {
@@ -12,14 +13,23 @@ interface ModelState {
   selectNode: (id: string | null) => void
 }
 
-export const useModelStore = create<ModelState>()((set) => ({
-  scene: null,
-  selectedId: null,
+export const useModelStore = create<ModelState>()(
+  persist(
+    (set) => ({
+      scene: null,
+      selectedId: null,
 
-  setScene: (scene) => set({ scene, selectedId: null }),
-  resetScene: () => set({ scene: null, selectedId: null }),
-  selectNode: (id) => set({ selectedId: id }),
-}))
+      setScene: (scene) => set({ scene, selectedId: null }),
+      resetScene: () => set({ scene: null, selectedId: null }),
+      selectNode: (id) => set({ selectedId: id }),
+    }),
+    {
+      name: 'wordcraft.model',
+      // 仅持久化场景，选中态无需跨会话保留
+      partialize: (state) => ({ scene: state.scene }),
+    },
+  ),
+)
 
 /** 选中节点类型辅助：供组件层以纯函数方式从 store 派生 */
 export function getSelectedNode(

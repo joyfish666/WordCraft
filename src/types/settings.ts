@@ -18,6 +18,8 @@ export interface AppSettings {
   activeKeyId: string | null
   /** 全局默认 Base URL，可覆盖单条 Key 的空值 */
   defaultBaseUrl: string
+  /** 全局默认模型名（如 DeepSeek 用 deepseek-chat） */
+  defaultModel: string
   colorMode: ColorMode
   wireframe: {
     enabled: boolean
