@@ -395,6 +395,111 @@ button {
   color: var(--text);
 }
 
+/* ---------- 移动控制 ---------- */
+
+.move-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.move-controls__title {
+  color: var(--text-dim);
+  font-size: 12px;
+  margin-right: 2px;
+}
+
+.move-controls__btn {
+  min-width: 28px;
+  padding: 3px 6px;
+  line-height: 1.2;
+}
+
+.move-controls__step {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+
+.move-controls__step-label {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.step-btn {
+  min-width: 30px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.step-btn:hover {
+  color: var(--text);
+}
+
+.step-btn--active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* ---------- 操作说明弹窗 ---------- */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.dialog {
+  width: min(520px, calc(100vw - 40px));
+  max-height: 80vh;
+  overflow: auto;
+  padding: 20px 22px;
+  border-radius: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+}
+
+.dialog__title {
+  margin: 0 0 14px;
+  font-size: 17px;
+}
+
+.dialog__list {
+  margin: 0 0 16px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.dialog__list strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* ---------- 设置页 ---------- */
 
 .settings {

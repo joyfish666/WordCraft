@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { createId } from '../lib/id'
-import type { ApiKeyEntry, AppSettings, ColorMode } from '../types/settings'
+import type { ApiKeyEntry, AppSettings, ColorMode, ThinkingMode } from '../types/settings'
 
 interface SettingsState extends AppSettings {
   /** 新增 API Key，返回新 Key 的 id */
@@ -10,6 +10,7 @@ interface SettingsState extends AppSettings {
   setActiveKey: (id: string | null) => void
   setDefaultBaseUrl: (url: string) => void
   setDefaultModel: (model: string) => void
+  setThinking: (mode: ThinkingMode) => void
   setColorMode: (mode: ColorMode) => void
   toggleWireframe: () => void
   setWireframeLineWidth: (width: number) => void
@@ -24,6 +25,7 @@ export const useSettingsStore = create<SettingsState>()(
       activeKeyId: null,
       defaultBaseUrl: '',
       defaultModel: 'gpt-3.5-turbo',
+      thinking: 'disabled',
       colorMode: 'standard',
       wireframe: { enabled: true, lineWidth: 1 },
 
@@ -48,6 +50,7 @@ export const useSettingsStore = create<SettingsState>()(
       setActiveKey: (id) => set({ activeKeyId: id }),
       setDefaultBaseUrl: (url) => set({ defaultBaseUrl: url }),
       setDefaultModel: (model) => set({ defaultModel: model }),
+      setThinking: (mode) => set({ thinking: mode }),
       setColorMode: (mode) => set({ colorMode: mode }),
 
       toggleWireframe: () =>
@@ -62,9 +65,17 @@ export const useSettingsStore = create<SettingsState>()(
 
 /** 当前激活 API Key 的完整配置；无激活 Key 时返回 null */
 export function getActiveApiConfig(
-  state: Pick<SettingsState, 'apiKeys' | 'activeKeyId' | 'defaultBaseUrl' | 'defaultModel'>,
-): { key: string; baseUrl: string; model: string } | null {
+  state: Pick<
+    SettingsState,
+    'apiKeys' | 'activeKeyId' | 'defaultBaseUrl' | 'defaultModel' | 'thinking'
+  >,
+): { key: string; baseUrl: string; model: string; thinking: ThinkingMode } | null {
   const active = state.apiKeys.find((k) => k.id === state.activeKeyId)
   if (!active) return null
-  return { key: active.key, baseUrl: active.baseUrl ?? state.defaultBaseUrl, model: state.defaultModel }
+  return {
+    key: active.key,
+    baseUrl: active.baseUrl ?? state.defaultBaseUrl,
+    model: state.defaultModel,
+    thinking: state.thinking,
+  }
 }

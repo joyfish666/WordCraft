@@ -1,4 +1,4 @@
-import type { ModelNode } from '../types/model'
+import type { ModelNode, Position } from '../types/model'
 
 /**
  * 深度优先遍历树中的所有节点。
@@ -52,4 +52,13 @@ export function countNodes(root: ModelNode): number {
     count += 1
   })
   return count
+}
+
+/** 不可变更新：将指定节点的 position 替换为新值，返回新的树 */
+export function updateNodePosition(root: ModelNode, id: string, position: Position): ModelNode {
+  if (root.id === id) return { ...root, position }
+  if (isContainer(root)) {
+    return { ...root, children: root.children.map((c) => updateNodePosition(c, id, position)) }
+  }
+  return root
 }

@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { forwardRef } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChatGenerationError, generateModelFromChat } from '../lib/chat'
@@ -10,7 +11,9 @@ import { HomePage } from './HomePage'
 
 // jsdom 无 WebGL，mock 掉 3D 视口以聚焦对话交互
 vi.mock('../components/viewport/SceneViewer', () => ({
-  SceneViewer: () => <div data-testid="scene-viewer" />,
+  SceneViewer: forwardRef(function MockSceneViewer() {
+    return <div data-testid="scene-viewer" />
+  }),
 }))
 
 vi.mock('../lib/chat', async (importOriginal) => {
@@ -28,6 +31,7 @@ function resetStores() {
     activeKeyId: null,
     defaultBaseUrl: '',
     defaultModel: 'gpt-3.5-turbo',
+    thinking: 'disabled',
     colorMode: 'standard',
     wireframe: { enabled: true, lineWidth: 1 },
   })

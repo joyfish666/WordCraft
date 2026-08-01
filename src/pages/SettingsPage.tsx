@@ -15,6 +15,7 @@ export function SettingsPage() {
   const activeKeyId = useSettingsStore((s) => s.activeKeyId)
   const defaultBaseUrl = useSettingsStore((s) => s.defaultBaseUrl)
   const defaultModel = useSettingsStore((s) => s.defaultModel)
+  const thinking = useSettingsStore((s) => s.thinking)
   const colorMode = useSettingsStore((s) => s.colorMode)
   const wireframe = useSettingsStore((s) => s.wireframe)
 
@@ -23,6 +24,7 @@ export function SettingsPage() {
   const setActiveKey = useSettingsStore((s) => s.setActiveKey)
   const setDefaultBaseUrl = useSettingsStore((s) => s.setDefaultBaseUrl)
   const setDefaultModel = useSettingsStore((s) => s.setDefaultModel)
+  const setThinking = useSettingsStore((s) => s.setThinking)
   const setColorMode = useSettingsStore((s) => s.setColorMode)
   const toggleWireframe = useSettingsStore((s) => s.toggleWireframe)
   const setWireframeLineWidth = useSettingsStore((s) => s.setWireframeLineWidth)
@@ -88,6 +90,33 @@ export function SettingsPage() {
             onChange={(e) => setDefaultModel(e.target.value)}
             placeholder="如 gpt-3.5-turbo / deepseek-chat，由你的服务商决定"
           />
+        </div>
+
+        <div className="field">
+          <span className="field__label">深度思考</span>
+          <div className="segmented">
+            <button
+              className={`segmented__btn ${thinking === 'disabled' ? 'segmented__btn--active' : ''}`}
+              onClick={() => setThinking('disabled')}
+            >
+              快速生成（推荐）
+            </button>
+            <button
+              className={`segmented__btn ${thinking === 'enabled' ? 'segmented__btn--active' : ''}`}
+              onClick={() => setThinking('enabled')}
+            >
+              深度思考
+            </button>
+            <button
+              className={`segmented__btn ${thinking === 'default' ? 'segmented__btn--active' : ''}`}
+              onClick={() => setThinking('default')}
+            >
+              跟随模型
+            </button>
+          </div>
+          <p className="field__hint">
+            推理型模型（如 DeepSeek v4）默认会先思考再回答，较慢但更聪明；关闭后响应更实时。
+          </p>
         </div>
 
         <div className="api-form">

@@ -145,22 +145,38 @@ describe('generateModelFromChat', () => {
     }
   })
 
-  it('请求体启用流式并包含系统提示与历史', async () => {
+  it('请求体启用流式并包含系统提示、历史与思考模式', async () => {
     respondWith(validModelJson())
     await generateModelFromChat({
       apiKey: 'sk-test',
       history: [{ role: 'user', content: '之前的设计' }],
       userInput: '再加一张床',
+      thinking: 'disabled',
     })
     const [url, init] = mockFetch.mock.calls[0] as [string, { body: string }]
     expect(url).toContain('/chat/completions')
     const body = JSON.parse(init.body) as {
       stream: boolean
+      thinking: { type: string }
       messages: { role: string; content: string }[]
     }
     expect(body.stream).toBe(true)
+    expect(body.thinking).toEqual({ type: 'disabled' })
     expect(body.messages.map((m) => m.role)).toEqual(['system', 'user', 'user'])
     expect(body.messages[0].content).toContain('house')
+  })
+
+  it('思考模式为 default 时不发送 thinking 字段', async () => {
+    respondWith(validModelJson())
+    await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: 'x',
+      thinking: 'default',
+    })
+    const [, init] = mockFetch.mock.calls[0] as [string, { body: string }]
+    const body = JSON.parse(init.body) as { thinking?: { type: string } }
+    expect(body.thinking).toBeUndefined()
   })
 
   it('流式回调收到内容增量', async () => {
