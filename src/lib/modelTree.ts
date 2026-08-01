@@ -1,4 +1,5 @@
-import type { ModelNode, Position } from '../types/model'
+import type { ContainerNode, ModelNode, Position, SceneModel } from '../types/model'
+import { WALL_THICKNESS } from './roomGeometry'
 
 /**
  * 深度优先遍历树中的所有节点。
@@ -61,4 +62,40 @@ export function updateNodePosition(root: ModelNode, id: string, position: Positi
     return { ...root, children: root.children.map((c) => updateNodePosition(c, id, position)) }
   }
   return root
+}
+
+/** 将数值限制到 [min,max]；区间非法（min>max，容器过小）时返回中点 */
+function clampTo(value: number, min: number, max: number): number {
+  if (min > max) return (min + max) / 2
+  return Math.min(Math.max(value, min), max)
+}
+
+/**
+ * 将每个容器内的家具约束在墙体之内，避免家具与墙/门重叠。
+ * 容器边界按墙体厚度内缩；家具保持自身半宽/半深余量。
+ */
+export function normalizeContainment(scene: SceneModel): SceneModel {
+  return { ...scene, root: containChildren(scene.root) }
+}
+
+function containChildren(container: ContainerNode): ContainerNode {
+  const minX = container.position.x - container.dimensions.length / 2 + WALL_THICKNESS
+  const maxX = container.position.x + container.dimensions.length / 2 - WALL_THICKNESS
+  const minZ = container.position.z - container.dimensions.width / 2 + WALL_THICKNESS
+  const maxZ = container.position.z + container.dimensions.width / 2 - WALL_THICKNESS
+
+  const children = container.children.map((child) => {
+    if (isContainer(child)) return containChildren(child)
+    const hx = child.dimensions.length / 2
+    const hz = child.dimensions.width / 2
+    return {
+      ...child,
+      position: {
+        x: clampTo(child.position.x, minX + hx, maxX - hx),
+        y: child.position.y,
+        z: clampTo(child.position.z, minZ + hz, maxZ - hz),
+      },
+    }
+  })
+  return { ...container, children }
 }
