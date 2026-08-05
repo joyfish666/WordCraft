@@ -2,6 +2,7 @@
 
 > **中文版文档**：[README-zh.md](README-zh.md)
 > **技术架构文档**（面向开发者）：[docs/architecture.md](docs/architecture.md)
+> **项目交接文档**（现状/坑/下一步）：[docs/handoff.md](docs/handoff.md)
 
 ## Overview
 
@@ -207,12 +208,12 @@ Beyond the checked roadmap items above:
   - `auto / living`: living room centered, other rooms arranged around it
   - `custom`: for explicitly unconventional layouts, keeps the LLM's free coordinates with code fallback
   - The layout mode is auto-selected by the LLM based on the user's request
-- **Nested sub-rooms (en-suite bathrooms)**: when the user says "bedroom has a bathroom inside", the bathroom renders *inside* the bedroom (not flattened to a neighbor); placed against the parent's corresponding side via `side` (north/south/east/west), or in a corner by default; position auto-constrained within the parent
+- **Nested sub-rooms (en-suite bathrooms)**: when the user says "bedroom has a bathroom inside", the bathroom renders *inside* the bedroom (not flattened to a neighbor); placed in the parent's **corner** on the corresponding `side` (north/south/east/west) or in the NE corner by default; position auto-constrained within the parent; **the door opens toward the parent's interior**
 - **Precision geometry layer**: house bounding box auto-centered; furniture relative to room center, auto-clamped inside walls; walls rendered as **segments by adjacency** (solid / door / open), with uncovered parts of partially-shared walls rendered as exterior walls — no openings to the outside except the front door
-- **Walls & doors**: solid floors + solid walls (door openings full height, equal to wall height); open spaces (living/dining/kitchen) have no wall to the corridor; private rooms (bedrooms/study) keep walls and doors and do not connect to each other; **bathrooms open only to their owner room** (master-bathroom → master bedroom, corridor-bathroom → corridor); shared walls deduplicated and colored by room, corridor uses default color
+- **Walls & doors**: solid floors + solid walls (door openings full height, equal to wall height); open spaces (living/dining/kitchen) have no wall to the corridor; **private rooms (bedrooms/study) connect only to the corridor, not directly to open spaces (kitchen/living)** and not to each other; **bathrooms open only to their owner room** (master-bathroom → master bedroom, corridor-bathroom → corridor), and **public/shared bathrooms open to the corridor**; shared walls deduplicated and colored by room, corridor uses default color
 - **Front door**: forced on the entrance room's south exterior wall, centered, rendered as a **prominent warm door leaf + bright yellow marker** (the only exterior opening)
 - **Camera & compass**: initial 45° south view facing the front door; arrow keys / WASD pan the view, reset view; a **real-time N/S/E/W compass** in the viewport's top-right corner (N points to world north)
-- **Interaction**: click a room to enter focus mode (interior furniture solid, other rooms ghosted); breadcrumb navigation; selected modules show dimensions + **center X/Z coordinates**
+- **Interaction**: click a room to enter focus mode (interior furniture solid, other rooms ghosted); **click to select furniture/parts inside a room** and show their info; breadcrumb navigation; selected modules show dimensions + **center X/Z coordinates**
 - **Conversation generation**: SSE streaming (compatible with reasoning models' long thinking), multi-turn modification, deep-thinking toggle (fast / deep / follow-model)
 - **Debug mode**: toggle in Settings; logs request params / raw LLM reply / v2 parse / layout result, copyable from a panel on the Home page
 
