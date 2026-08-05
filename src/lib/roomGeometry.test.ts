@@ -126,6 +126,21 @@ describe('入户门', () => {
     expect(plan.get('living')!.south.segments.some((s) => s.entrance)).toBe(true)
   })
 
+  it('客厅比厨房大：客厅东墙未被厨房覆盖的部分仍渲染为外墙', () => {
+    const rooms = [
+      room('living_room', '客厅', -2.7, -2.4, 6, 4.2),
+      room('kitchen', '厨房', 1.8, -1.8, 3, 3),
+    ]
+    const plan = computeWallPlan(rooms)
+    const east = plan.get('living_room')!.east
+    // 与厨房共享段开放连通
+    expect(hasOpen(east)).toBe(true)
+    // 客厅独有部分（超出厨房，z 更靠南）仍为外墙
+    expect(rendersWall(east)).toBe(true)
+    const wallSeg = east.segments.find((s) => s.kind === 'wall')!
+    expect(wallSeg.from).toBeLessThan(wallSeg.to)
+  })
+
   it('复现真实布局：客厅（南侧）南墙生成入户门', () => {
     // 与用户日志一致的已解析布局
     const rooms = [
