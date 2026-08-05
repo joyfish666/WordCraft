@@ -1,5 +1,8 @@
 # WordCraft Project Planning Document v1.5
 
+> **中文版文档**：[README-zh.md](README-zh.md)
+> **技术架构文档**（面向开发者）：[docs/architecture.md](docs/architecture.md)
+
 ## Overview
 
 **WordCraft (言筑)** is an open-source, pure front-end web application focused on rapidly generating 3D spatial structure models through natural-language conversation. The project follows a minimalist design philosophy, emphasizing accuracy of structural parameters and spatial planning over complex visual rendering.

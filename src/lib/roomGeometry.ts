@@ -285,12 +285,19 @@ export function computeWallPlan(
         if (ownerIsA(R, N)) {
           // 决定是否开门：
           // - 涉及卫生间时，用卫生间的归属规则（主卧卫生间→主卧、走廊卫生间→走廊），其余连接为实心墙
+          // - 公共卫生间（归属名在房间列表中不存在，如"公共卫生间"）允许与走廊开门
           // - 两侧都不是卫生间且都是私密房间（卧室/书房）时，不直接开门
           const rBath = bathroomOwner(R.name)
           const nBath = bathroomOwner(N.name)
           let hasDoor = true
           if (rBath || nBath) {
             hasDoor = (rBath ? N.name === rBath : false) || (nBath ? R.name === nBath : false)
+            if (!hasDoor) {
+              // 归属房间不存在 → 视为公共卫生间，可与走廊开门
+              hasDoor =
+                (rBath ? isCorridorName(N.name) && !rooms.some((x) => x.name === rBath) : false) ||
+                (nBath ? isCorridorName(R.name) && !rooms.some((x) => x.name === nBath) : false)
+            }
           } else if (isPrivateRoom(R.name) && isPrivateRoom(N.name)) {
             hasDoor = false
           }
