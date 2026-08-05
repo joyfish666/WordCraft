@@ -1,4 +1,5 @@
 import { sceneModelV2Schema } from '../schemas/model.schema'
+import { logDebug } from './debugLog'
 import { resolveLayout } from './layout'
 import type { SceneModel } from '../types/model'
 import {
@@ -85,12 +86,20 @@ export async function generateModelFromChat(options: GenerateOptions): Promise<G
     { role: 'user', content: userInput },
   ]
 
+  logDebug('发送请求', {
+    model: clientOptions.model ?? '(默认)',
+    baseUrl: clientOptions.baseUrl ?? '(默认)',
+    messagesCount: messages.length,
+    lastUser: userInput,
+  })
+
   let content: string
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS)
   try {
     content = await streamChatCompletion(clientOptions, messages, onChunk, controller.signal)
   } catch (error) {
+    logDebug('模型请求失败', error instanceof Error ? error.message : String(error), 'error')
     throw new ChatGenerationError(
       `模型请求失败：${error instanceof Error ? error.message : String(error)}。可在设置页点「检测连通性」定位问题。`,
       'http',
@@ -98,6 +107,8 @@ export async function generateModelFromChat(options: GenerateOptions): Promise<G
   } finally {
     clearTimeout(timer)
   }
+
+  logDebug('收到模型原始回复', content, 'info')
 
   const json = extractModelJson(content)
   if (!json) {
@@ -111,17 +122,26 @@ export async function generateModelFromChat(options: GenerateOptions): Promise<G
     throw new ChatGenerationError('模型返回的 JSON 无法解析，请重试', 'invalid-schema')
   }
 
+  logDebug('模型回复 JSON 解析结果', raw, 'info')
+
   const parsed = sceneModelV2Schema.safeParse(raw)
   if (!parsed.success) {
     const issues = parsed.error.issues
       .slice(0, 3)
       .map((i) => `${i.path.join('.')}: ${i.message}`)
       .join('；')
+    logDebug('v2 结构校验失败', issues, 'error')
     throw new ChatGenerationError(
       `模型返回的 JSON 不符合 v2 数据结构（${issues}），请重试`,
       'invalid-schema',
     )
   }
 
-  return { reply: content, model: resolveLayout(parsed.data) }
+  logDebug('v2 结构校验通过', {
+    layout: parsed.data.root.layout,
+    rooms: parsed.data.root.children.map((r) => ({ id: r.id, name: r.name, side: r.side, dims: r.dimensions })),
+  })
+
+  const model = resolveLayout(parsed.data)
+  return { reply: content, model }
 }

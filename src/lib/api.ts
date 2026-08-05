@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { logDebug } from './debugLog'
 import type { ThinkingMode } from '../types/settings'
 
 /** 聊天消息 */
@@ -181,6 +182,11 @@ export function describeAxiosError(error: unknown): string {
  * 对常见的 401/403/404 等错误给出可读提示。
  */
 export async function testConnection(options: ApiClientOptions): Promise<ConnectionTestResult> {
+  logDebug('连通性检测发起', {
+    baseUrl: options.baseUrl ?? '(默认)',
+    model: options.model ?? '(默认)',
+    keySuffix: options.apiKey.slice(-4),
+  })
   const client = createApiClient(options)
   try {
     const { data } = await client.post<{ model?: string }>('/chat/completions', {
@@ -188,18 +194,18 @@ export async function testConnection(options: ApiClientOptions): Promise<Connect
       messages: [{ role: 'user', content: 'ping' }],
       max_tokens: 1,
     } satisfies ChatCompletionRequest)
+    logDebug('连通性检测成功', data, 'info')
     return { ok: true, message: `连接成功：模型 ${data?.model ?? '未知'}` }
   } catch (error) {
-    if (axios.isAxiosError(error)) {
-      const status = error.response?.status
-      if (status === 401 || status === 403) {
-        return { ok: false, message: 'API Key 无效或无权限（401/403）' }
-      }
-      if (status === 404) {
-        return { ok: false, message: 'API 可达，但模型不存在，请检查模型名与 Base URL' }
-      }
-      return { ok: false, message: `请求失败：${describeAxiosError(error)}` }
-    }
-    return { ok: false, message: describeAxiosError(error) }
+    const message = axios.isAxiosError(error)
+      ? (() => {
+          const status = error.response?.status
+          if (status === 401 || status === 403) return 'API Key 无效或无权限（401/403）'
+          if (status === 404) return 'API 可达，但模型不存在，请检查模型名与 Base URL'
+          return `请求失败：${describeAxiosError(error)}`
+        })()
+      : describeAxiosError(error)
+    logDebug('连通性检测失败', message, 'error')
+    return { ok: false, message }
   }
 }

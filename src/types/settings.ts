@@ -30,4 +30,6 @@ export interface AppSettings {
     enabled: boolean
     lineWidth: number
   }
+  /** 调试模式：开启后记录生成过程日志（设置页开关） */
+  debugMode: boolean
 }

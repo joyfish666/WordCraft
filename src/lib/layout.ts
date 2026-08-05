@@ -1,3 +1,4 @@
+import { logDebug } from './debugLog'
 import { isContainer, normalizeContainment } from './modelTree'
 import { WALL_THICKNESS, isCorridorName } from './roomGeometry'
 import type {
@@ -23,8 +24,25 @@ type LivingSide = (typeof SIDES)[number]
  * - 家具位置统一由「相对房间中心」偏移为绝对坐标，并经 normalizeContainment 约束进墙内
  */
 export function resolveLayout(scene: SceneModelV2): SceneModel {
+  const layout = scene.root.layout
+  logDebug('布局引擎开始', {
+    mode: layout.mode,
+    template: layout.mode === 'auto' ? layout.template : 'custom',
+    house: scene.root.name,
+  })
   const root = resolveHouse(scene.root)
-  return normalizeContainment({ version: 1, root })
+  const model = normalizeContainment({ version: 1, root })
+  logDebug('布局解析完成', {
+    house: model.root.name,
+    houseDimensions: model.root.dimensions,
+    rooms: model.root.children.map((c) => ({
+      name: c.name,
+      position: c.position,
+      dimensions: c.dimensions,
+      furniture: c.type === 'room' ? c.children.length : 0,
+    })),
+  })
+  return model
 }
 
 function resolveHouse(house: HouseNodeV2): ContainerNode {

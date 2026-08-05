@@ -33,7 +33,8 @@ function resetStores() {
     defaultModel: 'gpt-3.5-turbo',
     thinking: 'disabled',
     colorMode: 'standard',
-    wireframe: { enabled: true, lineWidth: 1 },
+    wireframe: { enabled: false, lineWidth: 1 },
+    debugMode: false,
   })
 }
 
