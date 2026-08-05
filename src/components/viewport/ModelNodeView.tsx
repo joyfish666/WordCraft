@@ -4,6 +4,7 @@ import {
   CORRIDOR_COLOR,
   CORRIDOR_COLORBLIND,
   ENTRANCE_DOOR_COLOR,
+  ENTRANCE_MARKER_COLOR,
   FURNITURE_COLOR,
   FURNITURE_COLORBLIND,
   roomColor,
@@ -67,12 +68,18 @@ function WallSegmentBox({ from, to, height, thickness, kind, entrance, material 
         <boxGeometry args={[sideLen, height, thickness]} />
         <meshStandardMaterial {...material} />
       </mesh>
-      {/* 入户门：渲染醒目门扇，与室内门洞区分 */}
+      {/* 入户门：实心暖色门扇 + 门洞上方亮黄标识牌，与室内门洞明确区分 */}
       {entrance && (
-        <mesh position={[center, Math.min(height, 2.1) / 2, 0]}>
-          <boxGeometry args={[Math.min(DOOR_WIDTH, len), Math.min(height, 2.1), 0.06]} />
-          <meshStandardMaterial color={ENTRANCE_DOOR_COLOR} />
-        </mesh>
+        <>
+          <mesh position={[center, Math.min(height, 2.1) / 2, 0]}>
+            <boxGeometry args={[Math.min(DOOR_WIDTH, len), Math.min(height, 2.1), 0.12]} />
+            <meshStandardMaterial color={ENTRANCE_DOOR_COLOR} />
+          </mesh>
+          <mesh position={[center, height + 0.3, 0]}>
+            <boxGeometry args={[Math.min(DOOR_WIDTH, len) + 0.4, 0.22, 0.3]} />
+            <meshStandardMaterial color={ENTRANCE_MARKER_COLOR} />
+          </mesh>
+        </>
       )}
     </>
   )

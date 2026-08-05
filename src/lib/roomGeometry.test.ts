@@ -125,4 +125,18 @@ describe('入户门', () => {
     expect(rendersWall(plan.get('living')!.south)).toBe(true)
     expect(plan.get('living')!.south.segments.some((s) => s.entrance)).toBe(true)
   })
+
+  it('复现真实布局：客厅（南侧）南墙生成入户门', () => {
+    // 与用户日志一致的已解析布局
+    const rooms = [
+      room('corridor', '走廊', 0, 0.25, 10.5, 1.2),
+      room('living_room', '客厅', -2.25, -2.35, 6, 4),
+      room('bedroom1', '主卧', -3.25, 2.6, 4, 3.5),
+      room('bedroom2', '次卧', 0.5, 2.35, 3.5, 3),
+      room('bedroom3', '书房', 3.75, 2.35, 3, 3),
+    ]
+    const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'living_room' })
+    expect(hasDoor(plan.get('living_room')!.south)).toBe(true)
+    expect(plan.get('living_room')!.south.segments.some((s) => s.entrance)).toBe(true)
+  })
 })
