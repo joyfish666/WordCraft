@@ -36,6 +36,8 @@ export interface ContainerNode {
   dimensions: Dimensions
   position: Position
   children: ModelNode[]
+  /** 整屋的入户房间 id（仅 house 节点有意义），用于在外墙生成入户大门 */
+  entranceRoomId?: string
 }
 
 /** 模型中的任意节点（容器或叶节点） */

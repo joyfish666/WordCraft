@@ -2,21 +2,28 @@ import { useMemo } from 'react'
 import { walk } from '../../lib/modelTree'
 import { computeWallPlan, type WallPlan } from '../../lib/roomGeometry'
 import { useModelStore } from '../../store/useModelStore'
-import type { ContainerNode } from '../../types/model'
+import type { ContainerNode, SceneModel } from '../../types/model'
 import { ModelNodeView } from './ModelNodeView'
+
+/** 入口方向固定在南侧（地图下方，-Z）；入户门开在入口房间南墙 */
+const ENTRANCE_DIRECTION = 'south' as const
 
 /** 3D 场景内容：网格、坐标轴与当前模型（含共享墙去重与门洞计算） */
 export function Viewport3D() {
   const scene = useModelStore((s) => s.scene)
 
-  // 计算各房间墙体方案：共享墙去重、门洞开在相邻墙、走廊默认色
+  // 计算各房间墙体方案：共享墙去重、开放空间不设墙、南外墙入户门
   const wallPlan = useMemo(() => {
     if (!scene) return new Map<string, WallPlan>()
     const rooms: ContainerNode[] = []
     walk(scene.root, (n) => {
       if (n.type === 'room') rooms.push(n as ContainerNode)
     })
-    return computeWallPlan(rooms)
+    const house = scene.root as SceneModel['root']
+    return computeWallPlan(rooms, {
+      entrance: ENTRANCE_DIRECTION,
+      entranceRoomId: house.entranceRoomId,
+    })
   }, [scene])
 
   return (
