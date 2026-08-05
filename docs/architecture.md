@@ -1,6 +1,6 @@
 # 言筑（WordCraft）技术文档
 
-> 版本：v1.9 · 更新：2026-08-05（v1.0.0 已发布并部署 GitHub Pages）
+> 版本：v1.10 · 更新：2026-08-05（v1.0.0 已发布；v1.1.0 新增本地项目库与 2D 俯视平面图）
 
 本文档面向开发者和贡献者，描述言筑的核心架构、数据契约与实现细节。项目为**纯前端**应用，无需后端。
 
@@ -157,6 +157,24 @@ interface WallFace {
   - 编辑提交统一走 `updateSelected(patch)`（名称/尺寸/位置部分补丁）：不可变更新 `updateNodeFields` → `normalizeContainment` 约束进墙内 → 旧场景压入 `past` 并清空 `future`。
   - `translateSelected`（位置微调/方向键）与 `resetSelectedPosition`（复位）每次调用也各记一步历史；新编辑会使 redo 失效；历史上限 50 步。
 - **useChatStore**（persist → `wordcraft.chat`）：对话消息、生成态。
+- **useProjectStore**（persist → `wordcraft.project`）：当前场景所属项目（`currentId`/`currentName`，持久化）+ 会话内脏标记 `dirty`；`setProject`/`clearProject`/`markSaved`/`markDirty`/`setCurrentName`。**脏标记驱动**在 HomePage：`lastSavedJsonRef` 记录"上次保存的场景 JSON"，场景变化时与之一致则 `markSaved`、不一致则 `markDirty`；仅当前项目绑定（`currentId !== null`）时跟踪。
+
+## 6.5 本地项目库与 2D 俯视平面图（v1.1.0）
+
+### 本地项目库
+
+- **数据**：Dexie（IndexedDB）`wordcraft.projects`，`ProjectRecord {id?, name, data(模型JSON), createdAt, updatedAt}`；`database.ts` 提供 `listProjects`（按 updatedAt 倒序）/ `saveProject` / `getProject` / `updateProject` / `deleteProject`。
+- **UI**：HomePage 工具栏「保存」「项目库」+ `ProjectLibraryDialog`（新建/打开/重命名/删除）。保存无当前项目时打开对话框聚焦名称输入；有当前项目时 `updateProject` 覆盖。
+- **打开项目**：`JSON.parse` + 轻量校验（`version===1 && root.type==='house'`）→ `setScene(parsed)`（内部 normalize + 初始位置快照 + 清历史）→ `setProject`。切换/加载示例/清空前用 `confirmDiscardUnsaved` 守卫未保存修改。
+- **生成/示例/清空** 后 `clearProject()`：新场景成为游离场景，不属于任何项目。
+
+### 2D 俯视平面图（同 Canvas 正交相机）
+
+- **纯函数**（`lib/planGeometry.ts`）：`houseBounds`（整屋包围盒）、`walkRooms`（递归房间+兄弟索引，颜色与 3D 一致）、`roomLabelText`、`dimensionLines`（外廓尺寸线）、`computePlanCamera`（正交取景 zoom = min(w/fitX, h/fitZ)）。均可单测。
+- **相机切换**：`SceneViewer` 的 `planMode` 为 true 时挂载 **drei `OrthographicCamera makeDefault`**（`near=1 far=300 zoom=20 up=[0,0,1]`），`OrbitControls key={planMode?'ortho':'persp'}` 强制重挂载绑定新相机。⚠️ **必须用 drei 相机组件而非 R3F 原生元素**——R3F 核心不处理 `makeDefault`，drei 封装才切换 `state.camera` 并在卸载时恢复原相机。
+- **取景**（`PlanRig`）：`camera.up.set(0,0,1)` + `lookAt(整屋中心)` 使正北朝上；`camera.zoom = computePlanCamera().zoom`、`controls.update()`、`controls.saveState()`（复位视角回到取景）。依赖 scene/size 变化自动重新取景。
+- **标注**（`PlanAnnotations`）：drei `Html`（正交相机兼容）绘制房间「名称 长×宽」标签（颜色用共享 `roomFaceColor(name, siblingIndex, colorMode)`，走廊默认色）+ 整屋「总长/总宽」尺寸线（细长 mesh + Html 文案，墙顶之上、包围盒外）。`zIndexRange={[9,0]}` 保证在属性面板（z-10）之下。
+- **平移**：`pan()` 增加正交分支（scale = `1/zoom`；drei ortho frustum = 像素尺寸）；透视分支保持原 fov 公式。
 
 ## 7. 生成链路（lib/chat.ts）
 
@@ -173,8 +191,8 @@ src/
 ├── main.tsx / App.tsx         # 入口与路由
 ├── components/
 │   ├── layout/AppShell.tsx    # 侧边栏 + 内容区
-│   ├── ui/                    # Button/Input/HelpDialog
-│   └── viewport/              # SceneViewer/Viewport3D/ModelNodeView/PropertyPanel/Compass
+│   ├── ui/                    # Button/Input/HelpDialog/ProjectLibraryDialog
+│   └── viewport/              # SceneViewer/Viewport3D/ModelNodeView/PropertyPanel/Compass/PlanRig/PlanAnnotations
 ├── lib/
 │   ├── chat.ts                # 生成链路与系统提示词
 │   ├── api.ts                 # OpenAI 兼容客户端、SSE 流式、连通性检测
@@ -182,14 +200,15 @@ src/
 │   ├── furniturePlacement.ts  # 家具常理摆放（贴墙 + 避让嵌套卫生间）
 │   ├── roomGeometry.ts        # 分段墙体方案 computeWallPlan
 │   ├── modelTree.ts           # 树遍历/家具约束 normalizeContainment
+│   ├── planGeometry.ts        # 2D 平面图纯函数（包围盒/取景/尺寸线/房间标签）
 │   ├── sampleModel.ts         # 示例模型
 │   ├── debugLog.ts            # 调试日志器
-│   └── palette.ts / id.ts
+│   └── palette.ts / id.ts     # palette 含共享 roomFaceColor
 ├── schemas/model.schema.ts    # v2 Zod Schema
-├── store/                     # Zustand stores
+├── store/                     # Zustand stores（含 useProjectStore）
 ├── styles/global.css
 ├── types/model.ts             # v2 契约 + v1 已解析模型类型
-└── db/database.ts             # Dexie 本地项目库
+└── db/database.ts             # Dexie 本地项目库（已接入 UI）
 ```
 
 ## 9. 测试（Vitest）
@@ -207,4 +226,4 @@ src/
 
 ---
 
-**维护者**：JoyFish · 文档版本 v1.9
+**维护者**：JoyFish · 文档版本 v1.10

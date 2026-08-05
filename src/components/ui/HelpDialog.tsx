@@ -47,6 +47,12 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
           <li>
             <strong>层级导航</strong> — 底部面包屑可点击跳转到任意层级
           </li>
+          <li>
+            <strong>保存 / 项目库</strong> — 工具栏「保存」把当前场景存入本地项目库；「项目库」可新建 / 打开 / 重命名 / 删除多个方案
+          </li>
+          <li>
+            <strong>2D 平面图</strong> — 视口左上角「平面图」切换俯视平面图（正北朝上，可平移缩放），再点「3D」返回
+          </li>
         </ul>
         <div className="dialog__actions">
           <button className="btn btn--primary" onClick={onClose}>

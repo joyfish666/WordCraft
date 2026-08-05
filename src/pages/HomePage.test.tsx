@@ -6,13 +6,14 @@ import { ChatGenerationError, generateModelFromChat } from '../lib/chat'
 import { createSampleModel } from '../lib/sampleModel'
 import { useChatStore } from '../store/useChatStore'
 import { useModelStore } from '../store/useModelStore'
+import { useProjectStore } from '../store/useProjectStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { HomePage } from './HomePage'
 
-// jsdom 无 WebGL，mock 掉 3D 视口以聚焦对话交互
+// jsdom 无 WebGL，mock 掉 3D 视口以聚焦对话交互；暴露 planMode 供视图切换断言
 vi.mock('../components/viewport/SceneViewer', () => ({
-  SceneViewer: forwardRef(function MockSceneViewer() {
-    return <div data-testid="scene-viewer" />
+  SceneViewer: forwardRef(function MockSceneViewer(props: { planMode?: boolean }) {
+    return <div data-testid="scene-viewer" data-planmode={String(props?.planMode ?? false)} />
   }),
 }))
 
@@ -26,6 +27,7 @@ const mockGenerate = vi.mocked(generateModelFromChat)
 function resetStores() {
   useChatStore.setState({ messages: [], isGenerating: false })
   useModelStore.setState({ scene: null, selectedId: null })
+  useProjectStore.setState({ currentId: null, currentName: null, dirty: false })
   useSettingsStore.setState({
     apiKeys: [],
     activeKeyId: null,
@@ -95,5 +97,30 @@ describe('HomePage 对话交互', () => {
 
     expect(await screen.findByText(/模型请求失败：401 Unauthorized/)).toBeInTheDocument()
     expect(useModelStore.getState().scene).toBeNull()
+  })
+
+  it('视图模式切换：3D / 平面图 联动 planMode prop', async () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    const viewer = () => screen.getByTestId('scene-viewer')
+    expect(viewer().getAttribute('data-planmode')).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: '平面图' }))
+    expect(viewer().getAttribute('data-planmode')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: '3D' }))
+    expect(viewer().getAttribute('data-planmode')).toBe('false')
+  })
+
+  it('工具栏「项目库」按钮打开本地项目库对话框', async () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '项目库' }))
+    expect(await screen.findByRole('heading', { name: '本地项目库' })).toBeInTheDocument()
+    expect(await screen.findByText(/暂无项目/)).toBeInTheDocument()
   })
 })

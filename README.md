@@ -48,7 +48,7 @@
 
 #### Model Display
 - **3D view**: CAD-style rotate / zoom / pan
-- **2D view**: One-click switch to top-down plan view
+- **2D view**: One-click switch to top-down plan view ✅ implemented (v1.1, see "Current Implementation Progress")
 - **Dimension display**: When a module is selected, its length/width/height and volume are shown in real time
 
 #### Connectivity Detection
@@ -94,9 +94,9 @@ Implemented in two phases to balance precision and intuitiveness:
 - One-click clear of the current scene to start fresh
 
 #### Local Project Library
-- Save multiple designs to browser local storage (IndexedDB)
-- List, switch, delete, and rename operations
-- Auto-save to prevent accidental data loss
+- Save multiple designs to browser local storage (IndexedDB) ✅ implemented (v1.1)
+- List, switch, delete, and rename operations ✅
+- Manual-save model: toolbar "保存" + "项目库" dialog; unsaved changes are confirmed before switching / loading sample / clearing
 
 #### Data Export
 - Export raw JSON for secondary development
@@ -181,7 +181,7 @@ Implemented in two phases to balance precision and intuitiveness:
 
 ### Phase 2: Editing & Interaction V1.0
 - [x] Property panel editing
-- [ ] Local project save & switch
+- [x] Local project save & switch
 - [x] Model connectivity detection
 - [ ] Mobile basic adaptation
 - [x] Unit & integration tests
@@ -225,6 +225,9 @@ Beyond the checked roadmap items above:
 - **Conversation generation**: SSE streaming (compatible with reasoning models' long thinking), multi-turn modification, deep-thinking toggle (fast / deep / follow-model)
 - **Debug mode**: toggle in Settings; logs request params / raw LLM reply / v2 parse / layout result, copyable from a panel on the Home page
 - **v1.0.0 release**: first stable release on 2026-08-05, deployed to GitHub Pages (`vite base=/WordCraft/` + GitHub Actions auto build & deploy); 86 tests green, lint/build pass
+- **Local project library (v1.1.0)**: Dexie (IndexedDB) stores multiple designs; toolbar "保存" writes the scene to the current project, "项目库" dialog supports new / open / rename / delete; unsaved changes are confirmed before switching / loading sample / clearing; the active project survives reload
+- **2D top-down plan view (v1.1.0)**: "3D / 平面图" toggle at the viewport's top-left; orthographic top-down camera (north up, pan + zoom only, auto-framed to the house); per-room "name W×L" labels colored exactly like 3D; overall "length / width" dimension lines outside the house outline; selection / focus syncs with 3D
+- **v1.1.0 release**: on 2026-08-05 adds the project library and 2D plan view; tests grow to 109, all green, lint/build pass
 
 ## License
 
@@ -239,5 +242,5 @@ MIT — see the [LICENSE](LICENSE) file.
 ---
 
 **Last updated**: 2026-08-05
-**Doc version**: v1.9
+**Doc version**: v1.10
 **Maintainer**: JoyFish

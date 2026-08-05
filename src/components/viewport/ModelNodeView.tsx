@@ -1,19 +1,16 @@
 import { Edges } from '@react-three/drei'
 import { isContainer } from '../../lib/modelTree'
 import {
-  CORRIDOR_COLOR,
-  CORRIDOR_COLORBLIND,
   ENTRANCE_DOOR_COLOR,
   ENTRANCE_MARKER_COLOR,
   FURNITURE_COLOR,
   FURNITURE_COLORBLIND,
-  roomColor,
+  roomFaceColor,
 } from '../../lib/palette'
 import {
   DOOR_WIDTH,
   WALL_THICKNESS,
   defaultWallPlan,
-  isCorridorName,
   wallPlanWithDoor,
   type DoorDirection,
   type WallPlan,
@@ -253,12 +250,8 @@ export function ModelNodeView({
     }
 
     // 房间外壳材质：整屋视图实心；聚焦房间透明以便查看内部；其他房间聚焦时虚化
-    const isCorridor = isCorridorName(node.name)
-    const baseColor = isCorridor
-      ? colorMode === 'colorblind'
-        ? CORRIDOR_COLORBLIND
-        : CORRIDOR_COLOR
-      : roomColor(siblingIndex, colorMode)
+    // 颜色与 2D 平面图共用 roomFaceColor，保证两种视图下房间颜色一致
+    const baseColor = roomFaceColor(node.name, siblingIndex, colorMode)
     let material: ShellMaterial
     if (isFocusedRoom) {
       material = { color: baseColor, transparent: true, opacity: 0.1, depthWrite: false, wireframe: wireframeEnabled }
