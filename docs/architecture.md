@@ -1,6 +1,6 @@
 # 言筑（WordCraft）技术文档
 
-> 版本：v1.5 · 更新：2026-08-05
+> 版本：v1.9 · 更新：2026-08-05（v1.0.0 已发布并部署 GitHub Pages）
 
 本文档面向开发者和贡献者，描述言筑的核心架构、数据契约与实现细节。项目为**纯前端**应用，无需后端。
 
@@ -113,6 +113,8 @@ interface ContainerNode {
 
 **布局惯例**：客厅近入口（南侧）、卧室沿走廊两侧、单间房无走廊、除入户门外房屋闭合。
 
+**家具常理摆放**（`furniturePlacement.ts`，仅 auto 模式 + 示例模型）：靠墙家具（床/衣柜/橱柜/书桌/沙发等，`isWallAnchored`）贴**最近墙**（保持平行于墙的坐标），**大面积贴墙**——长边（max(长,宽)）沿墙，必要时**交换长宽**实现 90° 旋转（`rotationY` 同步 +90°，渲染器暂不读 rotationY，视觉靠交换后的尺寸生效）；再**沿墙滑动**避开三类禁止进入区：嵌套子房间（足迹 + 墙厚）、**房间门口通道**（`computeDoorZones` 从墙体方案提取门洞，含入户门，`DOOR_CLEARANCE=1m` 深 × 门宽）、已放置的其他家具（按 children 顺序贪心）。独立家具（茶几/餐桌/椅子等，`FREE_STANDING_RE`）保持原位，仅约束进墙内并避让上述禁区。custom 自由布局保留大模型的显式坐标。
+
 ## 4. 墙体模型（lib/roomGeometry.ts）
 
 墙体按**相邻关系切分为段（segment）**渲染，每段为 实体 / 门 / 开放 之一：
@@ -133,6 +135,7 @@ interface WallFace {
 - **部分被占用的墙**：被相邻房间覆盖的部分按共享/开放处理，**未覆盖部分仍渲染为外墙**，保证不与外部相通。
 - **入户门**：开在入口房间南外墙居中，段标记 `entrance: true`，渲染醒目门扇。
 - **墙段坐标**：东/西墙渲染用 `-90°` 旋转，使局部坐标方向与 `wallInfo` 一致（避免镜像导致外墙段错位）。
+- **门口禁区**（`computeDoorZones`/`DOOR_CLEARANCE`）：从墙体方案提取各顶层房间门洞（含入户门），供家具常理摆放避让；与渲染用 `computeWallPlan` 同源，保证门洞位置一致。
 
 ## 5. 渲染管线（components/viewport/*）
 
@@ -145,11 +148,14 @@ interface WallFace {
   - **家具**：实体 vs 虚化两态（聚焦时非聚焦房间家具虚化）。
   - **聚焦模式**：点击房间 → 该房间外壳透明化以查看内部实体家具，其他房间虚化。
 - **入户门**：暖橙门扇 + 亮黄门头标识，一眼可辨。
+- **属性面板**（`PropertyPanel`）：选中模块后浮于视口右侧，编辑名称/长宽高/X·Y·Z；数字输入本地草稿态、Enter/blur 提交（避免逐键提交）；位置微调与复位位置直接调用 `translateSelected`/`resetSelectedPosition`。
 
 ## 6. 状态管理（store/*）
 
 - **useSettingsStore**（Zustand + persist → localStorage `wordcraft.settings`）：API Keys、Base URL、默认模型、深度思考模式、颜色模式、线框、调试开关。
-- **useModelStore**（persist → `wordcraft.model`）：当前场景（已解析模型）、选中节点、聚焦房间、初始位置快照；`setScene` 应用 `normalizeContainment`。
+- **useModelStore**（persist → `wordcraft.model`）：当前场景（已解析模型）、选中节点、聚焦房间、初始位置快照、**撤销/重做历史栈（`past`/`future`，仅会话内不持久化）**；`setScene` 应用 `normalizeContainment` 并清空历史。
+  - 编辑提交统一走 `updateSelected(patch)`（名称/尺寸/位置部分补丁）：不可变更新 `updateNodeFields` → `normalizeContainment` 约束进墙内 → 旧场景压入 `past` 并清空 `future`。
+  - `translateSelected`（位置微调/方向键）与 `resetSelectedPosition`（复位）每次调用也各记一步历史；新编辑会使 redo 失效；历史上限 50 步。
 - **useChatStore**（persist → `wordcraft.chat`）：对话消息、生成态。
 
 ## 7. 生成链路（lib/chat.ts）
@@ -157,7 +163,7 @@ interface WallFace {
 1. 构建 messages：系统提示词（v2 语义契约 + 多轮修改规则）+ 多轮历史 + 用户输入。
 2. **SSE 流式请求**（`streamChatCompletion`，lib/api.ts）：兼容推理型模型长思考，180s 兜底超时。
 3. 从回复提取 JSON（纯 JSON / 代码块 / 夹杂散文），`sceneModelV2Schema` 校验。
-4. `resolveLayout` 平铺为绝对坐标模型。
+4. `resolveLayout` 平铺为绝对坐标模型；**auto 布局额外跑一遍家具常理摆放**（`applyFurnitureConventions`，贴墙 + 避让嵌套卫生间），再 normalizeContainment 兜底。
 5. 多轮：历史发送的是上一轮的 v2 JSON，系统提示词要求"基于上一个模型输出修改后的完整 JSON，不得原样重复"。
 
 ## 8. 文件结构
@@ -168,11 +174,12 @@ src/
 ├── components/
 │   ├── layout/AppShell.tsx    # 侧边栏 + 内容区
 │   ├── ui/                    # Button/Input/HelpDialog
-│   └── viewport/              # SceneViewer/Viewport3D/ModelNodeView/Compass
+│   └── viewport/              # SceneViewer/Viewport3D/ModelNodeView/PropertyPanel/Compass
 ├── lib/
 │   ├── chat.ts                # 生成链路与系统提示词
 │   ├── api.ts                 # OpenAI 兼容客户端、SSE 流式、连通性检测
 │   ├── layout.ts              # 布局引擎 resolveLayout
+│   ├── furniturePlacement.ts  # 家具常理摆放（贴墙 + 避让嵌套卫生间）
 │   ├── roomGeometry.ts        # 分段墙体方案 computeWallPlan
 │   ├── modelTree.ts           # 树遍历/家具约束 normalizeContainment
 │   ├── sampleModel.ts         # 示例模型
@@ -200,4 +207,4 @@ src/
 
 ---
 
-**维护者**：JoyFish · 文档版本 v1.5
+**维护者**：JoyFish · 文档版本 v1.9

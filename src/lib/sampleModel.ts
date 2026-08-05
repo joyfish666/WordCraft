@@ -1,11 +1,13 @@
+import { applyFurnitureConventions } from './furniturePlacement'
 import type { SceneModel } from '../types/model'
 
 /**
  * 示例模型：一条走廊连接主卧与客厅的小户型。
  * 用于在接入大模型前验证 3D 渲染管线（Phase 0）。
+ * 创建时应用家具常理摆放，让床/衣柜等默认贴墙，与生成模型行为一致。
  */
 export function createSampleModel(): SceneModel {
-  return {
+  return applyFurnitureConventions({
     version: 1,
     root: {
       id: 'house-sample',
@@ -74,5 +76,5 @@ export function createSampleModel(): SceneModel {
         },
       ],
     },
-  }
+  })
 }

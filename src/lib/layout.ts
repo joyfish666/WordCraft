@@ -1,4 +1,5 @@
 import { logDebug } from './debugLog'
+import { applyFurnitureConventions } from './furniturePlacement'
 import { isContainer, normalizeContainment } from './modelTree'
 import { WALL_THICKNESS, isCorridorName } from './roomGeometry'
 import type {
@@ -33,7 +34,12 @@ export function resolveLayout(scene: SceneModelV2): SceneModel {
     house: scene.root.name,
   })
   const root = resolveHouse(scene.root)
-  const model = normalizeContainment({ version: 1, root })
+  let model = normalizeContainment({ version: 1, root })
+  // 常规布局（auto）按家具常理贴墙放置；custom 自由布局保留大模型的显式坐标
+  if (layout.mode === 'auto') {
+    model = applyFurnitureConventions(model)
+    model = normalizeContainment(model)
+  }
   logDebug('布局解析完成', {
     house: model.root.name,
     houseDimensions: model.root.dimensions,

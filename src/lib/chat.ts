@@ -125,7 +125,10 @@ export async function generateModelFromChat(options: GenerateOptions): Promise<G
     throw new ChatGenerationError('模型返回的 JSON 无法解析，请重试', 'invalid-schema')
   }
 
-  logDebug('模型回复 JSON 解析结果', raw, 'info')
+  // 原始回复本身就是纯净 JSON 时，解析结果与之相同——跳过重复的大段 JSON，避免日志翻倍
+  if (json.trim() !== content.trim()) {
+    logDebug('模型回复 JSON 解析结果', raw, 'info')
+  }
 
   const parsed = sceneModelV2Schema.safeParse(raw)
   if (!parsed.success) {

@@ -8,6 +8,8 @@
 
 **WordCraft (言筑)** is an open-source, pure front-end web application focused on rapidly generating 3D spatial structure models through natural-language conversation. The project follows a minimalist design philosophy, emphasizing accuracy of structural parameters and spatial planning over complex visual rendering.
 
+> 🚀 **Live v1.0.0**: https://joyfish666.github.io/WordCraft/ (GitHub Pages, no backend, all data stays local)
+
 ### Core Features
 
 - 🚀 **Text-to-3D**: Automatically generate hierarchical spatial models from natural-language descriptions
@@ -72,12 +74,13 @@
 
 Implemented in two phases to balance precision and intuitiveness:
 
-#### Phase 1: Property Panel (V1.0 required - precise control)
+#### Phase 1: Property Panel (V1.0 required - precise control) ✅ implemented
 - **Trigger**: Click any module (furniture/wall) in the 3D scene
 - **Interface**: A property panel slides out from the right
 - **Function**: Shows the module's parameters (name, length, width, height, X/Y/Z coordinates)
 - **Operation**: Users modify values in input boxes; on Enter or blur, the 3D scene updates in real time
 - **Advantage**: CAD-like habits, satisfying hard requirements for precise dimension design
+- **Extras**: position nudging with an adjustable step (0.1 / 0.5 / 1 m), a "reset position" that returns to the load-time snapshot, and **undo / redo** (toolbar buttons or Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
 
 #### Phase 2: Gizmo Assistance (V2.0 iteration - intuitive interaction)
 - **Trigger**: After selecting a module, a 3D coordinate gizmo appears at its center
@@ -177,12 +180,12 @@ Implemented in two phases to balance precision and intuitiveness:
 - [x] Basic user-interaction tests
 
 ### Phase 2: Editing & Interaction V1.0
-- [ ] Property panel editing
+- [x] Property panel editing
 - [ ] Local project save & switch
 - [x] Model connectivity detection
 - [ ] Mobile basic adaptation
 - [x] Unit & integration tests
-- [ ] Release v1.0.0
+- [x] Release v1.0.0 (GitHub Pages: https://joyfish666.github.io/WordCraft/)
 
 ### Phase 3: Experience Optimization V2.0
 - [ ] Gizmo-assisted editing (TransformControls)
@@ -214,8 +217,14 @@ Beyond the checked roadmap items above:
 - **Front door**: forced on the entrance room's south exterior wall, centered, rendered as a **prominent warm door leaf + bright yellow marker** (the only exterior opening)
 - **Camera & compass**: initial 45° south view facing the front door; arrow keys / WASD pan the view, reset view; a **real-time N/S/E/W compass** in the viewport's top-right corner (N points to world north)
 - **Interaction**: click a room to enter focus mode (interior furniture solid, other rooms ghosted); **click to select furniture/parts inside a room** and show their info; breadcrumb navigation; selected modules show dimensions + **center X/Z coordinates**
+- **Manual editing (property panel)**: click any module → the panel slides out on the right; edit name / length / width / height / X·Y·Z, committed on Enter or blur, changes auto-constrained inside walls; position nudging with an adjustable step; "reset position" returns to the load-time snapshot
+- **Undo / redo**: snapshot-based history (session-only, capped at 50 steps); toolbar buttons or Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z; loading a new model clears history
+- **Furniture conventions**: at generation (auto layouts) wall-anchored furniture (beds / wardrobes / cabinets / desks / sofas...) snaps flush to its **nearest wall** with the **larger face against the wall** (long side along the wall, rotating by swapping length/width when needed), then **slides along the wall to avoid nested sub-rooms** (e.g. an en-suite bathroom), **room doorways** (extracted from the same wall plan, incl. the front door) and previously placed furniture; free-standing pieces (coffee table / dining table / chairs...) stay where placed, only clamped inside walls — code-level fallback so "bed against the wall, not blocking the door" no longer depends on the model following the prompt
+- **Debug log**: de-duplicated (the duplicated parsed-JSON dump is skipped when the reply is already pure JSON, and the noisy per-render front-door log is removed), with a **download** button in the debug panel that saves a `.log` file
+- **Nudge directions follow the compass**: at the default south view world +x projects to the screen-left, so the property panel's 东/西 nudge buttons map to world −x / +x to match the compass (北=+z, 南=−z)
 - **Conversation generation**: SSE streaming (compatible with reasoning models' long thinking), multi-turn modification, deep-thinking toggle (fast / deep / follow-model)
 - **Debug mode**: toggle in Settings; logs request params / raw LLM reply / v2 parse / layout result, copyable from a panel on the Home page
+- **v1.0.0 release**: first stable release on 2026-08-05, deployed to GitHub Pages (`vite base=/WordCraft/` + GitHub Actions auto build & deploy); 86 tests green, lint/build pass
 
 ## License
 
@@ -230,5 +239,5 @@ MIT — see the [LICENSE](LICENSE) file.
 ---
 
 **Last updated**: 2026-08-05
-**Doc version**: v1.5
+**Doc version**: v1.9
 **Maintainer**: JoyFish

@@ -137,20 +137,21 @@ describe('resolveLayout - living 客厅居中型', () => {
 
 describe('resolveLayout - custom 自由型', () => {
   it('家具相对房间中心偏移为绝对坐标', () => {
+    // 用独立家具（茶几）测相对→绝对转换，避免被家具常理贴墙逻辑挪动
     const model = resolveLayout(
       scene({
         children: [
-          roomV2('r1', '主卧', 3, 3, undefined, [{ id: 'bed', x: 0.5, z: -0.3 }]),
+          roomV2('r1', '客厅', 3, 3, undefined, [{ id: '茶几', x: 0.5, z: -0.3 }]),
         ],
       }),
     )
     const room = findNodeById(model.root, 'r1')!
     if (!isContainer(room)) throw new Error('expect room')
-    const bed = room.children.find((c) => c.id === 'bed')
+    const table = room.children.find((c) => c.id === '茶几')
     // 房间在自定义坐标（未提供 → 原点），家具 = 房间中心 + 相对偏移
-    expect(bed?.position.x).toBeCloseTo(0.5)
-    expect(bed?.position.z).toBeCloseTo(-0.3)
-    expect(bed?.position.y).toBeCloseTo(0.25)
+    expect(table?.position.x).toBeCloseTo(0.5)
+    expect(table?.position.z).toBeCloseTo(-0.3)
+    expect(table?.position.y).toBeCloseTo(0.25)
   })
 
   it('房间使用提供的绝对坐标并整体居中', () => {
@@ -382,5 +383,77 @@ describe('resolveLayout - 两卫生间布局', () => {
     expect(cb.north.segments.some((s) => s.kind === 'door')).toBe(true)
     // 与厨房之间不开门（实心墙）
     expect(cb.west.segments.some((s) => s.kind === 'door')).toBe(false)
+  })
+})
+
+describe('resolveLayout - 家具常理摆放（贴墙 + 避让嵌套卫生间 + 避让门口）', () => {
+  it('主卧双人床贴墙、不重叠内嵌卫生间、不堵门口', () => {
+    const v2: SceneModelV2 = {
+      version: 2,
+      root: {
+        id: 'h',
+        type: 'house',
+        name: '带内卫',
+        dimensions: { length: 12, width: 9, height: 2.8 },
+        position: { x: 0, y: 0, z: 0 },
+        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        children: [
+          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 6, width: 4.5, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'bedroom1',
+            type: 'room',
+            name: '主卧',
+            dimensions: { length: 4.5, width: 3.5, height: 2.8 },
+            side: 'right',
+            children: [
+              { id: 'bed', type: 'furniture', name: '双人床', dimensions: { length: 2, width: 1.5, height: 0.5 }, position: { x: 0, y: 0.25, z: -0.8 } },
+              { id: 'bathroom1', type: 'room', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 }, side: 'north', children: [] },
+            ],
+          },
+        ],
+      },
+    }
+    const model = resolveLayout(v2)
+    const bedroom = findNodeById(model.root, 'bedroom1') as ContainerNode
+    const bed = findNodeById(model.root, 'bed')!
+    const bath = findNodeById(model.root, 'bathroom1') as ContainerNode
+
+    const hx = bed.dimensions.length / 2
+    const hz = bed.dimensions.width / 2
+    const innerMinX = bedroom.position.x - bedroom.dimensions.length / 2 + 0.15
+    const innerMaxX = bedroom.position.x + bedroom.dimensions.length / 2 - 0.15
+    const innerMinZ = bedroom.position.z - bedroom.dimensions.width / 2 + 0.15
+    const innerMaxZ = bedroom.position.z + bedroom.dimensions.width / 2 - 0.15
+
+    // 床贴某面墙内壁（不悬空在中间）
+    const flushWall =
+      Math.abs(bed.position.x - (innerMinX + hx)) < 1e-6 ||
+      Math.abs(bed.position.x - (innerMaxX - hx)) < 1e-6 ||
+      Math.abs(bed.position.z - (innerMinZ + hz)) < 1e-6 ||
+      Math.abs(bed.position.z - (innerMaxZ - hz)) < 1e-6
+    expect(flushWall).toBe(true)
+
+    // 不与卫生间禁区（足迹 + 墙厚外扩）重叠；允许贴边（共享墙）的浮点误差
+    const EPS = 1e-6
+    const kMinX = bath.position.x - bath.dimensions.length / 2 - 0.15
+    const kMaxX = bath.position.x + bath.dimensions.length / 2 + 0.15
+    const kMinZ = bath.position.z - bath.dimensions.width / 2 - 0.15
+    const kMaxZ = bath.position.z + bath.dimensions.width / 2 + 0.15
+    const bathOverlap =
+      bed.position.x + hx > kMinX + EPS &&
+      bed.position.x - hx < kMaxX - EPS &&
+      bed.position.z + hz > kMinZ + EPS &&
+      bed.position.z - hz < kMaxZ - EPS
+    expect(bathOverlap).toBe(false)
+
+    // 不堵门口：主卧南墙（贴走廊）居中开门，门宽 0.9 → 禁区 x ∈ [门中心±0.45]，z 从南墙内壁向室内 1.0
+    const doorMinX = bedroom.position.x - 0.45
+    const doorMaxX = bedroom.position.x + 0.45
+    const doorOverlap =
+      bed.position.x + hx > doorMinX + EPS &&
+      bed.position.x - hx < doorMaxX - EPS &&
+      bed.position.z + hz > innerMinZ + EPS &&
+      bed.position.z - hz < innerMinZ + 1.0 - EPS
+    expect(doorOverlap).toBe(false)
   })
 })

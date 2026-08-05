@@ -21,7 +21,13 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
             <strong>缩放视角</strong> — 滚轮（触屏双指捏合）
           </li>
           <li>
-            <strong>选择模块</strong> — 点击场景中的房间 / 家具
+            <strong>选择模块</strong> — 点击场景中的房间 / 家具，右侧弹出属性面板
+          </li>
+          <li>
+            <strong>编辑属性</strong> — 在属性面板修改名称 / 长宽高 / X·Y·Z，Enter 或失焦生效；或用「位置微调」按钮按步长移动
+          </li>
+          <li>
+            <strong>撤销 / 重做</strong> — 工具栏按钮，或 Ctrl+Z 撤销、Ctrl+Y / Ctrl+Shift+Z 重做
           </li>
           <li>
             <strong>聚焦房间</strong> — 点击房间进入其内部视图，内部家具实体化、其他房间虚化

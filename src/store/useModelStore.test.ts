@@ -11,6 +11,8 @@ beforeEach(() => {
     focusId: null,
     stepSize: 0.5,
     initialPositions: {},
+    past: [],
+    future: [],
   })
 })
 
@@ -64,5 +66,70 @@ describe('useModelStore', () => {
     const state = useModelStore.getState()
     expect(state.focusId).toBe('room-master')
     expect(state.stepSize).toBe(1)
+  })
+
+  it('updateSelected 更新选中节点字段（名称/尺寸）', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('bed-master')
+    useModelStore.getState().updateSelected({ name: '加大床', dimensions: { width: 1.8 } })
+    const bed = findNodeById(useModelStore.getState().scene!.root, 'bed-master')!
+    expect(bed.name).toBe('加大床')
+    // 示例床已旋转为 1.5×2.0，只补 width → 1.8
+    expect(bed.dimensions).toEqual({ length: 1.5, width: 1.8, height: 0.5 })
+  })
+
+  it('updateSelected 提交后把越墙字段约束进墙内', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('bed-master')
+    // 床已旋转（半宽 0.75），主卧内缩后可活动 X ∈ [-2.6, -1.4]；-1 出界 → 拉到 -1.4
+    useModelStore.getState().updateSelected({ position: { x: -1 } })
+    const bed = findNodeById(useModelStore.getState().scene!.root, 'bed-master')!
+    expect(bed.position.x).toBe(-1.4)
+  })
+
+  it('undo / redo 回退与重做编辑', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('bed-master')
+    // 床已旋转（Z 半宽 1.0），可活动范围 [-0.35, 0.35]，取 0.2 在界内
+    useModelStore.getState().updateSelected({ position: { z: 0.2 } })
+    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBe(0.2)
+    useModelStore.getState().undo()
+    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBe(0)
+    useModelStore.getState().redo()
+    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBe(0.2)
+  })
+
+  it('translateSelected / resetSelectedPosition 每次调用记入历史', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('bed-master')
+    const originalX = findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.x
+    useModelStore.getState().translateSelected(1, 0, 0)
+    useModelStore.getState().translateSelected(1, 0, 0)
+    useModelStore.getState().undo()
+    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.x).toBe(originalX + 1)
+    useModelStore.getState().resetSelectedPosition()
+    useModelStore.getState().undo()
+    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.x).toBe(originalX + 1)
+  })
+
+  it('新编辑使重做历史失效；setScene 载入新模型清空历史', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('bed-master')
+    useModelStore.getState().translateSelected(1, 0, 0)
+    useModelStore.getState().undo()
+    expect(useModelStore.getState().future.length).toBe(1)
+    useModelStore.getState().translateSelected(-1, 0, 0) // 新编辑清空 future
+    expect(useModelStore.getState().future.length).toBe(0)
+    expect(useModelStore.getState().past.length).toBeGreaterThan(0)
+    useModelStore.getState().setScene(createSampleModel())
+    expect(useModelStore.getState().past.length).toBe(0)
+    expect(useModelStore.getState().future.length).toBe(0)
+  })
+
+  it('空补丁不产生历史记录', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('bed-master')
+    useModelStore.getState().updateSelected({})
+    expect(useModelStore.getState().past.length).toBe(0)
   })
 })

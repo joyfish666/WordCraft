@@ -1,4 +1,4 @@
-import type { ContainerNode, ModelNode, Position, SceneModel } from '../types/model'
+import type { ContainerNode, Dimensions, ModelNode, Position, SceneModel } from '../types/model'
 import { WALL_THICKNESS } from './roomGeometry'
 
 /**
@@ -60,6 +60,39 @@ export function updateNodePosition(root: ModelNode, id: string, position: Positi
   if (root.id === id) return { ...root, position }
   if (isContainer(root)) {
     return { ...root, children: root.children.map((c) => updateNodePosition(c, id, position)) }
+  }
+  return root
+}
+
+/** 节点字段补丁：名称 / 尺寸（部分） / 位置（部分），未提供的字段保持原值 */
+export interface NodeFieldsPatch {
+  name?: string
+  dimensions?: Partial<Dimensions>
+  position?: Partial<Position>
+}
+
+/**
+ * 不可变更新：将指定节点的 name / dimensions / position 按补丁合并替换。
+ * 未命中节点或补丁为空时返回原树（引用不变），便于调用方短路跳过。
+ */
+export function updateNodeFields(root: ModelNode, id: string, patch: NodeFieldsPatch): ModelNode {
+  if (root.id === id) {
+    if (!patch.name && !patch.dimensions && !patch.position) return root
+    const next: ModelNode = { ...root }
+    if (patch.name !== undefined) next.name = patch.name
+    if (patch.dimensions) next.dimensions = { ...root.dimensions, ...patch.dimensions }
+    if (patch.position) next.position = { ...root.position, ...patch.position }
+    return next
+  }
+  if (isContainer(root)) {
+    let changed = false
+    const children = root.children.map((c) => {
+      const next = updateNodeFields(c, id, patch)
+      if (next !== c) changed = true
+      return next
+    })
+    if (!changed) return root
+    return { ...root, children }
   }
   return root
 }
