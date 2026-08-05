@@ -4,6 +4,7 @@ import { forwardRef, useImperativeHandle, useRef } from 'react'
 import { PerspectiveCamera, Vector3 } from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useModelStore } from '../../store/useModelStore'
+import { CompassRose, CompassSensor } from './Compass'
 import { Viewport3D } from './Viewport3D'
 
 export interface SceneViewerHandle {
@@ -19,6 +20,7 @@ export interface SceneViewerHandle {
 /** R3F 场景容器：相机、灯光、视角控制与空白点击清理 */
 export const SceneViewer = forwardRef<SceneViewerHandle, object>(function SceneViewer(_props, ref) {
   const controlsRef = useRef<OrbitControlsImpl>(null)
+  const compassRef = useRef<HTMLDivElement>(null)
 
   useImperativeHandle(ref, () => ({
     resetView: () => controlsRef.current?.reset(),
@@ -55,20 +57,25 @@ export const SceneViewer = forwardRef<SceneViewerHandle, object>(function SceneV
   }))
 
   return (
-    <Canvas
-      className="scene-canvas"
-      // 初始视角：房屋正南侧斜向下，完整看到南立面（含入户门）
-      camera={{ position: [0, 9, -10], fov: 50 }}
-      dpr={[1, 2]}
-      onPointerMissed={() => {
-        useModelStore.getState().selectNode(null)
-        useModelStore.getState().setFocus(null)
-      }}
-    >
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[6, 10, 6]} intensity={0.9} />
-      <Viewport3D />
-      <OrbitControls ref={controlsRef} makeDefault enableDamping />
-    </Canvas>
+    <>
+      <Canvas
+        className="scene-canvas"
+        // 初始视角：房屋正南侧斜向下，完整看到南立面（含入户门）
+        camera={{ position: [0, 9, -10], fov: 50 }}
+        dpr={[1, 2]}
+        onPointerMissed={() => {
+          useModelStore.getState().selectNode(null)
+          useModelStore.getState().setFocus(null)
+        }}
+      >
+        <ambientLight intensity={0.7} />
+        <directionalLight position={[6, 10, 6]} intensity={0.9} />
+        <Viewport3D />
+        <CompassSensor compassRef={compassRef} />
+        <OrbitControls ref={controlsRef} makeDefault enableDamping />
+      </Canvas>
+      {/* 实时东西南北罗盘（覆盖在视口右上角） */}
+      <CompassRose ref={compassRef} />
+    </>
   )
 })

@@ -454,6 +454,67 @@ button {
   border-color: var(--accent);
 }
 
+/* ---------- 实时罗盘 ---------- */
+
+.compass {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: rgba(20, 22, 27, 0.72);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 5;
+  will-change: transform;
+}
+
+.compass__label {
+  position: absolute;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  line-height: 1;
+}
+
+.compass__label--n {
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--danger);
+}
+
+.compass__label--e {
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+}
+
+.compass__label--s {
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.compass__label--w {
+  top: 50%;
+  left: 5px;
+  transform: translateY(-50%);
+}
+
+.compass__cross {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
 /* ---------- 调试日志面板 ---------- */
 
 .debug-panel {
