@@ -21,7 +21,7 @@
 - ✅ **v1.0.0 已发布**（2026-08-05）：GitHub Pages 在线版 https://joyfish666.github.io/WordCraft/，`vite base=/WordCraft/` + GitHub Actions 自动构建部署（`.github/workflows/deploy.yml`）
 - ✅ **本地项目库（v1.1.0）**：Dexie 接入 UI，工具栏「保存/项目库」，新建/打开/重命名/删除，未保存守卫
 - ✅ **2D 俯视平面图（v1.1.0）**：同 Canvas 正交俯视相机，房间标签 + 外廓尺寸线，与 3D 选中/聚焦联动
-- ✅ **中英双语切换（v1.2.0）**：侧边栏「EN / 中文」按钮一键切换 + 持久化；UI 界面层全覆盖，生成数据不翻译（见坑 27/28）
+- ✅ **中英双语切换（v1.2.0）**：首页工具栏 + 设置页标题行的「EN / 中文」按钮一键切换 + 持久化；UI 界面层全覆盖，生成数据不翻译（见坑 27/28）
 
 **先读**：`README-zh.md`（功能）、`docs/architecture.md`（架构）→ 再读本文档（坑与细节）。
 
@@ -85,7 +85,7 @@ npm run build
 24. **正交相机 pan 公式**：`SceneViewer.pan` 对正交相机 scale = `1/zoom`（drei ortho frustum 恒等于像素尺寸）；透视分支保持 `2*distance*tan(fov/2)/clientHeight`。别把透视公式套到正交上。正北朝上靠 `camera.up.set(0,0,1)` + `lookAt(整屋中心)`。
 25. **R3F 射线命中按距离排序、逐个派发直到 stopPropagation**：房屋线框盒（整屋最高的盒）与房间选中轮廓盒（横跨房间体积、高于家具）若不排除，会先被命中并冒泡到房间 group（`stopPropagation`），导致"选中房间后点不到内部部件"。修复：两个盒都加 `raycast={() => null}`；空白处取消选中改由 Canvas `onPointerMissed` 兜底（原房屋线框盒的 onClick 已移除）。
 26. **撤销生成用生成前快照栈（会话内）**：`useChatStore.generationStack`，生成成功前 `pushGenerationHistory(prevScene)`，`undoLastGeneration()` 弹快照 + 删最后 user+assistant 对并返回场景（HomePage `setScene` 恢复）。`clearGenerationHistory` 在 加载示例/清空场景/打开项目/清空对话 时调用。生成失败不记录；仅当最后一条是携带模型的助手消息才允许撤销。
-27. **i18n 范围边界（重要）**：`src/i18n/translations.ts` 只翻译 **UI 界面层**。**生成数据不翻译**——LLM 系统提示词保持中文，`roomGeometry`/`furniturePlacement` 的房间/家具分类器是中文词表（`ROOM_TYPE_RE`、`FREE_STANDING_RE` 等），若英文房间名生成会破坏走廊/开放/私密房/家具贴墙分类。改分类器/提示词做多语言前，别期望英文房间名能正确分类。示例模型名、已保存项目内容保持原样。切换按钮在 `AppShell` 页脚；语言存 `useSettingsStore.language`（persist version 3）。
+27. **i18n 范围边界（重要）**：`src/i18n/translations.ts` 只翻译 **UI 界面层**。**生成数据不翻译**——LLM 系统提示词保持中文，`roomGeometry`/`furniturePlacement` 的房间/家具分类器是中文词表（`ROOM_TYPE_RE`、`FREE_STANDING_RE` 等），若英文房间名生成会破坏走廊/开放/私密房/家具贴墙分类。改分类器/提示词做多语言前，别期望英文房间名能正确分类。示例模型名、已保存项目内容保持原样。切换按钮在 `components/ui/LanguageToggle.tsx`（首页工具栏右侧 + 设置页标题行）；语言存 `useSettingsStore.language`（persist version 3）。
 28. **i18n 实现要点**：组件用 `useT()`（响应式）、lib 抛错用 `t()`（非响应式读 store，无循环依赖）；`t()` 的 `{}` 插值用 `split/join`（目标是 ES2020，无 `replaceAll`）。`translations.ts` 的 zh 为 key 真源、en 用 `Record<TKey,string>`，`translations.test.ts` 断言两语言 key 集合一致。2D 尺寸线标签走 `planGeometry.dimensionLines(bounds, { y, lang })`（保持纯函数）。
 25. **R3F 射线命中按距离排序、逐个派发直到 stopPropagation**：房屋线框盒（整屋最高的盒）与房间选中轮廓盒（横跨房间体积、高于家具）若不排除，会先被命中并冒泡到房间 group（`stopPropagation`），导致"选中房间后点不到内部部件"。修复：两个盒都加 `raycast={() => null}`；空白处取消选中改由 Canvas `onPointerMissed` 兜底（原房屋线框盒的 onClick 已移除）。
 26. **撤销生成用生成前快照栈（会话内）**：`useChatStore.generationStack`，生成成功前 `pushGenerationHistory(prevScene)`，`undoLastGeneration()` 弹快照 + 删最后 user+assistant 对并返回场景（HomePage `setScene` 恢复）。`clearGenerationHistory` 在 加载示例/清空场景/打开项目/清空对话 时调用。生成失败不记录；仅当最后一条是携带模型的助手消息才允许撤销。
