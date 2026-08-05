@@ -326,11 +326,12 @@ describe('resolveLayout - 两卫生间布局', () => {
     const bedroom = findNodeById(model.root, 'bedroom1')
     const bath = findNodeById(model.root, 'bathroom1')
     if (bedroom && bath && isContainer(bedroom) && isContainer(bath)) {
-      // 卫生间在卧室北侧（z 大于卧室中心），且仍在卧室范围内
+      // side:north → 靠西北角（z 偏北、x 偏西），贴两面墙而非居中贴单边
       expect(bath.position.z).toBeGreaterThan(bedroom.position.z)
+      expect(bath.position.x).toBeLessThan(bedroom.position.x)
+      // 仍在卧室范围内
       expect(bath.position.z).toBeLessThan(bedroom.position.z + bedroom.dimensions.width / 2)
       expect(bath.position.x).toBeGreaterThanOrEqual(bedroom.position.x - bedroom.dimensions.length / 2)
-      expect(bath.position.x).toBeLessThanOrEqual(bedroom.position.x + bedroom.dimensions.length / 2)
     }
   })
 
