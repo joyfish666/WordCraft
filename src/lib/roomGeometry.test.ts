@@ -74,12 +74,13 @@ describe('computeWallPlan（分段墙体）', () => {
     expect(rendersWall(plan.get('corridor')!.west)).toBe(true)
   })
 
-  it('两个非走廊房间相邻时由 id 较小者持有', () => {
+  it('两个非走廊房间相邻时由 id 较小者持有（私密-开放之间不开门）', () => {
     const a = room('a', '客厅', 0, -1.5, 3, 3)
     const b = room('b', '主卧', 0, 1.5, 3, 3)
     const plan = computeWallPlan([a, b])
-    expect(hasDoor(plan.get('a')!.north)).toBe(true)
-    expect(rendersWall(plan.get('b')!.south)).toBe(false)
+    // a（id 较小）持有共享墙；但私密房间（主卧）不直连开放空间（客厅）→ 墙实体不开门
+    expect(rendersWall(plan.get('a')!.north)).toBe(true)
+    expect(hasDoor(plan.get('a')!.north)).toBe(false)
   })
 
   it('走廊两侧：封闭房间开门，开放房间与走廊开放连通', () => {
@@ -135,6 +136,18 @@ describe('wallPlanWithDoor（嵌套房间用）', () => {
 })
 
 describe('入户门', () => {
+  it('私密房间（卧室）不直连厨房等开放空间，只连走廊', () => {
+    const corridor = room('corridor', '走廊', 0, 0.5, 6, 1)
+    const kitchen = room('kitchen', '厨房', 0, 2.5, 3, 3)
+    const bedroom = room('bedroom2', '次卧1', 3.25, 2.5, 3.5, 3)
+    const plan = computeWallPlan([corridor, kitchen, bedroom])
+    // 卧室南墙（朝走廊）开门
+    expect(plan.get('bedroom2')!.south.segments.some((s) => s.kind === 'door')).toBe(true)
+    // 卧室西墙（朝厨房）不开门（实心墙）
+    expect(plan.get('bedroom2')!.west.segments.some((s) => s.kind === 'door')).toBe(false)
+    expect(plan.get('bedroom2')!.west.segments.some((s) => s.kind === 'wall')).toBe(true)
+  })
+
   it('公共卫生间（归属房间不存在）与走廊开门，不与卧室开门', () => {
     const corridor = room('corridor', '走廊', 0, 0.5, 6, 1)
     const bedroom = room('bedroom2', '卧室2', 3.5, -1.0, 3, 3)
