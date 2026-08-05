@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HelpDialog } from '../components/ui/HelpDialog'
 import { Button } from '../components/ui/Button'
+import { PropertyPanel } from '../components/viewport/PropertyPanel'
 import { SceneViewer, type SceneViewerHandle } from '../components/viewport/SceneViewer'
 import { ChatGenerationError, generateModelFromChat } from '../lib/chat'
 import { clearDebug, useDebugEntries, type DebugEntry } from '../lib/debugLog'
@@ -25,10 +26,24 @@ function copyDebug(entries: DebugEntry[]): void {
   }
 }
 
+/** 下载调试日志为 .log 文件（保存到浏览器下载目录，便于直接读取排查） */
+function downloadDebug(entries: DebugEntry[]): void {
+  const text = entries
+    .map((e) => `[${e.time}] [${e.level}] ${e.message}${e.detail ? `\n${e.detail}` : ''}`)
+    .join('\n')
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `wordcraft-debug-${new Date().toISOString().replace(/[:.]/g, '-')}.log`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 /** 助手消息的展示文本：携带模型时显示摘要，否则显示回复（跳过纯 JSON） */
 function assistantDisplay(m: ChatMessageItem): string {
   if (m.model) {
-    return `已生成「${m.model.root.name}」模型，共 ${countNodes(m.model.root)} 个模块。可点击模块查看尺寸，或用方向键移动视角。`
+    return `已生成「${m.model.root.name}」模型，共 ${countNodes(m.model.root)} 个模块。可点击模块查看/修改尺寸，或用方向键移动视角。`
   }
   const content = m.content.trim()
   if (content && !content.startsWith('{')) return content
@@ -43,6 +58,10 @@ export function HomePage() {
   const resetScene = useModelStore((s) => s.resetScene)
   const selectNode = useModelStore((s) => s.selectNode)
   const setFocus = useModelStore((s) => s.setFocus)
+  const undo = useModelStore((s) => s.undo)
+  const redo = useModelStore((s) => s.redo)
+  const canUndo = useModelStore((s) => s.past.length > 0)
+  const canRedo = useModelStore((s) => s.future.length > 0)
 
   const messages = useChatStore((s) => s.messages)
   const isGenerating = useChatStore((s) => s.isGenerating)
@@ -99,11 +118,28 @@ export function HomePage() {
     if (el) el.scrollTop = el.scrollHeight
   }, [debugEntries])
 
-  // 键盘平移视角：方向键 + WASD（不干扰输入框/文本框）
+  // 键盘：方向键/WASD 平移视角；Ctrl+Z 撤销、Ctrl+Shift+Z / Ctrl+Y 重做。
+  // 输入框/文本框聚焦时不拦截，让位给原生文本编辑（含原生撤销）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const active = document.activeElement
       if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return
+
+      const mod = e.ctrlKey || e.metaKey
+      if (mod && !e.altKey) {
+        const key = e.key.toLowerCase()
+        if (key === 'z' && !e.shiftKey) {
+          e.preventDefault()
+          useModelStore.getState().undo()
+          return
+        }
+        if ((key === 'z' && e.shiftKey) || key === 'y') {
+          e.preventDefault()
+          useModelStore.getState().redo()
+          return
+        }
+      }
+
       const controls = viewportRef.current
       if (!controls) return
       let dx = 0
@@ -184,6 +220,13 @@ export function HomePage() {
           </Button>
           <Button variant="ghost" onClick={resetScene} disabled={!scene}>
             清空场景
+          </Button>
+          <span className="toolbar-sep" />
+          <Button variant="ghost" onClick={undo} disabled={!canUndo} title="撤销 (Ctrl+Z)">
+            撤销
+          </Button>
+          <Button variant="ghost" onClick={redo} disabled={!canRedo} title="重做 (Ctrl+Y / Ctrl+Shift+Z)">
+            重做
           </Button>
           <Button variant="ghost" onClick={() => setHelpOpen(true)}>
             操作说明
@@ -266,6 +309,7 @@ export function HomePage() {
 
         <section className="panel home__viewport">
           <SceneViewer ref={viewportRef} />
+          {selected && <PropertyPanel node={selected} />}
         </section>
       </div>
 
@@ -283,6 +327,14 @@ export function HomePage() {
                 disabled={debugEntries.length === 0}
               >
                 复制
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => downloadDebug(debugEntries)}
+                disabled={debugEntries.length === 0}
+                title="下载 .log 文件（保存到浏览器下载目录）"
+              >
+                下载
               </Button>
               <Button
                 variant="ghost"

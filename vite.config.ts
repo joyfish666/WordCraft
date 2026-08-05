@@ -4,6 +4,8 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [react()],
+  // GitHub Pages 项目站点路径（仓库名 WordCraft）；本地 dev 不受影响
+  base: '/WordCraft/',
   build: {
     // three.js 独立 chunk 体积固有，放宽告警阈值
     chunkSizeWarningLimit: 1200,

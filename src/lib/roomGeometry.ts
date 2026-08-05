@@ -1,4 +1,3 @@
-import { logDebug } from './debugLog'
 import type { ContainerNode, Position } from '../types/model'
 
 export type DoorDirection = 'north' | 'south' | 'east' | 'west'
@@ -245,7 +244,6 @@ function addEntranceDoor(
   if (!target) return
   const info = wallInfo(target, entrance)
   addDoorOnFace(plan.get(target.id)![entrance], -info.length / 2, info.length / 2, true)
-  logDebug('入户门生成', { roomId: target.id, roomName: target.name, direction: entrance, roomPos: target.position })
 }
 
 /**
@@ -339,4 +337,39 @@ export function computeWallPlan(
 
   addEntranceDoor(plan, rooms, options)
   return plan
+}
+
+/** 门口禁入区深度（米）：从墙内壁向室内，家具不得占据门口通道 */
+export const DOOR_CLEARANCE = 1.0
+
+/** 一个房间的门口位置（世界坐标，沿墙方向） */
+export interface DoorZoneInfo {
+  /** 门所在墙（决定朝向与向室内方向） */
+  dir: DoorDirection
+  /** 门中心的沿墙世界坐标 */
+  along: number
+}
+
+/**
+ * 提取每个顶层房间的门洞位置（含入户门），供家具常理摆放避让门口。
+ * 与渲染用 computeWallPlan 同源，保证与渲染门洞一致。
+ */
+export function computeDoorZones(
+  rooms: ContainerNode[],
+  options: WallPlanOptions = {},
+): Map<string, DoorZoneInfo[]> {
+  const plan = computeWallPlan(rooms, options)
+  const result = new Map<string, DoorZoneInfo[]>()
+  for (const R of rooms) {
+    const zones: DoorZoneInfo[] = []
+    for (const dir of WALL_DIRECTIONS) {
+      const info = wallInfo(R, dir)
+      for (const seg of plan.get(R.id)![dir].segments) {
+        if (seg.kind !== 'door') continue
+        zones.push({ dir, along: info.start + info.length / 2 + (seg.from + seg.to) / 2 })
+      }
+    }
+    result.set(R.id, zones)
+  }
+  return result
 }
