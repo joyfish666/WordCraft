@@ -64,6 +64,12 @@ export interface FurnitureNodeV2 {
   description?: string
 }
 
+/** 房间子节点：家具/墙体，或嵌套的子房间（如卧室内的卫生间） */
+export type RoomChildV2 = FurnitureNodeV2 | RoomNodeV2
+
+/** v2 模型任意节点（房间或家具） */
+export type ModelNodeV2 = FurnitureNodeV2 | RoomNodeV2
+
 /** 房间 v2：auto 模式用 side 表达布置意图；custom 模式提供 position */
 export interface RoomNodeV2 {
   id: string
@@ -74,7 +80,8 @@ export interface RoomNodeV2 {
   position?: Position
   /** 布置意图：corridor 模板为 'left'|'right'；living 模板为 'north'|'south'|'east'|'west' */
   side?: string
-  children: FurnitureNodeV2[]
+  /** 子节点：家具，或嵌套的子房间（如卧室内的卫生间，布局时自动拍平） */
+  children: RoomChildV2[]
 }
 
 /** 布局说明：auto（代码平铺）或 custom（自由坐标） */

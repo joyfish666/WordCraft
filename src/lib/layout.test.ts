@@ -241,6 +241,60 @@ describe('resolveLayout - 两卫生间布局', () => {
     expect(b2.west.segments.some((s) => s.kind === 'door')).toBe(false)
   })
 
+  it('嵌套在卧室内的卫生间被拍平为顶层房间并与卧室开门', () => {
+    const v2: SceneModelV2 = {
+      version: 2,
+      root: {
+        id: 'h',
+        type: 'house',
+        name: '带内卫',
+        dimensions: { length: 10, width: 8, height: 2.8 },
+        position: { x: 0, y: 0, z: 0 },
+        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        children: [
+          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 6, width: 4.8, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'bedroom1',
+            type: 'room',
+            name: '主卧',
+            dimensions: { length: 4.8, width: 3.6, height: 2.8 },
+            side: 'right',
+            children: [
+              { id: 'bed', type: 'furniture', name: '双人床', dimensions: { length: 2, width: 1.5, height: 0.5 }, position: { x: 0, y: 0.25, z: 0.8 } },
+              {
+                id: 'bathroom1',
+                type: 'room',
+                name: '主卧卫生间',
+                dimensions: { length: 2, width: 1.8, height: 2.8 },
+                children: [
+                  { id: 'toilet', type: 'furniture', name: '马桶', dimensions: { length: 0.6, width: 0.4, height: 0.7 }, position: { x: 0, y: 0.35, z: 0 } },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    }
+    const model = resolveLayout(v2)
+    // 卫生间成为顶层房间，且继承主卧的右侧朝向
+    const bath = findNodeById(model.root, 'bathroom1')
+    expect(bath).not.toBeNull()
+    expect(bath!.type).toBe('room')
+    expect(model.root.children.some((c) => c.name === '主卧卫生间')).toBe(true)
+    // 主卧的家具仍在主卧内
+    expect(findNodeById(model.root, 'bed')).not.toBeNull()
+    // 卫生间与主卧之间开门
+    const rooms: ContainerNode[] = []
+    walk(model.root, (n) => {
+      if (n.type === 'room') rooms.push(n as ContainerNode)
+    })
+    const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'living_room' })
+    const hasDoorBetween =
+      plan.get('bathroom1')!.west.segments.some((s) => s.kind === 'door') ||
+      plan.get('bedroom1')!.east.segments.some((s) => s.kind === 'door')
+    expect(hasDoorBetween).toBe(true)
+  })
+
   it('走廊卫生间只与走廊开门，不连厨房', () => {
     const model = resolveLayout(twoBathScene())
     const rooms: ContainerNode[] = []

@@ -26,8 +26,9 @@ export function buildSystemPrompt(): string {
 
 1. 只输出一个 JSON 对象，不要任何解释文字，不要 markdown 代码块。
 2. 结构（version: 2）：{"version": 2, "root": {"id":"house1","type":"house","name":"整屋名","dimensions":{"length":数字,"width":数字,"height":数字},"position":{"x":0,"y":0,"z":0},"layout":{...},"children":[房间...]}}
-   - 房间：{"id":"唯一字符串","type":"room","name":"房间名","dimensions":{"length","width","height"},"side":"...","children":[家具...]}
+   - 房间：{"id":"唯一字符串","type":"room","name":"房间名","dimensions":{"length","width","height"},"side":"...","children":[家具或子房间...]}
    - 家具：{"id":"唯一字符串","type":"furniture"（墙体为"wall"）,"name","dimensions","position"}
+   - 房间内可嵌套子房间（如卧室内的"主卧卫生间"），也可全部作为顶层房间；系统会自动把嵌套房间拍平并按命名归属连通（X卫生间 → X）。
    - 每个节点 id 全局唯一，重新生成时保持已有 id 不变。
 3. layout 模式（根据用户需求二选一）：
    - 常规住宅（多个房间、需要连通）→ {"mode":"auto","template":"corridor","corridor":{"width":1.2,"entranceRoomId":"客厅的房间id"}}
