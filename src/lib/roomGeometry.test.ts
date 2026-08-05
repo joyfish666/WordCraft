@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ContainerNode } from '../types/model'
-import { DOOR_WIDTH, computeWallPlan, doorDirection, isCorridorName, isOpenRoom, type WallFace } from './roomGeometry'
+import { DOOR_WIDTH, computeWallPlan, doorDirection, isCorridorName, isOpenRoom, wallPlanWithDoor, type WallFace } from './roomGeometry'
 
 function room(
   id: string,
@@ -119,6 +119,18 @@ describe('computeWallPlan（分段墙体）', () => {
     const plan = computeWallPlan([a])
     expect(hasDoor(plan.get('a')!.north)).toBe(true)
     expect(rendersWall(plan.get('a')!.east)).toBe(true)
+  })
+})
+
+describe('wallPlanWithDoor（嵌套房间用）', () => {
+  it('在指定方向开门，其余墙实体', () => {
+    const a = room('a', '主卧', 0, 0, 3, 3)
+    const plan = wallPlanWithDoor(a, 'north')
+    expect(hasDoor(plan.north)).toBe(true)
+    expect(hasDoor(plan.south)).toBe(false)
+    expect(hasDoor(plan.east)).toBe(false)
+    expect(hasDoor(plan.west)).toBe(false)
+    expect(rendersWall(plan.north)).toBe(true)
   })
 })
 

@@ -14,12 +14,14 @@ import {
   WALL_THICKNESS,
   defaultWallPlan,
   isCorridorName,
+  wallPlanWithDoor,
+  type DoorDirection,
   type WallPlan,
   type WallSegmentKind,
 } from '../../lib/roomGeometry'
 import { useModelStore } from '../../store/useModelStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
-import type { ContainerNode, ModelNode } from '../../types/model'
+import type { ContainerNode, ModelNode, Position } from '../../types/model'
 
 /** 地板厚度：做成可见的实体板，墙体从地板顶面升起（墙的底部是地板） */
 const FLOOR_THICKNESS = 0.12
@@ -174,6 +176,15 @@ interface ModelNodeViewProps {
   ancestors?: string[]
   /** 各房间的分段墙体方案 */
   wallPlan?: Map<string, WallPlan>
+  /** 父房间中心（嵌套房间据此决定门朝向父房间内部） */
+  parentCenter?: Position
+}
+
+/** 嵌套房间的门朝向：指向父房间中心（从父房间进嵌套房间） */
+function nestedDoorDirection(node: ContainerNode, parentCenter: Position): DoorDirection {
+  const dx = parentCenter.x - node.position.x
+  const dz = parentCenter.z - node.position.z
+  return Math.abs(dx) >= Math.abs(dz) ? (dx > 0 ? 'east' : 'west') : (dz > 0 ? 'north' : 'south')
 }
 
 /**
@@ -182,7 +193,13 @@ interface ModelNodeViewProps {
  * - 聚焦视图（focusId 指向某房间）：该房间外壳透明化以便查看内部实体家具，
  *   其他房间外壳虚化；家具仍遵循 实体/虚化 两态
  */
-export function ModelNodeView({ node, siblingIndex = 0, ancestors = [], wallPlan }: ModelNodeViewProps) {
+export function ModelNodeView({
+  node,
+  siblingIndex = 0,
+  ancestors = [],
+  wallPlan,
+  parentCenter,
+}: ModelNodeViewProps) {
   const selectNode = useModelStore((s) => s.selectNode)
   const setFocus = useModelStore((s) => s.setFocus)
   const selectedId = useModelStore((s) => s.selectedId)
@@ -228,6 +245,7 @@ export function ModelNodeView({ node, siblingIndex = 0, ancestors = [], wallPlan
               siblingIndex={i}
               ancestors={childAncestors}
               wallPlan={wallPlan}
+              parentCenter={node.position}
             />
           ))}
         </>
@@ -250,9 +268,11 @@ export function ModelNodeView({ node, siblingIndex = 0, ancestors = [], wallPlan
       material = { color: baseColor, transparent: false, opacity: 1, depthWrite: true, wireframe: wireframeEnabled }
     }
 
-    const plan = wallPlan?.get(node.id) ?? defaultWallPlan(node)
-
     const isNestedRoom = ancestors.length > 1
+    // 嵌套房间：门朝向父房间中心（从父房间进嵌套房间）；顶层房间用共享墙方案或兜底
+    const plan =
+      wallPlan?.get(node.id) ??
+      (isNestedRoom && parentCenter ? wallPlanWithDoor(node, nestedDoorDirection(node, parentCenter)) : defaultWallPlan(node))
 
     return (
       <group onClick={handleClick}>
@@ -270,6 +290,7 @@ export function ModelNodeView({ node, siblingIndex = 0, ancestors = [], wallPlan
             siblingIndex={i}
             ancestors={childAncestors}
             wallPlan={wallPlan}
+            parentCenter={node.position}
           />
         ))}
       </group>

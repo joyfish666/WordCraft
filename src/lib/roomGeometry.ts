@@ -188,10 +188,10 @@ function ownerIsA(a: ContainerNode, b: ContainerNode): boolean {
   return aC !== bC ? !aC : a.id < b.id
 }
 
-/** 无相邻信息时的兜底方案：四面墙实体，朝整屋中心的墙开门 */
-export function defaultWallPlan(room: ContainerNode): WallPlan {
-  const makeFace = (dir: DoorDirection): WallFace => {
-    const half = wallInfo(room, dir).length / 2
+/** 四面实体墙 + 指定方向开一扇门 */
+export function wallPlanWithDoor(room: ContainerNode, dir: DoorDirection): WallPlan {
+  const makeFace = (d: DoorDirection): WallFace => {
+    const half = wallInfo(room, d).length / 2
     return { shared: false, segments: [{ from: -half, to: half, kind: 'wall' }] }
   }
   const plan: WallPlan = {
@@ -200,9 +200,14 @@ export function defaultWallPlan(room: ContainerNode): WallPlan {
     east: makeFace('east'),
     west: makeFace('west'),
   }
-  const dir = doorDirection(room)
-  addDoorOnFace(plan[dir], -wallInfo(room, dir).length / 2, wallInfo(room, dir).length / 2)
+  const info = wallInfo(room, dir)
+  addDoorOnFace(plan[dir], -info.length / 2, info.length / 2)
   return plan
+}
+
+/** 无相邻信息时的兜底方案：四面墙实体，朝整屋中心的墙开门 */
+export function defaultWallPlan(room: ContainerNode): WallPlan {
+  return wallPlanWithDoor(room, doorDirection(room))
 }
 
 export interface WallPlanOptions {
