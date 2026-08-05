@@ -275,7 +275,13 @@ export function ModelNodeView({
       (isNestedRoom && parentCenter ? wallPlanWithDoor(node, nestedDoorDirection(node, parentCenter)) : defaultWallPlan(node))
 
     return (
-      <group onClick={handleClick}>
+      <group
+        onClick={(e) => {
+          // 停止冒泡：点击本房间的部件/子房间时不重新选中父房间
+          e.stopPropagation()
+          handleClick()
+        }}
+      >
         <RoomShell
           room={node}
           material={material}
@@ -302,7 +308,11 @@ export function ModelNodeView({
   return (
     <mesh
       position={[node.position.x, node.position.y + FLOOR_THICKNESS, node.position.z]}
-      onClick={handleClick}
+      onClick={(e) => {
+        // 停止冒泡：选中部件而非冒泡到父房间
+        e.stopPropagation()
+        handleClick()
+      }}
     >
       <boxGeometry args={[node.dimensions.length, node.dimensions.height, node.dimensions.width]} />
       <meshStandardMaterial

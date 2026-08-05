@@ -303,8 +303,19 @@ export function computeWallPlan(
                 (rBath ? isCorridorName(N.name) && !rooms.some((x) => x.name === rBath) : false) ||
                 (nBath ? isCorridorName(R.name) && !rooms.some((x) => x.name === nBath) : false)
             }
-          } else if (isPrivateRoom(R.name) && isPrivateRoom(N.name)) {
-            hasDoor = false
+          } else {
+            const rPrivate = isPrivateRoom(R.name)
+            const nPrivate = isPrivateRoom(N.name)
+            if (rPrivate && nPrivate) {
+              // 卧室之间不互开门
+              hasDoor = false
+            } else if (
+              (rPrivate && isOpenRoom(N.name) && !isCorridorName(N.name)) ||
+              (nPrivate && isOpenRoom(R.name) && !isCorridorName(R.name))
+            ) {
+              // 私密房间（卧室/书房）不直连非走廊开放空间（厨房/客厅/餐厅），只连走廊
+              hasDoor = false
+            }
           }
           segs = splitSegments(segs, nb.from, nb.to, hasDoor ? 'door' : 'wall')
         } else {
