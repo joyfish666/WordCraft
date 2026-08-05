@@ -19,6 +19,11 @@ export function isCorridorName(name: string): boolean {
   )
 }
 
+/** 判断是否为开放空间（客厅/餐厅/厨房等）：与走廊/开放空间之间不设墙 */
+export function isOpenRoom(name: string): boolean {
+  return /客厅|餐厅|厨房|起居室|玄关|门厅|走廊|连廊|过道|通道|中庭/.test(name)
+}
+
 /**
  * 兜底计算房间门的朝向：指向整屋中心（整屋中心约定为原点）。
  * 仅用于没有任何相邻房间的房间。
@@ -103,14 +108,64 @@ export function defaultWallPlan(room: ContainerNode): WallPlan {
   return plan
 }
 
+export interface WallPlanOptions {
+  /** 入户大门所在方向（房屋外墙） */
+  entrance?: DoorDirection
+  /** 入户门开在哪个房间的外墙（优先于边界推断） */
+  entranceRoomId?: string
+}
+
+/** 在入口侧的边界外墙开入户门：优先指定房间，其次走廊/开放空间 */
+function addEntranceDoor(
+  plan: Map<string, WallPlan>,
+  rooms: ContainerNode[],
+  options: WallPlanOptions,
+): void {
+  const { entrance, entranceRoomId } = options
+  if (!entrance || rooms.length === 0) return
+
+  let target: ContainerNode | undefined
+  if (entranceRoomId) {
+    target = rooms.find((r) => r.id === entranceRoomId)
+  }
+  if (!target) {
+    // 入口侧边界坐标
+    const coord = (r: ContainerNode) =>
+      entrance === 'south'
+        ? r.position.z - r.dimensions.width / 2
+        : entrance === 'north'
+          ? r.position.z + r.dimensions.width / 2
+          : entrance === 'west'
+            ? r.position.x - r.dimensions.length / 2
+            : r.position.x + r.dimensions.length / 2
+    const boundary =
+      entrance === 'south' || entrance === 'west'
+        ? Math.min(...rooms.map(coord))
+        : Math.max(...rooms.map(coord))
+    const candidates = rooms.filter((r) => Math.abs(coord(r) - boundary) < 1e-6)
+    target =
+      candidates.find((r) => isCorridorName(r.name)) ??
+      candidates.find((r) => isOpenRoom(r.name)) ??
+      candidates[0]
+  }
+  if (!target) return
+
+  const face = plan.get(target.id)![entrance]
+  // 只有外墙（非共享）才开门
+  if (face.render) face.hasDoor = true
+}
+
 /**
  * 计算所有房间的墙体方案：
- * - 相邻房间共用的墙只渲染一堵，由非走廊房间持有（否则 id 较小者持有），
- *   颜色即按该房间标色；走廊的墙为默认色。
- * - 共用墙上开一扇门，保证房间之间可相互到达（允许经由其他房间通行）。
+ * - 相邻房间共用的墙只渲染一堵，由非走廊房间持有（否则 id 较小者持有）。
+ * - 若共享墙两侧都是开放空间（如客厅与走廊），则不渲染墙（开放连通）。
+ * - 外墙始终保留；入口侧外墙开入户大门。
  * - 无任何相邻房间时，兜底开一扇朝向整屋中心的门。
  */
-export function computeWallPlan(rooms: ContainerNode[]): Map<string, WallPlan> {
+export function computeWallPlan(
+  rooms: ContainerNode[],
+  options: WallPlanOptions = {},
+): Map<string, WallPlan> {
   const plan = new Map<string, WallPlan>()
   for (const room of rooms) {
     plan.set(room.id, freshPlan())
@@ -126,6 +181,16 @@ export function computeWallPlan(rooms: ContainerNode[]): Map<string, WallPlan> {
       const bFace = plan.get(b.id)![dirs.b]
       aFace.shared = true
       bFace.shared = true
+
+      // 两侧都是开放空间：开放连通，不设墙
+      if (isOpenRoom(a.name) && isOpenRoom(b.name)) {
+        aFace.render = false
+        aFace.hasDoor = false
+        bFace.render = false
+        bFace.hasDoor = false
+        continue
+      }
+
       // 持有方：非走廊优先；同为走廊/房间时取 id 较小者（确定性）
       const aIsCorridor = isCorridorName(a.name)
       const bIsCorridor = isCorridorName(b.name)
@@ -152,5 +217,7 @@ export function computeWallPlan(rooms: ContainerNode[]): Map<string, WallPlan> {
       p[doorDirection(room)].hasDoor = true
     }
   }
+
+  addEntranceDoor(plan, rooms, options)
   return plan
 }

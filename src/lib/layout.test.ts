@@ -43,7 +43,7 @@ function scene(root: Partial<SceneModelV2['root']> & { children: RoomNodeV2[] })
 }
 
 describe('resolveLayout - corridor 走廊型', () => {
-  it('房间分布在走廊两侧，客厅（入口）靠走廊一端', () => {
+  it('房间分布在走廊两侧，客厅（入口）强制置于南侧并排最前', () => {
     const model = resolveLayout(
       scene({
         layout: {
@@ -54,23 +54,23 @@ describe('resolveLayout - corridor 走廊型', () => {
         children: [
           roomV2('master', '主卧', 3, 3, 'left'),
           roomV2('living', '客厅', 4, 3, 'right'),
-          roomV2('bed2', '次卧', 3, 3, 'left'),
+          roomV2('bed2', '次卧', 3, 3, 'right'),
         ],
       }),
     )
-    // 整屋居中于原点
+    // 整屋居中于原点，含走廊，入口房间已标记
     expect(model.root.position).toEqual({ x: 0, y: 0, z: 0 })
-    // 含走廊
     expect(model.root.children.some((c) => c.name === '走廊')).toBe(true)
+    expect(model.root.entranceRoomId).toBe('living')
     const master = findNodeById(model.root, 'master')!
     const living = findNodeById(model.root, 'living')!
     const bed2 = findNodeById(model.root, 'bed2')!
-    // 左右侧（入口客厅在前端，作为右侧第一间）
+    // 入口客厅强制在南侧（z<0），主卧也在南侧，次卧在北侧
+    expect(living.position.z).toBeLessThan(0)
     expect(master.position.z).toBeLessThan(0)
-    expect(bed2.position.z).toBeLessThan(0)
-    expect(living.position.z).toBeGreaterThan(0)
-    // 同一侧房间沿走廊顺序排开、无缝相邻
-    expect(master.position.x).toBeLessThan(bed2.position.x)
+    expect(bed2.position.z).toBeGreaterThan(0)
+    // 入口排最前（同一侧沿走廊 x 最小）
+    expect(living.position.x).toBeLessThan(master.position.x)
   })
 
   it('单房间时无需走廊，房间居中', () => {

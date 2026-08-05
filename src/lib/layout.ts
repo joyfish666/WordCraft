@@ -112,6 +112,11 @@ function finalizeHouse(house: HouseNodeV2, children: ContainerNode[]): Container
       height: Math.max(maxTop, house.dimensions.height),
     },
     position: { x: 0, y: 0, z: 0 },
+    // 记录入户房间，供墙体方案在南外墙开入户门
+    entranceRoomId:
+      house.layout.mode === 'auto' && house.layout.template === 'corridor'
+        ? house.layout.corridor?.entranceRoomId
+        : undefined,
     children: children.map((c) => translateNode(c, -centerX, -centerZ)),
   }
 }
@@ -146,7 +151,7 @@ function resolveCorridor(house: HouseNodeV2): ContainerNode {
       ? layout.corridor?.entranceRoomId
       : undefined
 
-  // 入口房间放最前（近走廊 x=0 入口端）
+  // 入口房间放最前（近走廊 x=0 入口端），并强制置于走廊南侧（left），保证入户门在南外墙
   const ordered = entranceId
     ? [...rooms].sort((a, b) => {
         if (a.id === entranceId) return -1
@@ -166,7 +171,8 @@ function resolveCorridor(house: HouseNodeV2): ContainerNode {
   const placed: ContainerNode[] = ordered.map((r) => {
     const along = r.dimensions.length
     const depth = r.dimensions.width
-    const side = r.side === 'left' ? 'left' : 'right'
+    const isEntrance = r.id === entranceId
+    const side = isEntrance || r.side === 'left' ? 'left' : 'right'
     const sign = side === 'left' ? -1 : 1
     const x0 = cursor[side]
     const cx = x0 + along / 2
