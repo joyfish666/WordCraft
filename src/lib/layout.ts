@@ -57,7 +57,7 @@ function resolveHouse(house: HouseNodeV2): ContainerNode {
 
 /**
  * 计算嵌套房间在父房间内的相对位置（相对父中心）：
- * - 有 side 提示（north/south/east/west）→ 靠父房间对应边（居中于该边）
+ * - 有 side 提示（north/south/east/west）→ 靠父房间对应方向的**角落**（贴两面墙，符合常理）
  * - 无 side 但有 position → 用相对偏移
  * - 均无 → 按常理靠父房间东北角
  * 结果会约束在父房间内部（去墙厚），normalizeContainment 也会再次兜底。
@@ -70,16 +70,20 @@ function placeNested(n: RoomNodeV2, parentLen: number, parentWid: number): { x: 
   let z = 0
   switch (n.side) {
     case 'north':
+      x = -halfX
       z = halfZ
       break
     case 'south':
+      x = halfX
       z = -halfZ
       break
     case 'east':
       x = halfX
+      z = halfZ
       break
     case 'west':
       x = -halfX
+      z = -halfZ
       break
     default:
       if (n.position) {
