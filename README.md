@@ -230,7 +230,7 @@ Beyond the checked roadmap items above:
 - **v1.1.0 release**: on 2026-08-05 adds the project library and 2D plan view; tests grow to 109, all green, lint/build pass
 - **Undo generation (conversation)**: when a multi-turn modification isn't to your liking, the chat header "撤销生成" reverts the scene to before that generation and removes the corresponding messages (session-only snapshot stack, cap 20); failed generations are not recorded
 - **Part selection fix**: the house wireframe box and the room selection outline no longer take part in raycasting — you can select furniture inside a selected room directly, and the focus state is no longer cleared by accident
-- **Bilingual UI (v1.2.0)**: the sidebar-footer "EN / 中文" button switches the interface language with one click and persists it; covers the toolbar / chat / settings / help / property panel / project library / status bar / debug panel / error messages / 2D-plan dimension labels; the page title and `html lang` follow. **Generated data is not translated** — room/furniture names are produced by the LLM per its prompt (classifiers are Chinese-vocabulary), and the sample model / saved projects keep their content as-is
+- **Bilingual UI (v1.2.0)**: the "EN / 中文" button on the Home toolbar (top-right) and the Settings page header switches the interface language with one click and persists it; covers the toolbar / chat / settings / help / property panel / project library / status bar / debug panel / error messages / 2D-plan dimension labels; the page title and `html lang` follow. **Generated data is not translated** — room/furniture names are produced by the LLM per its prompt (classifiers are Chinese-vocabulary), and the sample model / saved projects keep their content as-is
 
 ## License
 
