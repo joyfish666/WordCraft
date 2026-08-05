@@ -154,9 +154,9 @@ function RoomShell({ room, material, isSelected, plan, nested = false }: RoomShe
       {wall('east', [cx + L / 2, wallBaseY, cz], [0, -Math.PI / 2, 0])}
       {wall('west', [cx - L / 2, wallBaseY, cz], [0, -Math.PI / 2, 0])}
 
-      {/* 选中轮廓 */}
+      {/* 选中轮廓（不参与射线检测：否则会挡在房间内部件上方，使部件点不到） */}
       {isSelected && (
-        <mesh position={[cx, baseY + (FLOOR_THICKNESS + H) / 2, cz]}>
+        <mesh raycast={() => null} position={[cx, baseY + (FLOOR_THICKNESS + H) / 2, cz]}>
           <boxGeometry args={[L, FLOOR_THICKNESS + H, W]} />
           <meshBasicMaterial color="#ffd93d" wireframe transparent opacity={0.7} />
         </mesh>
@@ -223,12 +223,12 @@ export function ModelNodeView({
     if (node.type === 'house') {
       return (
         <>
+          {/* 房屋线框盒仅作视觉轮廓，不参与射线检测：
+              否则它横跨整屋且最高，每次点击部件/房间都会先命中它（先 deselect、清空聚焦）。
+              空白处点击由 Canvas onPointerMissed 兜底取消选中。 */}
           <mesh
+            raycast={() => null}
             position={[0, node.dimensions.height / 2, 0]}
-            onClick={() => {
-              selectNode(null)
-              setFocus(null)
-            }}
           >
             <boxGeometry
               args={[node.dimensions.length, node.dimensions.height, node.dimensions.width]}

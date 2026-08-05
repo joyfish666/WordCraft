@@ -82,6 +82,8 @@ npm run build
 22. **项目库脏标记用 lastSavedJsonRef 而非 revision**：HomePage 持 `lastSavedJsonRef`（上次保存的场景 JSON），`useEffect` 订阅 `scene`——与之一致则 `markSaved`、不一致则 `markDirty`；**仅 `currentId !== null` 时跟踪**（游离新场景不算脏）。打开项目/保存成功后必须先 `lastSavedJsonRef.current = JSON.stringify(scene)` 再 `setProject`/`markSaved`，顺序反了会被 effect 误标脏。手动保存策略（README 原说"自动保存"已改为手动+守卫）。
 23. **测试注入 fake-indexeddb**：jsdom 无原生 IndexedDB，`vitest.setup.ts` 加了 `import 'fake-indexeddb/auto'` 供 Dexie 测试（`database.test.ts`）。`ProjectLibraryDialog` 的异步续体用 `aliveRef` 守卫避免卸载后 setState（否则 vitest 报 unhandled error）。
 24. **正交相机 pan 公式**：`SceneViewer.pan` 对正交相机 scale = `1/zoom`（drei ortho frustum 恒等于像素尺寸）；透视分支保持 `2*distance*tan(fov/2)/clientHeight`。别把透视公式套到正交上。正北朝上靠 `camera.up.set(0,0,1)` + `lookAt(整屋中心)`。
+25. **R3F 射线命中按距离排序、逐个派发直到 stopPropagation**：房屋线框盒（整屋最高的盒）与房间选中轮廓盒（横跨房间体积、高于家具）若不排除，会先被命中并冒泡到房间 group（`stopPropagation`），导致"选中房间后点不到内部部件"。修复：两个盒都加 `raycast={() => null}`；空白处取消选中改由 Canvas `onPointerMissed` 兜底（原房屋线框盒的 onClick 已移除）。
+26. **撤销生成用生成前快照栈（会话内）**：`useChatStore.generationStack`，生成成功前 `pushGenerationHistory(prevScene)`，`undoLastGeneration()` 弹快照 + 删最后 user+assistant 对并返回场景（HomePage `setScene` 恢复）。`clearGenerationHistory` 在 加载示例/清空场景/打开项目/清空对话 时调用。生成失败不记录；仅当最后一条是携带模型的助手消息才允许撤销。
 
 ## 5. 已知限制 / 未实现
 

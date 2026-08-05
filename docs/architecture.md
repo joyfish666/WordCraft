@@ -1,6 +1,6 @@
 # 言筑（WordCraft）技术文档
 
-> 版本：v1.10 · 更新：2026-08-05（v1.0.0 已发布；v1.1.0 新增本地项目库与 2D 俯视平面图）
+> 版本：v1.11 · 更新：2026-08-05（v1.0.0 已发布；v1.1.0 新增本地项目库与 2D 俯视平面图；后随修复增加对话撤销生成与部件点选修复）
 
 本文档面向开发者和贡献者，描述言筑的核心架构、数据契约与实现细节。项目为**纯前端**应用，无需后端。
 
@@ -144,7 +144,7 @@ interface WallFace {
 - **ModelNodeView**：递归渲染层级模型——
   - **房间外壳**（`RoomShell`）：实体地板（外扩覆盖墙脚）+ 分段实心墙（门洞与墙同高）+ 选中轮廓；嵌套子房间地板略微抬高避免与父地板重叠闪烁。
   - **嵌套房间门朝向父房间**：`wallPlanWithDoor(room, dir)` + 按父房间中心计算门方向（`nestedDoorDirection`）。
-  - **点击选中部件**：家具/嵌套房间的 `onClick` 调用 `stopPropagation()`，点击床等部件可选中并展示信息，不会被父房间覆盖。
+  - **点击选中部件**：家具/嵌套房间的 `onClick` 调用 `stopPropagation()`，点击床等部件可选中并展示信息，不会被父房间覆盖。**房屋线框盒与房间选中轮廓盒都加了 `raycast={() => null}`**——R3F 按射线距离排序逐级派发事件，若轮廓盒参与射线，它会先被命中并冒泡到房间 group 的 `stopPropagation`，导致选中房间后无法点中内部部件。
   - **家具**：实体 vs 虚化两态（聚焦时非聚焦房间家具虚化）。
   - **聚焦模式**：点击房间 → 该房间外壳透明化以查看内部实体家具，其他房间虚化。
 - **入户门**：暖橙门扇 + 亮黄门头标识，一眼可辨。
@@ -156,7 +156,7 @@ interface WallFace {
 - **useModelStore**（persist → `wordcraft.model`）：当前场景（已解析模型）、选中节点、聚焦房间、初始位置快照、**撤销/重做历史栈（`past`/`future`，仅会话内不持久化）**；`setScene` 应用 `normalizeContainment` 并清空历史。
   - 编辑提交统一走 `updateSelected(patch)`（名称/尺寸/位置部分补丁）：不可变更新 `updateNodeFields` → `normalizeContainment` 约束进墙内 → 旧场景压入 `past` 并清空 `future`。
   - `translateSelected`（位置微调/方向键）与 `resetSelectedPosition`（复位）每次调用也各记一步历史；新编辑会使 redo 失效；历史上限 50 步。
-- **useChatStore**（persist → `wordcraft.chat`）：对话消息、生成态。
+- **useChatStore**（persist → `wordcraft.chat`）：对话消息、生成态、**生成历史栈**（`generationStack`，会话内不持久化）：每次生成成功前 `pushGenerationHistory(prevScene)`（上限 20）；`undoLastGeneration()` 弹出快照并移除最后 user+assistant 对、返回待恢复场景（仅当最后一条是携带模型的助手消息）；`clearGenerationHistory` 在加载示例/清空场景/打开项目/清空对话时调用。
 - **useProjectStore**（persist → `wordcraft.project`）：当前场景所属项目（`currentId`/`currentName`，持久化）+ 会话内脏标记 `dirty`；`setProject`/`clearProject`/`markSaved`/`markDirty`/`setCurrentName`。**脏标记驱动**在 HomePage：`lastSavedJsonRef` 记录"上次保存的场景 JSON"，场景变化时与之一致则 `markSaved`、不一致则 `markDirty`；仅当前项目绑定（`currentId !== null`）时跟踪。
 
 ## 6.5 本地项目库与 2D 俯视平面图（v1.1.0）
@@ -226,4 +226,4 @@ src/
 
 ---
 
-**维护者**：JoyFish · 文档版本 v1.10
+**维护者**：JoyFish · 文档版本 v1.11
