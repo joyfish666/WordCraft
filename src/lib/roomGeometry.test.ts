@@ -117,11 +117,12 @@ describe('computeWallPlan（分段墙体）', () => {
 })
 
 describe('入户门', () => {
-  it('入户门开在指定房间的南外墙（居中）', () => {
+  it('入户门开在指定房间的南外墙（居中）并标记为入户', () => {
     const living = room('living', '客厅', 0, -2, 3, 3)
     const master = room('master', '主卧', 0, 2, 3, 3)
     const plan = computeWallPlan([living, master], { entrance: 'south', entranceRoomId: 'living' })
     expect(hasDoor(plan.get('living')!.south)).toBe(true)
     expect(rendersWall(plan.get('living')!.south)).toBe(true)
+    expect(plan.get('living')!.south.segments.some((s) => s.entrance)).toBe(true)
   })
 })
