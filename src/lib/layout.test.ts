@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { findNodeById, isContainer } from './modelTree'
+import { findNodeById, isContainer, walk } from './modelTree'
 import { resolveLayout } from './layout'
-import type { RoomNodeV2, SceneModelV2 } from '../types/model'
+import { computeWallPlan } from './roomGeometry'
+import type { ContainerNode, RoomNodeV2, SceneModelV2 } from '../types/model'
 
 function roomV2(
   id: string,
@@ -191,5 +192,66 @@ describe('resolveLayout - 整屋包围盒', () => {
       expect(c.position.z - halfW).toBeGreaterThanOrEqual(-model.root.dimensions.width / 2)
       expect(c.position.z + halfW).toBeLessThanOrEqual(model.root.dimensions.width / 2)
     }
+  })
+})
+
+describe('resolveLayout - 两卫生间布局', () => {
+  function twoBathScene(): SceneModelV2 {
+    return {
+      version: 2,
+      root: {
+        id: 'h',
+        type: 'house',
+        name: '三室两卫',
+        dimensions: { length: 14.4, width: 9.6, height: 2.8 },
+        position: { x: 0, y: 0, z: 0 },
+        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        children: [
+          roomV2('living_room', '客厅', 6, 4.2, 'left'),
+          roomV2('kitchen', '厨房', 3, 3, 'left'),
+          roomV2('bedroom1', '主卧', 4.2, 3.6, 'right'),
+          roomV2('master_bathroom', '主卧卫生间', 2, 1.8, 'right'),
+          roomV2('bedroom2', '次卧一', 3.6, 3.3, 'right'),
+          roomV2('bedroom3', '次卧二', 3.6, 3.3, 'right'),
+          roomV2('corridor_bathroom', '走廊卫生间', 2, 1.8, 'left'),
+        ],
+      },
+    }
+  }
+
+  it('两个卫生间都参与布局（走廊卫生间不再被当作走廊过滤）', () => {
+    const model = resolveLayout(twoBathScene())
+    expect(findNodeById(model.root, 'corridor_bathroom')).not.toBeNull()
+    expect(findNodeById(model.root, 'master_bathroom')).not.toBeNull()
+  })
+
+  it('主卧卫生间只与主卧开门，不连次卧', () => {
+    const model = resolveLayout(twoBathScene())
+    const rooms: ContainerNode[] = []
+    walk(model.root, (n) => {
+      if (n.type === 'room') rooms.push(n as ContainerNode)
+    })
+    const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'living_room' })
+    const b1 = plan.get('bedroom1')!
+    const b2 = plan.get('bedroom2')!
+    // 主卧卫生间与主卧之间：墙开门（由主卧侧持有渲染）
+    expect(b1.east.segments.some((s) => s.kind === 'door')).toBe(true)
+    // 主卧卫生间与次卧一之间的墙为实心（不开门）——由次卧一侧渲染
+    expect(b2.west.segments.some((s) => s.kind === 'wall')).toBe(true)
+    expect(b2.west.segments.some((s) => s.kind === 'door')).toBe(false)
+  })
+
+  it('走廊卫生间只与走廊开门，不连厨房', () => {
+    const model = resolveLayout(twoBathScene())
+    const rooms: ContainerNode[] = []
+    walk(model.root, (n) => {
+      if (n.type === 'room') rooms.push(n as ContainerNode)
+    })
+    const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'living_room' })
+    const cb = plan.get('corridor_bathroom')!
+    // 与走廊相连（北墙开门）
+    expect(cb.north.segments.some((s) => s.kind === 'door')).toBe(true)
+    // 与厨房之间不开门（实心墙）
+    expect(cb.west.segments.some((s) => s.kind === 'door')).toBe(false)
   })
 })
