@@ -13,7 +13,40 @@ describe('useSettingsStore', () => {
       colorMode: 'standard',
       wireframe: { enabled: false, lineWidth: 1 },
       debugMode: false,
+      language: 'zh',
     })
+  })
+
+  it('setLanguage 切换语言并持久化', () => {
+    useSettingsStore.getState().setLanguage('en')
+    expect(useSettingsStore.getState().language).toBe('en')
+    const saved = JSON.parse(localStorage.getItem('wordcraft.settings') as string) as {
+      state: { language: string }
+    }
+    expect(saved.state.language).toBe('en')
+  })
+
+  it('v2 旧数据迁移：缺 language 字段时回退为 zh', async () => {
+    // 先让当前状态为 en（会写入 v3），再覆写为无 language 的 v2 数据，验证 migrate 补回 zh
+    useSettingsStore.setState({ language: 'en' })
+    localStorage.setItem(
+      'wordcraft.settings',
+      JSON.stringify({
+        state: {
+          apiKeys: [],
+          activeKeyId: null,
+          defaultBaseUrl: '',
+          defaultModel: 'gpt-3.5-turbo',
+          thinking: 'disabled',
+          colorMode: 'standard',
+          wireframe: { enabled: false, lineWidth: 1 },
+          debugMode: false,
+        },
+        version: 2,
+      }),
+    )
+    await useSettingsStore.persist.rehydrate()
+    expect(useSettingsStore.getState().language).toBe('zh')
   })
 
   it('默认关闭线框（实体色块渲染）', () => {

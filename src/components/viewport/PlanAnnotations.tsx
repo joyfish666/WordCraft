@@ -4,6 +4,7 @@ import { roomFaceColor } from '../../lib/palette'
 import { dimensionLines, houseBounds, roomLabelText, walkRooms } from '../../lib/planGeometry'
 import { useModelStore } from '../../store/useModelStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
+import type { Lang } from '../../i18n/translations'
 
 /**
  * 2D 俯视平面图的标注层（仅 planMode 渲染）：
@@ -15,14 +16,15 @@ export function PlanAnnotations() {
   const selectedId = useModelStore((s) => s.selectedId)
   const focusId = useModelStore((s) => s.focusId)
   const colorMode = useSettingsStore((s) => s.colorMode)
+  const language = useSettingsStore((s) => s.language) as Lang
 
   // 标签/尺寸线高度：墙顶以上（墙高 = 整屋高度），避免被墙体遮挡
   const labelY = scene ? scene.root.dimensions.height + 1 : 4
   const bounds = useMemo(() => (scene ? houseBounds(scene) : null), [scene])
   const rooms = useMemo(() => (scene ? walkRooms(scene.root) : []), [scene])
   const dims = useMemo(
-    () => (bounds ? dimensionLines(bounds, { y: labelY }) : []),
-    [bounds, labelY],
+    () => (bounds ? dimensionLines(bounds, { y: labelY, lang: language }) : []),
+    [bounds, labelY, language],
   )
 
   if (!scene || !bounds) return null

@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { sceneModelV2Schema } from '../schemas/model.schema'
 import { logDebug } from './debugLog'
 import { resolveLayout } from './layout'
@@ -102,11 +103,9 @@ export async function generateModelFromChat(options: GenerateOptions): Promise<G
   try {
     content = await streamChatCompletion(clientOptions, messages, onChunk, controller.signal)
   } catch (error) {
-    logDebug('模型请求失败', error instanceof Error ? error.message : String(error), 'error')
-    throw new ChatGenerationError(
-      `模型请求失败：${error instanceof Error ? error.message : String(error)}。可在设置页点「检测连通性」定位问题。`,
-      'http',
-    )
+    const detail = error instanceof Error ? error.message : String(error)
+    logDebug('模型请求失败', detail, 'error')
+    throw new ChatGenerationError(t('error.httpRequestFailed', { detail }), 'http')
   } finally {
     clearTimeout(timer)
   }
@@ -115,14 +114,14 @@ export async function generateModelFromChat(options: GenerateOptions): Promise<G
 
   const json = extractModelJson(content)
   if (!json) {
-    throw new ChatGenerationError('模型返回内容中未找到 JSON，请重试', 'no-json')
+    throw new ChatGenerationError(t('error.noJson'), 'no-json')
   }
 
   let raw: unknown
   try {
     raw = JSON.parse(json)
   } catch {
-    throw new ChatGenerationError('模型返回的 JSON 无法解析，请重试', 'invalid-schema')
+    throw new ChatGenerationError(t('error.invalidJson'), 'invalid-schema')
   }
 
   // 原始回复本身就是纯净 JSON 时，解析结果与之相同——跳过重复的大段 JSON，避免日志翻倍
@@ -137,10 +136,7 @@ export async function generateModelFromChat(options: GenerateOptions): Promise<G
       .map((i) => `${i.path.join('.')}: ${i.message}`)
       .join('；')
     logDebug('v2 结构校验失败', issues, 'error')
-    throw new ChatGenerationError(
-      `模型返回的 JSON 不符合 v2 数据结构（${issues}），请重试`,
-      'invalid-schema',
-    )
+    throw new ChatGenerationError(t('error.invalidSchema', { issues }), 'invalid-schema')
   }
 
   logDebug('v2 结构校验通过', {

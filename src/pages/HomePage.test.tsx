@@ -42,6 +42,7 @@ function resetStores() {
     colorMode: 'standard',
     wireframe: { enabled: false, lineWidth: 1 },
     debugMode: false,
+    language: 'zh',
   })
 }
 
@@ -137,6 +138,21 @@ describe('HomePage 对话交互', () => {
     fireEvent.click(screen.getByRole('button', { name: '撤销生成' }))
     await waitFor(() => expect(useModelStore.getState().scene?.root.name).toBe('示例小屋'))
     expect(useChatStore.getState().messages).toHaveLength(0)
+  })
+
+  it('切换语言为英文后，界面文案变为英文', async () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('button', { name: '加载示例' })).toBeInTheDocument()
+
+    useSettingsStore.getState().setLanguage('en')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Load sample' })).toBeInTheDocument(),
+    )
+    expect(screen.queryByRole('button', { name: '加载示例' })).not.toBeInTheDocument()
   })
 
   it('工具栏「项目库」按钮打开本地项目库对话框', async () => {

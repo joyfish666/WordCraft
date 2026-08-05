@@ -1,7 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { createId } from '../lib/id'
-import type { ApiKeyEntry, AppSettings, ColorMode, ThinkingMode } from '../types/settings'
+import type {
+  ApiKeyEntry,
+  AppSettings,
+  ColorMode,
+  Language,
+  ThinkingMode,
+} from '../types/settings'
 
 interface SettingsState extends AppSettings {
   /** 新增 API Key，返回新 Key 的 id */
@@ -15,6 +21,7 @@ interface SettingsState extends AppSettings {
   toggleWireframe: () => void
   setWireframeLineWidth: (width: number) => void
   setDebugMode: (value: boolean) => void
+  setLanguage: (lang: Language) => void
 }
 
 const STORAGE_KEY = 'wordcraft.settings'
@@ -31,6 +38,7 @@ export const useSettingsStore = create<SettingsState>()(
       // 默认实体色块渲染（关闭线框），家具/房间呈现为有遮挡关系的实心方块
       wireframe: { enabled: false, lineWidth: 1 },
       debugMode: false,
+      language: 'zh',
 
       addApiKey: (entry) => {
         const id = createId()
@@ -63,15 +71,20 @@ export const useSettingsStore = create<SettingsState>()(
         set((state) => ({ wireframe: { ...state.wireframe, lineWidth: width } })),
 
       setDebugMode: (value) => set({ debugMode: value }),
+      setLanguage: (lang) => set({ language: lang }),
     }),
     {
       name: STORAGE_KEY,
-      version: 2,
-      // v2 起默认关闭线框，让既有用户也切换到实体色块渲染
-      migrate: (persistedState) => ({
-        ...(persistedState as AppSettings),
-        wireframe: { enabled: false, lineWidth: 1 },
-      }),
+      version: 3,
+      // v2 起默认关闭线框；v3 起新增语言字段（旧数据缺省为中文）
+      migrate: (persistedState) => {
+        const persisted = persistedState as AppSettings
+        return {
+          ...persisted,
+          wireframe: { enabled: false, lineWidth: 1 },
+          language: persisted.language ?? 'zh',
+        }
+      },
     },
   ),
 )

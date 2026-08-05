@@ -15,6 +15,9 @@ export type ColorMode = 'standard' | 'colorblind'
 /** 深度思考模式：enabled=开启 / disabled=关闭（更快）/ default=跟随模型默认 */
 export type ThinkingMode = 'enabled' | 'disabled' | 'default'
 
+/** 界面语言：中文 / 英文 */
+export type Language = 'zh' | 'en'
+
 /** 应用全局设置 */
 export interface AppSettings {
   apiKeys: ApiKeyEntry[]
@@ -32,4 +35,6 @@ export interface AppSettings {
   }
   /** 调试模式：开启后记录生成过程日志（设置页开关） */
   debugMode: boolean
+  /** 界面语言：zh / en（侧边栏按钮快速切换） */
+  language: Language
 }
