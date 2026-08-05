@@ -2,7 +2,7 @@
 
 > 面向下一个接手 agent / 开发者。本文档补充 README 与技术文档未涉及之处：项目现状、关键实现坑、运行调试方式、下一步建议。
 
-**交接日期**：2026-08-05 · 当前分支 `main`（全部已推送 GitHub）
+**交接日期**：2026-08-05 · 当前分支 `main`（v1.1.0 已发布并推送 GitHub）
 
 ## 1. 交接总览
 
@@ -17,8 +17,10 @@
 - ✅ 撤销/重做（快照历史栈，工具栏按钮 + Ctrl+Z/Ctrl+Y 快捷键）
 - ✅ 家具常理摆放（生成时贴墙 + 大面积贴墙旋转 + 避让嵌套卫生间/门口/家具，`lib/furniturePlacement.ts`）
 - ✅ 调试日志精简（去重、去刷屏）+ 调试面板「下载日志」按钮
-- ✅ 调试模式、测试（86 用例）
+- ✅ 调试模式、测试（109 用例）
 - ✅ **v1.0.0 已发布**（2026-08-05）：GitHub Pages 在线版 https://joyfish666.github.io/WordCraft/，`vite base=/WordCraft/` + GitHub Actions 自动构建部署（`.github/workflows/deploy.yml`）
+- ✅ **本地项目库（v1.1.0）**：Dexie 接入 UI，工具栏「保存/项目库」，新建/打开/重命名/删除，未保存守卫
+- ✅ **2D 俯视平面图（v1.1.0）**：同 Canvas 正交俯视相机，房间标签 + 外廓尺寸线，与 3D 选中/聚焦联动
 
 **先读**：`README-zh.md`（功能）、`docs/architecture.md`（架构）→ 再读本文档（坑与细节）。
 
@@ -76,16 +78,20 @@ npm run build
 18. **重叠判定要容忍浮点贴边**：床贴墙/贴禁区边界时，边缘仅差 ~1e-16 的浮点噪声，严格不等式会误判重叠。`overlaps` 内部用 1e-6 容差，测试判定也按贴边允许处理。
 19. **旋转 = 交换长宽**：大面积贴墙时若长边不在墙的平行轴，通过**交换 length/width** 实现 90° 旋转（`rotationY` 同步 +90°，但**渲染器暂不读 rotationY**，视觉靠交换后的尺寸生效）。副作用：旋转后属性面板/状态栏显示的"长×宽"与家具语义相反（如衣柜 1.2×0.6 贴东墙后显示 0.6×1.2）。改渲染器支持 rotationY 前，别在面板里"修正"它的尺寸。
 20. **调试日志精简**：`roomGeometry` 不再记录「入户门生成」（该函数每次场景变化都重算导致刷屏）；`chat.ts` 里原始回复本身就是纯净 JSON 时跳过重复的「解析结果」日志（避免 JSON 翻倍）。调试面板新增「下载」按钮（Blob 下载 .log 到浏览器下载目录）。
+21. **相机切换必须用 drei 相机组件**：R3F 核心**不处理** `makeDefault`（源码确认），只有 drei 的 `OrthographicCamera`/`PerspectiveCamera` 封装才切换 `state.camera` 并在卸载时恢复原相机。`SceneViewer` 用 `{planMode && <OrthographicCamera makeDefault .../>}` + **`<OrbitControls key={planMode?'ortho':'persp'} .../>`**（key 强制重挂载绑定新相机）+ `enableRotate={!planMode}`。改回原生 `<orthographicCamera>` 会失效。
+22. **项目库脏标记用 lastSavedJsonRef 而非 revision**：HomePage 持 `lastSavedJsonRef`（上次保存的场景 JSON），`useEffect` 订阅 `scene`——与之一致则 `markSaved`、不一致则 `markDirty`；**仅 `currentId !== null` 时跟踪**（游离新场景不算脏）。打开项目/保存成功后必须先 `lastSavedJsonRef.current = JSON.stringify(scene)` 再 `setProject`/`markSaved`，顺序反了会被 effect 误标脏。手动保存策略（README 原说"自动保存"已改为手动+守卫）。
+23. **测试注入 fake-indexeddb**：jsdom 无原生 IndexedDB，`vitest.setup.ts` 加了 `import 'fake-indexeddb/auto'` 供 Dexie 测试（`database.test.ts`）。`ProjectLibraryDialog` 的异步续体用 `aliveRef` 守卫避免卸载后 setState（否则 vitest 报 unhandled error）。
+24. **正交相机 pan 公式**：`SceneViewer.pan` 对正交相机 scale = `1/zoom`（drei ortho frustum 恒等于像素尺寸）；透视分支保持 `2*distance*tan(fov/2)/clientHeight`。别把透视公式套到正交上。正北朝上靠 `camera.up.set(0,0,1)` + `lookAt(整屋中心)`。
 
 ## 5. 已知限制 / 未实现
 
 - **嵌套房间是"父内独立外壳"**，不是真正在父房间墙内再划分（卫生间与卧室共享地板，靠内部墙+门分隔）。若要"真·内嵌"，需引擎支持父房间内再划分子空间。
-- **2D 俯视视图**未实现（README 提到）。
+- ~~**2D 俯视视图**未实现~~ ✅ 已实现（v1.1，同 Canvas 正交俯视，坑见第 4 节 21/24）。
 - **Gizmo 辅助编辑**未实现（Phase 3，TransformControls）。属性面板（Phase 2 阶段一）已实现。
 - **手动编辑不触发重排**：改房间尺寸/位置不会重跑布局引擎，共享墙方案可能与该房间邻居错位（见第 4 节坑 15）。
 - **家具-家具避让是"贪心顺序"**：生成时常理按 children 顺序逐个放置并避让已放置家具，非全局最优，极端情况下仍可能贴边。属性面板手动编辑不会再触发常理（改后可能叠到其他家具/门口，属手动编辑的自由）。
 - **属性面板编辑不避让门口/嵌套房间**：`normalizeContainment` 只约束进父房间外边界；手动把家具移进卫生间或门口不会弹开（生成时的 `applyFurnitureConventions` 才会避让）。
-- **本地项目库**（Dexie `src/db/database.ts` 已就绪）未接入 UI。
+- ~~**本地项目库**未接入 UI~~ ✅ 已实现（v1.1，手动保存模式；README 原说的"自动保存"按用户要求改为手动保存 + 未保存守卫）。
 - **截图分享、口令**未实现（Phase 3）。
 - **LLM 输出质量依赖提示词**（当前 DeepSeek v4-flash）。多轮修改、家具常理摆放等依赖 LLM 遵循度，必要时可加代码级兜底。
 - 测试环境 jsdom 无 WebGL：`HomePage.test.tsx` mock 了 `SceneViewer`，测试 R3F 渲染相关改动注意。
@@ -93,10 +99,11 @@ npm run build
 ## 6. 给下一个 agent 的建议
 
 1. **先跑 `npm run dev` + `npm test`**，加载示例模型熟悉渲染；再开调试模式跑一次生成，看日志理解数据流。
-2. **下一步优先级**（README Phase 2）：
-   - 本地项目库 UI（Dexie `src/db/database.ts` 就绪，未接 UI）
-   - 2D 俯视平面图（README 已列；建议提前，平面图是室内设计第一视角，且天然可与 3D 联动）
-   - Gizmo 辅助编辑（TransformControls，`@react-three/drei` 已装；属性面板已覆盖核心编辑需求，Gizmo 属加分交互）
+2. **下一步优先级**（本地项目库与 2D 平面图已落地）：
+   - **截图分享 + 口令**（README Phase 3 核心特性，`lz-string` 已装；截图用 R3F Canvas 快照）
+   - **Gizmo 辅助编辑**（TransformControls，`@react-three/drei` 已装；属性面板已覆盖核心编辑需求，Gizmo 属加分交互）
+   - **移动端基础适配**（Phase 2 未勾选项）
+   - 2D 平面图后续可加：家具足迹显示、门洞开启符号、房间尺寸标注（当前仅标签 + 外廓总尺寸）
 3. **改墙体/门相关代码前**，先看第 4 节的坑，尤其东西墙旋转和门段渲染。
 4. **加功能时保持"语义/几何分离"**：让 LLM 出语义，代码算几何；不要回到"LLM 直接给绝对坐标"。
 5. **用户原则**：一切以用户明确要求为主，未明确才按常理；除入户门外不要擅自固定其他内容。
@@ -114,5 +121,8 @@ npm run build
 | 渲染 | `components/viewport/*` |
 | 属性面板 UI | `components/viewport/PropertyPanel.tsx` |
 | 编辑提交/撤销重做 | `store/useModelStore.ts`（`updateSelected`/`undo`/`redo`）、`lib/modelTree.ts`（`updateNodeFields`） |
-| 状态 | `store/*` |
+| 状态 | `store/*`（项目库状态在 `store/useProjectStore.ts`） |
 | 家具约束 | `lib/modelTree.ts` |
+| 项目库 UI/保存/守卫 | `components/ui/ProjectLibraryDialog.tsx` + `pages/HomePage.tsx`（`handleSave`/`handleOpenProject`/`confirmDiscardUnsaved`/脏标记 effect）、`db/database.ts`、`store/useProjectStore.ts` |
+| 2D 平面图（取景/标注） | `lib/planGeometry.ts`（纯函数）、`components/viewport/PlanRig.tsx`、`PlanAnnotations.tsx`、`SceneViewer.tsx`（`planMode` 相机切换） |
+| 共享配色（2D/3D 一致） | `lib/palette.ts`（`roomFaceColor`） |

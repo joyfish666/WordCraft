@@ -28,6 +28,11 @@ export async function listProjects(): Promise<ProjectRecord[]> {
   return db.projects.orderBy('updatedAt').reverse().toArray()
 }
 
+/** 按 id 读取单个项目；不存在返回 undefined */
+export async function getProject(id: number): Promise<ProjectRecord | undefined> {
+  return db.projects.get(id)
+}
+
 /** 新建项目，返回自增 id */
 export async function saveProject(input: Omit<ProjectRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
   const now = Date.now()

@@ -1,7 +1,7 @@
 {
   "name": "wordcraft",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "言筑 WordCraft —— 通过自然语言对话快速生成 3D 空间结构模型的纯前端 Web 应用",
   "scripts": {
@@ -40,6 +40,7 @@
     "eslint": "^9.17.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.16",
+    "fake-indexeddb": "^6.0.0",
     "globals": "^15.14.0",
     "jsdom": "^26.0.0",
     "prettier": "^3.4.2",

@@ -2,16 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HelpDialog } from '../components/ui/HelpDialog'
 import { Button } from '../components/ui/Button'
+import { ProjectLibraryDialog } from '../components/ui/ProjectLibraryDialog'
 import { PropertyPanel } from '../components/viewport/PropertyPanel'
 import { SceneViewer, type SceneViewerHandle } from '../components/viewport/SceneViewer'
+import { getProject, updateProject } from '../db/database'
 import { ChatGenerationError, generateModelFromChat } from '../lib/chat'
 import { clearDebug, useDebugEntries, type DebugEntry } from '../lib/debugLog'
 import { countNodes, getPathToNode, isContainer } from '../lib/modelTree'
 import { createSampleModel } from '../lib/sampleModel'
 import { toChatHistory, useChatStore, type ChatMessageItem } from '../store/useChatStore'
 import { useModelStore } from '../store/useModelStore'
+import { useProjectStore } from '../store/useProjectStore'
 import { getActiveApiConfig, useSettingsStore } from '../store/useSettingsStore'
-import type { ModelNode } from '../types/model'
+import type { ModelNode, SceneModel } from '../types/model'
 
 /** 方向键平移视角的位移量（屏幕像素等效） */
 const PAN_STEP = 15
@@ -76,9 +79,32 @@ export function HomePage() {
   const [elapsed, setElapsed] = useState(0)
   const [helpOpen, setHelpOpen] = useState(false)
   const [debugOpen, setDebugOpen] = useState(true)
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<'3d' | 'plan'>('3d')
+  const planMode = viewMode === 'plan'
   const logRef = useRef<HTMLDivElement>(null)
   const debugRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<SceneViewerHandle>(null)
+
+  const projectDirty = useProjectStore((s) => s.dirty)
+
+  // 项目库脏标记：记录"上次保存的场景"快照，场景变化与其不一致即视为有未保存修改。
+  // 首次挂载（含持久化重载）视为已保存快照，避免误标脏。
+  const lastSavedJsonRef = useRef<string | null>(null)
+  const dirtyInitRef = useRef(false)
+  useEffect(() => {
+    if (!dirtyInitRef.current) {
+      dirtyInitRef.current = true
+      lastSavedJsonRef.current = scene ? JSON.stringify(scene) : null
+      return
+    }
+    const currentProjectId = useProjectStore.getState().currentId
+    if (currentProjectId === null) return
+    const json = scene ? JSON.stringify(scene) : ''
+    // 与已保存快照不一致 → 有未保存修改；撤销回到已保存状态时清除脏标记
+    if (lastSavedJsonRef.current !== json) useProjectStore.getState().markDirty()
+    else useProjectStore.getState().markSaved()
+  }, [scene])
 
   const selected = useMemo(() => {
     if (!scene || !selectedId) return null
@@ -195,6 +221,9 @@ export function HomePage() {
       })
       addMessage({ role: 'assistant', content: reply, model })
       setScene(model)
+      // 生成的是全新的未保存场景：解绑项目，重置已保存快照
+      useProjectStore.getState().clearProject()
+      lastSavedJsonRef.current = null
     } catch (error) {
       addMessage({
         role: 'error',
@@ -211,14 +240,82 @@ export function HomePage() {
     else if (node.type === 'room') setFocus(node.id)
   }
 
+  /** 丢弃当前场景前的未保存守卫。includeOrphan：是否也警告未入库的游离新场景 */
+  const confirmDiscardUnsaved = (includeOrphan: boolean): boolean => {
+    const { currentId, dirty } = useProjectStore.getState()
+    if (currentId !== null && dirty) {
+      return window.confirm('当前项目有未保存的修改，此操作将放弃这些修改，确定继续吗？')
+    }
+    if (includeOrphan && currentId === null && useModelStore.getState().scene !== null) {
+      return window.confirm('当前场景尚未保存到项目库，此操作将覆盖当前场景，确定继续吗？')
+    }
+    return true
+  }
+
+  const handleSave = async () => {
+    const s = useModelStore.getState().scene
+    if (!s) return
+    const { currentId } = useProjectStore.getState()
+    if (currentId !== null) {
+      await updateProject(currentId, { data: JSON.stringify(s) })
+      lastSavedJsonRef.current = JSON.stringify(useModelStore.getState().scene)
+      useProjectStore.getState().markSaved()
+    } else {
+      // 无当前项目：打开项目库对话框，聚焦「新建项目」名称输入
+      setProjectDialogOpen(true)
+    }
+  }
+
+  const handleOpenProject = async (id: number, name: string) => {
+    if (!confirmDiscardUnsaved(true)) return
+    const rec = await getProject(id)
+    if (!rec) return
+    let parsed: SceneModel
+    try {
+      parsed = JSON.parse(rec.data) as SceneModel
+    } catch {
+      window.alert('项目数据损坏，无法打开')
+      return
+    }
+    if (!parsed || parsed.version !== 1 || !parsed.root || parsed.root.type !== 'house') {
+      window.alert('项目数据格式不正确，无法打开')
+      return
+    }
+    setScene(parsed)
+    lastSavedJsonRef.current = JSON.stringify(useModelStore.getState().scene)
+    useProjectStore.getState().setProject(id, name)
+  }
+
+  const handleProjectCreated = (id: number, name: string) => {
+    lastSavedJsonRef.current = JSON.stringify(useModelStore.getState().scene)
+    useProjectStore.getState().setProject(id, name)
+  }
+
   return (
     <div className="home">
       <header className="home__toolbar">
         <div className="home__toolbar-left">
-          <Button variant="ghost" onClick={() => setScene(createSampleModel())}>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              if (!confirmDiscardUnsaved(true)) return
+              useProjectStore.getState().clearProject()
+              lastSavedJsonRef.current = null
+              setScene(createSampleModel())
+            }}
+          >
             加载示例
           </Button>
-          <Button variant="ghost" onClick={resetScene} disabled={!scene}>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              if (!confirmDiscardUnsaved(false)) return
+              useProjectStore.getState().clearProject()
+              lastSavedJsonRef.current = null
+              resetScene()
+            }}
+            disabled={!scene}
+          >
             清空场景
           </Button>
           <span className="toolbar-sep" />
@@ -227,6 +324,18 @@ export function HomePage() {
           </Button>
           <Button variant="ghost" onClick={redo} disabled={!canRedo} title="重做 (Ctrl+Y / Ctrl+Shift+Z)">
             重做
+          </Button>
+          <span className="toolbar-sep" />
+          <Button
+            variant="ghost"
+            onClick={() => void handleSave()}
+            disabled={!scene}
+            title={projectDirty ? '保存到本地项目库（有未保存的修改）' : '保存到本地项目库'}
+          >
+            保存
+          </Button>
+          <Button variant="ghost" onClick={() => setProjectDialogOpen(true)}>
+            项目库
           </Button>
           <Button variant="ghost" onClick={() => setHelpOpen(true)}>
             操作说明
@@ -308,7 +417,24 @@ export function HomePage() {
         </section>
 
         <section className="panel home__viewport">
-          <SceneViewer ref={viewportRef} />
+          <div className="view-mode-toggle segmented" role="group" aria-label="视图模式">
+            <button
+              type="button"
+              className={`segmented__btn ${!planMode ? 'segmented__btn--active' : ''}`}
+              onClick={() => setViewMode('3d')}
+            >
+              3D
+            </button>
+            <button
+              type="button"
+              className={`segmented__btn ${planMode ? 'segmented__btn--active' : ''}`}
+              onClick={() => setViewMode('plan')}
+              title="切换至俯视平面图"
+            >
+              平面图
+            </button>
+          </div>
+          <SceneViewer ref={viewportRef} planMode={planMode} />
           {selected && <PropertyPanel node={selected} />}
         </section>
       </div>
@@ -435,6 +561,12 @@ export function HomePage() {
       </footer>
 
       <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <ProjectLibraryDialog
+        open={projectDialogOpen}
+        onClose={() => setProjectDialogOpen(false)}
+        onOpenProject={(id, name) => void handleOpenProject(id, name)}
+        onProjectCreated={handleProjectCreated}
+      />
     </div>
   )
 }

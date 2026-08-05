@@ -1,3 +1,4 @@
+import { isCorridorName } from './roomGeometry'
 import type { ColorMode } from '../types/settings'
 
 /** 标准模式下相邻房间区分用色板 */
@@ -23,4 +24,15 @@ export const ENTRANCE_MARKER_COLOR = '#ffd93d'
 export function roomColor(index: number, colorMode: ColorMode): string {
   const palette = colorMode === 'colorblind' ? COLORBLIND_ROOM_COLORS : ROOM_COLORS
   return palette[index % palette.length]
+}
+
+/**
+ * 房间面颜色：走廊用默认色，其余按兄弟索引取色板色。
+ * 供 3D 渲染与 2D 平面图共用，保证两种视图下房间颜色一致。
+ */
+export function roomFaceColor(name: string, siblingIndex: number, colorMode: ColorMode): string {
+  if (isCorridorName(name)) {
+    return colorMode === 'colorblind' ? CORRIDOR_COLORBLIND : CORRIDOR_COLOR
+  }
+  return roomColor(siblingIndex, colorMode)
 }
