@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { testConnection, type ConnectionTestResult } from '../lib/api'
+import { clearDebug } from '../lib/debugLog'
 import { useSettingsStore } from '../store/useSettingsStore'
 import type { ColorMode } from '../types/settings'
 
@@ -18,6 +19,7 @@ export function SettingsPage() {
   const thinking = useSettingsStore((s) => s.thinking)
   const colorMode = useSettingsStore((s) => s.colorMode)
   const wireframe = useSettingsStore((s) => s.wireframe)
+  const debugMode = useSettingsStore((s) => s.debugMode)
 
   const addApiKey = useSettingsStore((s) => s.addApiKey)
   const removeApiKey = useSettingsStore((s) => s.removeApiKey)
@@ -28,6 +30,7 @@ export function SettingsPage() {
   const setColorMode = useSettingsStore((s) => s.setColorMode)
   const toggleWireframe = useSettingsStore((s) => s.toggleWireframe)
   const setWireframeLineWidth = useSettingsStore((s) => s.setWireframeLineWidth)
+  const setDebugMode = useSettingsStore((s) => s.setDebugMode)
 
   const [name, setName] = useState('')
   const [key, setKey] = useState('')
@@ -228,6 +231,26 @@ export function SettingsPage() {
             />
             <span className="field__hint">{wireframe.lineWidth}</span>
           </div>
+        </div>
+      </section>
+
+      <section className="panel settings__section">
+        <h3 className="panel__title">调试</h3>
+        <div className="field">
+          <label className="field__label field__label--row">
+            <input
+              type="checkbox"
+              checked={debugMode}
+              onChange={(e) => setDebugMode(e.target.checked)}
+            />
+            开启调试模式
+          </label>
+          <p className="field__hint">
+            开启后，对话生成的全过程（请求参数、模型原始回复、v2 解析、布局平铺结果）会记录到首页的「调试日志」面板，便于排查问题。
+          </p>
+          <Button variant="ghost" onClick={clearDebug}>
+            清空日志
+          </Button>
         </div>
       </section>
     </div>

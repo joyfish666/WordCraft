@@ -14,6 +14,7 @@ interface SettingsState extends AppSettings {
   setColorMode: (mode: ColorMode) => void
   toggleWireframe: () => void
   setWireframeLineWidth: (width: number) => void
+  setDebugMode: (value: boolean) => void
 }
 
 const STORAGE_KEY = 'wordcraft.settings'
@@ -29,6 +30,7 @@ export const useSettingsStore = create<SettingsState>()(
       colorMode: 'standard',
       // 默认实体色块渲染（关闭线框），家具/房间呈现为有遮挡关系的实心方块
       wireframe: { enabled: false, lineWidth: 1 },
+      debugMode: false,
 
       addApiKey: (entry) => {
         const id = createId()
@@ -59,6 +61,8 @@ export const useSettingsStore = create<SettingsState>()(
 
       setWireframeLineWidth: (width) =>
         set((state) => ({ wireframe: { ...state.wireframe, lineWidth: width } })),
+
+      setDebugMode: (value) => set({ debugMode: value }),
     }),
     {
       name: STORAGE_KEY,

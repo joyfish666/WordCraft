@@ -454,6 +454,85 @@ button {
   border-color: var(--accent);
 }
 
+/* ---------- 调试日志面板 ---------- */
+
+.debug-panel {
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  max-height: 42vh;
+}
+
+.debug-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.debug-panel__toggle {
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.debug-panel__count {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.debug-panel__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.debug-panel__body {
+  overflow: auto;
+  padding: 8px 14px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.debug-panel__empty {
+  color: var(--text-dim);
+}
+
+.debug-entry {
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.debug-entry__time {
+  color: var(--text-dim);
+  margin-right: 8px;
+}
+
+.debug-entry--warn .debug-entry__msg {
+  color: var(--warn);
+}
+
+.debug-entry--error .debug-entry__msg {
+  color: var(--danger);
+}
+
+.debug-entry__detail {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ---------- 操作说明弹窗 ---------- */
 
 .dialog-overlay {

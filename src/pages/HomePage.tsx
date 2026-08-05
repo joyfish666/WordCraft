@@ -4,6 +4,7 @@ import { HelpDialog } from '../components/ui/HelpDialog'
 import { Button } from '../components/ui/Button'
 import { SceneViewer, type SceneViewerHandle } from '../components/viewport/SceneViewer'
 import { ChatGenerationError, generateModelFromChat } from '../lib/chat'
+import { clearDebug, useDebugEntries, type DebugEntry } from '../lib/debugLog'
 import { countNodes, getPathToNode, isContainer } from '../lib/modelTree'
 import { createSampleModel } from '../lib/sampleModel'
 import { toChatHistory, useChatStore, type ChatMessageItem } from '../store/useChatStore'
@@ -13,6 +14,16 @@ import type { ModelNode } from '../types/model'
 
 /** 方向键平移视角的位移量（屏幕像素等效） */
 const PAN_STEP = 15
+
+/** 将调试日志导出为可复制的纯文本 */
+function copyDebug(entries: DebugEntry[]): void {
+  const text = entries
+    .map((e) => `[${e.time}] [${e.level}] ${e.message}${e.detail ? `\n${e.detail}` : ''}`)
+    .join('\n')
+  if (navigator.clipboard?.writeText) {
+    void navigator.clipboard.writeText(text).catch(() => {})
+  }
+}
 
 /** 助手消息的展示文本：携带模型时显示摘要，否则显示回复（跳过纯 JSON） */
 function assistantDisplay(m: ChatMessageItem): string {
@@ -39,11 +50,15 @@ export function HomePage() {
   const clearConversation = useChatStore((s) => s.clearConversation)
   const setIsGenerating = useChatStore((s) => s.setIsGenerating)
   const hasApiKey = useSettingsStore((s) => s.activeKeyId != null)
+  const debugMode = useSettingsStore((s) => s.debugMode)
+  const debugEntries = useDebugEntries()
 
   const [draft, setDraft] = useState('')
   const [elapsed, setElapsed] = useState(0)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [debugOpen, setDebugOpen] = useState(true)
   const logRef = useRef<HTMLDivElement>(null)
+  const debugRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<SceneViewerHandle>(null)
 
   const selected = useMemo(() => {
@@ -77,6 +92,12 @@ export function HomePage() {
     const timer = window.setInterval(() => setElapsed((s) => s + 1), 1000)
     return () => window.clearInterval(timer)
   }, [isGenerating])
+
+  // 调试日志自动滚动到底部
+  useEffect(() => {
+    const el = debugRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [debugEntries])
 
   // 键盘平移视角：方向键 + WASD（不干扰输入框/文本框）
   useEffect(() => {
@@ -247,6 +268,50 @@ export function HomePage() {
           <SceneViewer ref={viewportRef} />
         </section>
       </div>
+
+      {debugMode && (
+        <section className="debug-panel">
+          <div className="debug-panel__header">
+            <button className="debug-panel__toggle" onClick={() => setDebugOpen((o) => !o)}>
+              {debugOpen ? '▾' : '▸'} 调试日志
+            </button>
+            <span className="debug-panel__count">{debugEntries.length} 条</span>
+            <div className="debug-panel__actions">
+              <Button
+                variant="ghost"
+                onClick={() => copyDebug(debugEntries)}
+                disabled={debugEntries.length === 0}
+              >
+                复制
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={clearDebug}
+                disabled={debugEntries.length === 0}
+              >
+                清空
+              </Button>
+            </div>
+          </div>
+          {debugOpen && (
+            <div className="debug-panel__body" ref={debugRef}>
+              {debugEntries.length === 0 ? (
+                <p className="debug-panel__empty">
+                  暂无日志（调试模式已开启，生成模型或检测连通性时会记录）
+                </p>
+              ) : (
+                debugEntries.map((e) => (
+                  <div key={e.id} className={`debug-entry debug-entry--${e.level}`}>
+                    <span className="debug-entry__time">{e.time}</span>
+                    <span className="debug-entry__msg">{e.message}</span>
+                    {e.detail && <pre className="debug-entry__detail">{e.detail}</pre>}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       <footer className="home__statusbar">
         {crumbs.length > 0 && (

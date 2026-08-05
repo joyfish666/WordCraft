@@ -12,6 +12,7 @@ describe('useSettingsStore', () => {
       thinking: 'disabled',
       colorMode: 'standard',
       wireframe: { enabled: false, lineWidth: 1 },
+      debugMode: false,
     })
   })
 
