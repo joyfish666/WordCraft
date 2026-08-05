@@ -43,12 +43,16 @@ interface WallSegmentBoxProps {
   material: ShellMaterial
 }
 
-/** 渲染沿局部 X 轴的一段墙；kind='door' 时在中部留出与墙等高的门洞 */
+/**
+ * 渲染沿局部 X 轴的一段墙。
+ * - 'wall'：实体墙
+ * - 'door'：门洞（左右墙段 + 入户门扇/门头标识；室内门保持空门洞）
+ */
 function WallSegmentBox({ from, to, height, thickness, kind, entrance, material }: WallSegmentBoxProps) {
   if (kind === 'open') return null
   const len = to - from
   const center = (from + to) / 2
-  if (kind === 'wall' || len <= DOOR_WIDTH) {
+  if (kind === 'wall') {
     return (
       <mesh position={[center, height / 2, 0]}>
         <boxGeometry args={[len, height, thickness]} />
@@ -56,27 +60,33 @@ function WallSegmentBox({ from, to, height, thickness, kind, entrance, material 
       </mesh>
     )
   }
-  // 门洞：左右墙段（与墙同高，无门楣）
-  const sideLen = (len - DOOR_WIDTH) / 2
+  // door 段：必定渲染为门洞（门段宽度即 DOOR_WIDTH，不再落入实心墙分支）
+  const doorW = Math.min(DOOR_WIDTH, len)
+  const sideLen = (len - doorW) / 2
+  const leafH = Math.min(height, 2.1)
   return (
     <>
-      <mesh position={[from + sideLen / 2, height / 2, 0]}>
-        <boxGeometry args={[sideLen, height, thickness]} />
-        <meshStandardMaterial {...material} />
-      </mesh>
-      <mesh position={[to - sideLen / 2, height / 2, 0]}>
-        <boxGeometry args={[sideLen, height, thickness]} />
-        <meshStandardMaterial {...material} />
-      </mesh>
-      {/* 入户门：实心暖色门扇 + 门洞上方亮黄标识牌，与室内门洞明确区分 */}
+      {sideLen > 0 && (
+        <>
+          <mesh position={[from + sideLen / 2, height / 2, 0]}>
+            <boxGeometry args={[sideLen, height, thickness]} />
+            <meshStandardMaterial {...material} />
+          </mesh>
+          <mesh position={[to - sideLen / 2, height / 2, 0]}>
+            <boxGeometry args={[sideLen, height, thickness]} />
+            <meshStandardMaterial {...material} />
+          </mesh>
+        </>
+      )}
+      {/* 入户门：实心暖色门扇 + 门头亮黄标识（在墙内，不悬浮） */}
       {entrance && (
         <>
-          <mesh position={[center, Math.min(height, 2.1) / 2, 0]}>
-            <boxGeometry args={[Math.min(DOOR_WIDTH, len), Math.min(height, 2.1), 0.12]} />
+          <mesh position={[center, leafH / 2, 0]}>
+            <boxGeometry args={[doorW, leafH, 0.12]} />
             <meshStandardMaterial color={ENTRANCE_DOOR_COLOR} />
           </mesh>
-          <mesh position={[center, height + 0.3, 0]}>
-            <boxGeometry args={[Math.min(DOOR_WIDTH, len) + 0.4, 0.22, 0.3]} />
+          <mesh position={[center, leafH + 0.18, 0]}>
+            <boxGeometry args={[doorW + 0.3, 0.16, 0.22]} />
             <meshStandardMaterial color={ENTRANCE_MARKER_COLOR} />
           </mesh>
         </>
