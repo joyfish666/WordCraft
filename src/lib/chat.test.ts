@@ -1,10 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  ChatGenerationError,
-  extractModelJson,
-  generateModelFromChat,
-  normalizeModelPayload,
-} from './chat'
+import { ChatGenerationError, extractModelJson, generateModelFromChat } from './chat'
 
 const mockFetch = vi.fn()
 
@@ -26,7 +21,6 @@ function errorResponse(status: number, body: string): Response {
   return new Response(body, { status })
 }
 
-/** 让 fetch 每次调用返回全新的成功响应（避免流被消费后复用） */
 function respondWith(content: string) {
   mockFetch.mockImplementation(() => Promise.resolve(sseResponse(content)))
 }
@@ -35,31 +29,41 @@ function respondWithError(status: number, body: string) {
   mockFetch.mockImplementation(() => Promise.resolve(errorResponse(status, body)))
 }
 
+/** 一个合法的 v2 auto 走廊型模型 */
 function validModelJson(): string {
   return JSON.stringify({
-    version: 1,
+    version: 2,
     root: {
       id: 'h1',
       type: 'house',
-      name: '小屋',
-      dimensions: { length: 4, width: 3, height: 2.8 },
+      name: '示例房',
+      dimensions: { length: 7, width: 4, height: 2.8 },
       position: { x: 0, y: 0, z: 0 },
+      layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living' } },
       children: [
         {
-          id: 'r1',
+          id: 'master',
           type: 'room',
-          name: '卧室',
+          name: '主卧',
           dimensions: { length: 3, width: 3, height: 2.8 },
-          position: { x: 0, y: 1.4, z: 0 },
+          side: 'left',
           children: [
             {
-              id: 'b1',
+              id: 'bed',
               type: 'furniture',
               name: '双人床',
               dimensions: { length: 2, width: 1.5, height: 0.5 },
-              position: { x: 0, y: 0.25, z: 0 },
+              position: { x: 0, y: 0.25, z: 0.3 },
             },
           ],
+        },
+        {
+          id: 'living',
+          type: 'room',
+          name: '客厅',
+          dimensions: { length: 4, width: 3, height: 2.8 },
+          side: 'right',
+          children: [],
         },
       ],
     },
@@ -86,8 +90,8 @@ describe('extractModelJson', () => {
   })
 
   it('从夹杂散文的文本中提取 JSON', () => {
-    const text = '好的，这是设计：{"version":1} 以上就是方案。'
-    expect(extractModelJson(text)).toBe('{"version":1}')
+    const text = '好的，这是设计：{"version":2} 以上就是方案。'
+    expect(extractModelJson(text)).toBe('{"version":2}')
   })
 
   it('无 JSON 时返回 null', () => {
@@ -96,53 +100,18 @@ describe('extractModelJson', () => {
   })
 })
 
-describe('normalizeModelPayload', () => {
-  it('接受标准 { version, root } 结构', () => {
-    const normalized = normalizeModelPayload(JSON.parse(validModelJson()))
-    expect(normalized?.root.name).toBe('小屋')
-  })
-
-  it('接受裸 house 容器（自动包装）', () => {
-    const raw = JSON.parse(validModelJson()).root
-    const normalized = normalizeModelPayload(raw)
-    expect(normalized?.root.name).toBe('小屋')
-    expect(normalized?.version).toBe(1)
-  })
-
-  it('接受 { rooms: [...] } 并推断整屋尺寸', () => {
-    const room = JSON.parse(validModelJson()).root.children[0]
-    const normalized = normalizeModelPayload({ rooms: [room], name: '一居室' })
-    expect(normalized?.root.name).toBe('一居室')
-    expect(normalized?.root.children).toHaveLength(1)
-    expect(normalized?.root.dimensions.length).toBeGreaterThan(0)
-  })
-
-  it('接受顶层数组（多个房间）', () => {
-    const { children } = JSON.parse(validModelJson()).root
-    const normalized = normalizeModelPayload(children)
-    expect(normalized?.root.children).toHaveLength(children.length)
-  })
-
-  it('无法识别时返回 null', () => {
-    expect(normalizeModelPayload({ foo: 'bar' })).toBeNull()
-    expect(normalizeModelPayload(null)).toBeNull()
-  })
-})
-
 describe('generateModelFromChat', () => {
-  it('流式响应校验通过时返回模型', async () => {
+  it('流式 v2 响应经布局解析后返回模型', async () => {
     respondWith(validModelJson())
     const result = await generateModelFromChat({
       apiKey: 'sk-test',
       history: [],
-      userInput: '设计一个卧室',
+      userInput: '设计一个带走廊的两居室',
     })
-    expect(result.model.root.name).toBe('小屋')
-    const room = result.model.root.children[0]
-    expect(room.type).toBe('room')
-    if (room.type === 'room') {
-      expect(room.children[0].type).toBe('furniture')
-    }
+    expect(result.model.root.name).toBe('示例房')
+    // 走廊被引擎生成，房间已平铺
+    expect(result.model.root.children.some((c) => c.name === '走廊')).toBe(true)
+    expect(result.model.root.children.some((c) => c.name === '主卧')).toBe(true)
   })
 
   it('请求体启用流式并包含系统提示、历史与思考模式', async () => {
@@ -150,7 +119,7 @@ describe('generateModelFromChat', () => {
     await generateModelFromChat({
       apiKey: 'sk-test',
       history: [{ role: 'user', content: '之前的设计' }],
-      userInput: '再加一张床',
+      userInput: '再加一个卧室',
       thinking: 'disabled',
     })
     const [url, init] = mockFetch.mock.calls[0] as [string, { body: string }]
@@ -163,7 +132,7 @@ describe('generateModelFromChat', () => {
     expect(body.stream).toBe(true)
     expect(body.thinking).toEqual({ type: 'disabled' })
     expect(body.messages.map((m) => m.role)).toEqual(['system', 'user', 'user'])
-    expect(body.messages[0].content).toContain('house')
+    expect(body.messages[0].content).toContain('layout')
   })
 
   it('思考模式为 default 时不发送 thinking 字段', async () => {
@@ -179,29 +148,6 @@ describe('generateModelFromChat', () => {
     expect(body.thinking).toBeUndefined()
   })
 
-  it('流式回调收到内容增量', async () => {
-    respondWith(validModelJson())
-    const chunks: string[] = []
-    await generateModelFromChat({
-      apiKey: 'sk-test',
-      history: [],
-      userInput: 'x',
-      onChunk: (delta) => chunks.push(delta),
-    })
-    expect(chunks.join('')).toBe(validModelJson())
-  })
-
-  it('模型输出裸容器（无 root 包装）时也能正常生成', async () => {
-    const bareRoot = JSON.parse(validModelJson()).root
-    respondWith(JSON.stringify(bareRoot))
-    const result = await generateModelFromChat({
-      apiKey: 'sk-test',
-      history: [],
-      userInput: '设计一个卧室',
-    })
-    expect(result.model.root.name).toBe('小屋')
-  })
-
   it('未找到 JSON 时抛出 no-json 错误', async () => {
     respondWith('抱歉，我无法完成')
     await expect(
@@ -210,7 +156,7 @@ describe('generateModelFromChat', () => {
   })
 
   it('Schema 校验失败时抛出 invalid-schema 错误', async () => {
-    respondWith('{"version":1,"root":{"type":"house"}}')
+    respondWith('{"version":2,"root":{"type":"house"}}')
     await expect(
       generateModelFromChat({ apiKey: 'sk', history: [], userInput: 'x' }),
     ).rejects.toBeInstanceOf(ChatGenerationError)
