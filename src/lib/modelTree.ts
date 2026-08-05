@@ -85,7 +85,23 @@ function containChildren(container: ContainerNode): ContainerNode {
   const maxZ = container.position.z + container.dimensions.width / 2 - WALL_THICKNESS
 
   const children = container.children.map((child) => {
-    if (isContainer(child)) return containChildren(child)
+    if (isContainer(child)) {
+      // 嵌套房间（如卧室内卫生间，父节点是房间）：整体约束进父房间内部，再递归约束其家具。
+      // 顶层房间（父节点是整屋）由布局引擎放置，不约束位置。
+      if (container.type === 'room') {
+        const hx = child.dimensions.length / 2
+        const hz = child.dimensions.width / 2
+        return containChildren({
+          ...child,
+          position: {
+            x: clampTo(child.position.x, minX + hx, maxX - hx),
+            y: child.position.y,
+            z: clampTo(child.position.z, minZ + hz, maxZ - hz),
+          },
+        })
+      }
+      return containChildren(child)
+    }
     const hx = child.dimensions.length / 2
     const hz = child.dimensions.width / 2
     return {

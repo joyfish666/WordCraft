@@ -100,15 +100,18 @@ interface RoomShellProps {
   material: ShellMaterial
   isSelected: boolean
   plan: WallPlan
+  /** 是否为嵌套在父房间内部的子房间（如卧室内卫生间）：地板略微抬高避免与父地板重叠 */
+  nested?: boolean
 }
 
 /** 房间外壳：实体地板 + 分段实心墙（共享/开放/门洞按段处理），外墙始终保留 */
-function RoomShell({ room, material, isSelected, plan }: RoomShellProps) {
+function RoomShell({ room, material, isSelected, plan, nested = false }: RoomShellProps) {
   const { length: L, width: W, height: H } = room.dimensions
   const cx = room.position.x
   const cz = room.position.z
   const baseY = room.position.y - H / 2
   const wallBaseY = baseY + FLOOR_THICKNESS
+  const floorLift = nested ? 0.012 : 0
 
   // 地板：非共享边外扩一个墙厚；共享边到边界（邻居地板接续）
   const xmin = plan.west.shared ? cx - L / 2 : cx - L / 2 - WALL_THICKNESS
@@ -139,8 +142,8 @@ function RoomShell({ room, material, isSelected, plan }: RoomShellProps) {
 
   return (
     <>
-      {/* 实体地板 */}
-      <mesh position={[(xmin + xmax) / 2, baseY + FLOOR_THICKNESS / 2, (zmin + zmax) / 2]}>
+      {/* 实体地板（嵌套子房间的地板略微抬高，避免与父地板重叠闪烁） */}
+      <mesh position={[(xmin + xmax) / 2, baseY + FLOOR_THICKNESS / 2 + floorLift, (zmin + zmax) / 2]}>
         <boxGeometry args={[xmax - xmin, FLOOR_THICKNESS, zmax - zmin]} />
         <meshStandardMaterial {...material} />
       </mesh>
@@ -249,9 +252,17 @@ export function ModelNodeView({ node, siblingIndex = 0, ancestors = [], wallPlan
 
     const plan = wallPlan?.get(node.id) ?? defaultWallPlan(node)
 
+    const isNestedRoom = ancestors.length > 1
+
     return (
       <group onClick={handleClick}>
-        <RoomShell room={node} material={material} isSelected={isSelected} plan={plan} />
+        <RoomShell
+          room={node}
+          material={material}
+          isSelected={isSelected}
+          plan={plan}
+          nested={isNestedRoom}
+        />
         {node.children.map((child, i) => (
           <ModelNodeView
             key={child.id}

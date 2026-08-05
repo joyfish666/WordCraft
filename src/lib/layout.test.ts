@@ -241,7 +241,7 @@ describe('resolveLayout - 两卫生间布局', () => {
     expect(b2.west.segments.some((s) => s.kind === 'door')).toBe(false)
   })
 
-  it('嵌套在卧室内的卫生间被拍平为顶层房间并与卧室开门', () => {
+  it('嵌套在卧室内的卫生间保留在卧室内部', () => {
     const v2: SceneModelV2 = {
       version: 2,
       root: {
@@ -266,6 +266,7 @@ describe('resolveLayout - 两卫生间布局', () => {
                 type: 'room',
                 name: '主卧卫生间',
                 dimensions: { length: 2, width: 1.8, height: 2.8 },
+                position: { x: 1.2, y: 1.4, z: 1.2 },
                 children: [
                   { id: 'toilet', type: 'furniture', name: '马桶', dimensions: { length: 0.6, width: 0.4, height: 0.7 }, position: { x: 0, y: 0.35, z: 0 } },
                 ],
@@ -276,23 +277,24 @@ describe('resolveLayout - 两卫生间布局', () => {
       },
     }
     const model = resolveLayout(v2)
-    // 卫生间成为顶层房间，且继承主卧的右侧朝向
-    const bath = findNodeById(model.root, 'bathroom1')
-    expect(bath).not.toBeNull()
-    expect(bath!.type).toBe('room')
-    expect(model.root.children.some((c) => c.name === '主卧卫生间')).toBe(true)
+    const bedroom = findNodeById(model.root, 'bedroom1')
+    expect(bedroom).not.toBeNull()
+    // 卫生间是主卧的子节点（在卧室内部），不是顶层房间
+    if (bedroom && isContainer(bedroom)) {
+      expect(bedroom.children.some((c) => c.id === 'bathroom1')).toBe(true)
+    }
+    expect(model.root.children.some((c) => c.name === '主卧卫生间')).toBe(false)
     // 主卧的家具仍在主卧内
     expect(findNodeById(model.root, 'bed')).not.toBeNull()
-    // 卫生间与主卧之间开门
-    const rooms: ContainerNode[] = []
-    walk(model.root, (n) => {
-      if (n.type === 'room') rooms.push(n as ContainerNode)
-    })
-    const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'living_room' })
-    const hasDoorBetween =
-      plan.get('bathroom1')!.west.segments.some((s) => s.kind === 'door') ||
-      plan.get('bedroom1')!.east.segments.some((s) => s.kind === 'door')
-    expect(hasDoorBetween).toBe(true)
+    // 卫生间位于卧室内部
+    const bath = findNodeById(model.root, 'bathroom1')
+    expect(bath).not.toBeNull()
+    if (bedroom && bath && isContainer(bedroom) && isContainer(bath)) {
+      expect(bath.position.x).toBeGreaterThanOrEqual(bedroom.position.x - bedroom.dimensions.length / 2)
+      expect(bath.position.x).toBeLessThanOrEqual(bedroom.position.x + bedroom.dimensions.length / 2)
+      expect(bath.position.z).toBeGreaterThanOrEqual(bedroom.position.z - bedroom.dimensions.width / 2)
+      expect(bath.position.z).toBeLessThanOrEqual(bedroom.position.z + bedroom.dimensions.width / 2)
+    }
   })
 
   it('走廊卫生间只与走廊开门，不连厨房', () => {

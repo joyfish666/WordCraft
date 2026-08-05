@@ -6,6 +6,7 @@ import type {
   FurnitureNode,
   FurnitureNodeV2,
   HouseNodeV2,
+  ModelNode,
   Position,
   RoomNodeV2,
   SceneModel,
@@ -55,35 +56,26 @@ function resolveHouse(house: HouseNodeV2): ContainerNode {
 }
 
 /**
- * 将房间（含嵌套子房间，如卧室内的卫生间）拍平为顶层房间列表：
- * 嵌套房间继承父房间的 side，并紧随父房间之后，保持归属相邻。
+ * 由 RoomNodeV2 构建 ContainerNode：房间居地面，家具相对房间中心偏移为绝对坐标；
+ * 嵌套子房间（如卧室内卫生间）保留在父房间内部，按相对父中心的位置放置。
  */
-function flattenRooms(rooms: RoomNodeV2[]): RoomNodeV2[] {
-  const out: RoomNodeV2[] = []
-  const walk = (room: RoomNodeV2, inheritedSide?: string) => {
-    const furniture = room.children.filter((c) => c.type !== 'room') as FurnitureNodeV2[]
-    const nested = room.children.filter((c) => c.type === 'room') as RoomNodeV2[]
-    out.push({ ...room, children: furniture, side: room.side ?? inheritedSide })
-    for (const n of nested) walk(n, room.side ?? inheritedSide)
-  }
-  for (const r of rooms) walk(r)
-  return out
-}
-
-/** 由 RoomNodeV2 构建 ContainerNode：房间居地面，家具相对房间中心偏移为绝对坐标 */
 function makeRoom(r: RoomNodeV2, cx: number, cz: number): ContainerNode {
   const H = r.dimensions.height
-  // flattenRooms 已把嵌套子房间拍平为顶层，此处 children 只含家具
   const furniture = r.children.filter((c) => c.type !== 'room') as FurnitureNodeV2[]
-  const children: FurnitureNode[] = furniture.map((f) => ({
-    id: f.id,
-    type: f.type,
-    name: f.name,
-    dimensions: f.dimensions,
-    position: { x: cx + f.position.x, y: f.position.y, z: cz + f.position.z },
-    rotationY: f.rotationY,
-    description: f.description,
-  }))
+  const nested = r.children.filter((c) => c.type === 'room') as RoomNodeV2[]
+  const children: ModelNode[] = [
+    ...furniture.map((f): FurnitureNode => ({
+      id: f.id,
+      type: f.type,
+      name: f.name,
+      dimensions: f.dimensions,
+      position: { x: cx + f.position.x, y: f.position.y, z: cz + f.position.z },
+      rotationY: f.rotationY,
+      description: f.description,
+    })),
+    // 嵌套子房间：位于父房间内部，相对父中心偏移（位置由 normalizeContainment 约束进父房间）
+    ...nested.map((n) => makeRoom(n, cx + (n.position?.x ?? 0), cz + (n.position?.z ?? 0))),
+  ]
   return {
     id: r.id,
     type: 'room',
@@ -160,7 +152,7 @@ function shiftPosition<T extends { position: Position }>(node: T, dx: number, dz
 // ---------------------------------------------------------------------------
 
 function resolveCorridor(house: HouseNodeV2): ContainerNode {
-  const rooms = flattenRooms(house.children).filter((r) => !isCorridorName(r.name))
+  const rooms = house.children.filter((r) => !isCorridorName(r.name))
   const layout = house.layout
   const corridorWidth = layout.mode === 'auto' && layout.template === 'corridor'
     ? (layout.corridor?.width ?? DEFAULT_CORRIDOR_WIDTH)
@@ -220,7 +212,7 @@ function resolveCorridor(house: HouseNodeV2): ContainerNode {
 // ---------------------------------------------------------------------------
 
 function resolveLiving(house: HouseNodeV2): ContainerNode {
-  const rooms = flattenRooms(house.children).filter((r) => !isCorridorName(r.name))
+  const rooms = house.children.filter((r) => !isCorridorName(r.name))
   const layout = house.layout
   const centerId = layout.mode === 'auto' && layout.template === 'living' ? layout.centerRoomId : ''
   const centerRoom = rooms.find((r) => r.id === centerId) ?? rooms[0]
@@ -286,8 +278,6 @@ function placeRow(
 // ---------------------------------------------------------------------------
 
 function resolveCustom(house: HouseNodeV2): ContainerNode {
-  const children = flattenRooms(house.children).map((r) =>
-    makeRoom(r, r.position?.x ?? 0, r.position?.z ?? 0),
-  )
+  const children = house.children.map((r) => makeRoom(r, r.position?.x ?? 0, r.position?.z ?? 0))
   return finalizeHouse(house, children)
 }

@@ -1,5 +1,4 @@
 import { useMemo } from 'react'
-import { walk } from '../../lib/modelTree'
 import { computeWallPlan, type WallPlan } from '../../lib/roomGeometry'
 import { useModelStore } from '../../store/useModelStore'
 import type { ContainerNode, SceneModel } from '../../types/model'
@@ -12,13 +11,14 @@ const ENTRANCE_DIRECTION = 'south' as const
 export function Viewport3D() {
   const scene = useModelStore((s) => s.scene)
 
-  // 计算各房间墙体方案：共享墙去重、开放空间不设墙、南外墙入户门
+  // 计算顶层房间墙体方案：共享墙去重、开放空间不设墙、南外墙入户门
+  // （嵌套子房间如卧室内卫生间不在其中，渲染时使用 defaultWallPlan）
   const wallPlan = useMemo(() => {
     if (!scene) return new Map<string, WallPlan>()
     const rooms: ContainerNode[] = []
-    walk(scene.root, (n) => {
-      if (n.type === 'room') rooms.push(n as ContainerNode)
-    })
+    for (const child of scene.root.children) {
+      if (child.type === 'room') rooms.push(child as ContainerNode)
+    }
     const house = scene.root as SceneModel['root']
     return computeWallPlan(rooms, {
       entrance: ENTRANCE_DIRECTION,
