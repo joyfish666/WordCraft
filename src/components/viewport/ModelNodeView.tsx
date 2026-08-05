@@ -13,6 +13,7 @@ import {
   defaultWallPlan,
   isCorridorName,
   type WallPlan,
+  type WallSegmentKind,
 } from '../../lib/roomGeometry'
 import { useModelStore } from '../../store/useModelStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
@@ -29,38 +30,37 @@ interface ShellMaterial {
   wireframe: boolean
 }
 
-interface WallSegmentsProps {
-  length: number
+interface WallSegmentBoxProps {
+  from: number
+  to: number
   height: number
   thickness: number
-  hasDoor: boolean
+  kind: WallSegmentKind
   material: ShellMaterial
 }
 
-/**
- * 沿局部 X 轴的一段墙。hasDoor 时在中部开出与墙等高的门洞
- * （左右墙段，缺口为空心，无门楣——门与墙同等高度）。
- */
-function WallSegments({ length, height, thickness, hasDoor, material }: WallSegmentsProps) {
-  if (!hasDoor) {
+/** 渲染沿局部 X 轴的一段墙；kind='door' 时在中部留出与墙等高的门洞 */
+function WallSegmentBox({ from, to, height, thickness, kind, material }: WallSegmentBoxProps) {
+  if (kind === 'open') return null
+  const len = to - from
+  const center = (from + to) / 2
+  if (kind === 'wall' || len <= DOOR_WIDTH) {
     return (
-      // 整墙：box 中心上移 height/2，使墙底位于组原点（地板顶面），而不是一半埋入地板
-      <mesh position={[0, height / 2, 0]}>
-        <boxGeometry args={[length, height, thickness]} />
+      <mesh position={[center, height / 2, 0]}>
+        <boxGeometry args={[len, height, thickness]} />
         <meshStandardMaterial {...material} />
       </mesh>
     )
   }
-  const sideLen = length / 2 - DOOR_WIDTH / 2
-  if (sideLen <= 0) return null // 墙比门还窄，整体留空
-  const sideCenter = (length / 2 + DOOR_WIDTH / 2) / 2
+  // 门洞：左右墙段（与墙同高，无门楣）
+  const sideLen = (len - DOOR_WIDTH) / 2
   return (
     <>
-      <mesh position={[-sideCenter, height / 2, 0]}>
+      <mesh position={[from + sideLen / 2, height / 2, 0]}>
         <boxGeometry args={[sideLen, height, thickness]} />
         <meshStandardMaterial {...material} />
       </mesh>
-      <mesh position={[sideCenter, height / 2, 0]}>
+      <mesh position={[to - sideLen / 2, height / 2, 0]}>
         <boxGeometry args={[sideLen, height, thickness]} />
         <meshStandardMaterial {...material} />
       </mesh>
@@ -75,55 +75,55 @@ interface RoomShellProps {
   plan: WallPlan
 }
 
-/** 房间外壳：实体地板（墙脚在其上）+ 四面实心墙（共享墙去重），门洞与墙同高 */
+/** 房间外壳：实体地板 + 分段实心墙（共享/开放/门洞按段处理），外墙始终保留 */
 function RoomShell({ room, material, isSelected, plan }: RoomShellProps) {
   const { length: L, width: W, height: H } = room.dimensions
   const cx = room.position.x
   const cz = room.position.z
   const baseY = room.position.y - H / 2
-  // 墙体从地板顶面升起
   const wallBaseY = baseY + FLOOR_THICKNESS
 
-  // 地板：非共享边外扩一个墙厚（墙体底部落在其上）；共享边到边界即可（邻居地板接续）
+  // 地板：非共享边外扩一个墙厚；共享边到边界（邻居地板接续）
   const xmin = plan.west.shared ? cx - L / 2 : cx - L / 2 - WALL_THICKNESS
   const xmax = plan.east.shared ? cx + L / 2 : cx + L / 2 + WALL_THICKNESS
   const zmin = plan.south.shared ? cz - W / 2 : cz - W / 2 - WALL_THICKNESS
   const zmax = plan.north.shared ? cz + W / 2 : cz + W / 2 + WALL_THICKNESS
 
   const wall = (
-    key: string,
+    dir: keyof WallPlan,
     position: [number, number, number],
     rotation: [number, number, number],
-    length: number,
-    hasDoor: boolean,
   ) => (
-    <group key={key} position={position} rotation={rotation}>
-      <WallSegments
-        length={length}
-        height={H}
-        thickness={WALL_THICKNESS}
-        hasDoor={hasDoor}
-        material={material}
-      />
+    <group position={position} rotation={rotation}>
+      {plan[dir].segments.map((seg, i) => (
+        <WallSegmentBox
+          key={i}
+          from={seg.from}
+          to={seg.to}
+          height={H}
+          thickness={WALL_THICKNESS}
+          kind={seg.kind}
+          material={material}
+        />
+      ))}
     </group>
   )
 
   return (
     <>
-      {/* 实体地板：可见的底板，墙体从其上竖起 */}
+      {/* 实体地板 */}
       <mesh position={[(xmin + xmax) / 2, baseY + FLOOR_THICKNESS / 2, (zmin + zmax) / 2]}>
         <boxGeometry args={[xmax - xmin, FLOOR_THICKNESS, zmax - zmin]} />
         <meshStandardMaterial {...material} />
       </mesh>
 
-      {/* 南北墙（沿 X），底部在地板顶面 */}
-      {plan.north.render && wall('north', [cx, wallBaseY, cz + W / 2], [0, 0, 0], L, plan.north.hasDoor)}
-      {plan.south.render && wall('south', [cx, wallBaseY, cz - W / 2], [0, 0, 0], L, plan.south.hasDoor)}
-      {/* 东西墙（绕 Y 旋转 90°，沿 Z） */}
-      {plan.east.render && wall('east', [cx + L / 2, wallBaseY, cz], [0, Math.PI / 2, 0], W, plan.east.hasDoor)}
-      {plan.west.render && wall('west', [cx - L / 2, wallBaseY, cz], [0, Math.PI / 2, 0], W, plan.west.hasDoor)}
+      {/* 四面墙：按分段渲染（开放段留空、共享段按持有方渲染） */}
+      {wall('north', [cx, wallBaseY, cz + W / 2], [0, 0, 0])}
+      {wall('south', [cx, wallBaseY, cz - W / 2], [0, 0, 0])}
+      {wall('east', [cx + L / 2, wallBaseY, cz], [0, Math.PI / 2, 0])}
+      {wall('west', [cx - L / 2, wallBaseY, cz], [0, Math.PI / 2, 0])}
 
-      {/* 选中轮廓（含地板厚度） */}
+      {/* 选中轮廓 */}
       {isSelected && (
         <mesh position={[cx, baseY + (FLOOR_THICKNESS + H) / 2, cz]}>
           <boxGeometry args={[L, FLOOR_THICKNESS + H, W]} />
@@ -140,13 +140,13 @@ interface ModelNodeViewProps {
   siblingIndex?: number
   /** 祖先节点 id，用于判断是否位于聚焦房间内 */
   ancestors?: string[]
-  /** 各房间的墙体方案（共享墙去重与门洞位置） */
+  /** 各房间的分段墙体方案 */
   wallPlan?: Map<string, WallPlan>
 }
 
 /**
  * 递归渲染层级模型。
- * - 整屋视图：房间为实心墙体+地板（门与墙同高），共享墙去重并按房间标色，家具被墙体遮挡
+ * - 整屋视图：房间为实心墙体+地板（分段），门与墙同高，开放空间连通，外墙完整
  * - 聚焦视图（focusId 指向某房间）：该房间外壳透明化以便查看内部实体家具，
  *   其他房间外壳虚化；家具仍遵循 实体/虚化 两态
  */
