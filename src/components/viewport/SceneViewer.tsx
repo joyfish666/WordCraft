@@ -57,8 +57,8 @@ export const SceneViewer = forwardRef<SceneViewerHandle, object>(function SceneV
   return (
     <Canvas
       className="scene-canvas"
-      // 初始视角：房屋正南侧 45° 斜向下，直接看到南侧入户门
-      camera={{ position: [0, 7, -7], fov: 50 }}
+      // 初始视角：房屋正南侧斜向下，完整看到南立面（含入户门）
+      camera={{ position: [0, 9, -10], fov: 50 }}
       dpr={[1, 2]}
       onPointerMissed={() => {
         useModelStore.getState().selectNode(null)

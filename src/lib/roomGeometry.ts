@@ -1,3 +1,4 @@
+import { logDebug } from './debugLog'
 import type { ContainerNode, Position } from '../types/model'
 
 export type DoorDirection = 'north' | 'south' | 'east' | 'west'
@@ -234,6 +235,7 @@ function addEntranceDoor(
   if (!target) return
   const info = wallInfo(target, entrance)
   addDoorOnFace(plan.get(target.id)![entrance], -info.length / 2, info.length / 2, true)
+  logDebug('入户门生成', { roomId: target.id, roomName: target.name, direction: entrance, roomPos: target.position })
 }
 
 /**

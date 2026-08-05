@@ -16,6 +16,8 @@ export const CORRIDOR_COLORBLIND = '#c2c6cd'
 
 /** 入户门扇颜色（醒目的暖色，与室内门洞区分） */
 export const ENTRANCE_DOOR_COLOR = '#e8644a'
+/** 入户标识牌颜色（门洞上方浮动标记，亮黄色） */
+export const ENTRANCE_MARKER_COLOR = '#ffd93d'
 
 /** 按索引取房间颜色，超出色板长度自动循环 */
 export function roomColor(index: number, colorMode: ColorMode): string {
