@@ -123,6 +123,18 @@ describe('computeWallPlan（分段墙体）', () => {
 })
 
 describe('入户门', () => {
+  it('公共卫生间（归属房间不存在）与走廊开门，不与卧室开门', () => {
+    const corridor = room('corridor', '走廊', 0, 0.5, 6, 1)
+    const bedroom = room('bedroom2', '卧室2', 3.5, -1.0, 3, 3)
+    const pub = room('publicbath', '公共卫生间', 1, -1.0, 2, 2)
+    const plan = computeWallPlan([corridor, bedroom, pub])
+    // 公共卫生间北墙朝走廊：开门
+    expect(plan.get('publicbath')!.north.segments.some((s) => s.kind === 'door')).toBe(true)
+    // 与卧室2之间：不开门（实心墙）
+    expect(plan.get('publicbath')!.east.segments.some((s) => s.kind === 'door')).toBe(false)
+    expect(plan.get('bedroom2')!.west.segments.some((s) => s.kind === 'door')).toBe(false)
+  })
+
   it('入户门开在指定房间的南外墙（居中）并标记为入户', () => {
     const living = room('living', '客厅', 0, -2, 3, 3)
     const master = room('master', '主卧', 0, 2, 3, 3)

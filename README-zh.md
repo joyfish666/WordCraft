@@ -1,5 +1,8 @@
 # 言筑（WordCraft）项目规划文档 v1.5
 
+> **English README**：[README.md](README.md)
+> **技术架构文档**（面向开发者）：[docs/architecture.md](docs/architecture.md)
+
 ## 项目概述
 
 **言筑（WordCraft）** 是一个开源的纯前端Web应用，专注于通过自然语言对话快速生成3D空间结构模型。项目采用极简主义设计理念，强调结构参数与空间规划的准确性，而非复杂的视觉渲染。
