@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ContainerNode } from '../types/model'
-import { computeWallPlan, doorDirection, isCorridorName, isOpenRoom, type WallFace } from './roomGeometry'
+import { DOOR_WIDTH, computeWallPlan, doorDirection, isCorridorName, isOpenRoom, type WallFace } from './roomGeometry'
 
 function room(
   id: string,
@@ -138,5 +138,8 @@ describe('入户门', () => {
     const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'living_room' })
     expect(hasDoor(plan.get('living_room')!.south)).toBe(true)
     expect(plan.get('living_room')!.south.segments.some((s) => s.entrance)).toBe(true)
+    // 门段应为标准门宽（0.9m），确保渲染为真实门洞而非实心墙
+    const doorSeg = plan.get('living_room')!.south.segments.find((s) => s.kind === 'door')!
+    expect(doorSeg.to - doorSeg.from).toBeCloseTo(DOOR_WIDTH)
   })
 })
