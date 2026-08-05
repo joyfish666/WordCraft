@@ -70,6 +70,7 @@ export function HomePage() {
   const isGenerating = useChatStore((s) => s.isGenerating)
   const addMessage = useChatStore((s) => s.addMessage)
   const clearConversation = useChatStore((s) => s.clearConversation)
+  const canUndoGeneration = useChatStore((s) => s.generationStack.length > 0)
   const setIsGenerating = useChatStore((s) => s.setIsGenerating)
   const hasApiKey = useSettingsStore((s) => s.activeKeyId != null)
   const debugMode = useSettingsStore((s) => s.debugMode)
@@ -220,6 +221,9 @@ export function HomePage() {
         userInput: input,
       })
       addMessage({ role: 'assistant', content: reply, model })
+      // 记录生成前的场景，供「撤销生成」回退
+      const prevScene = useModelStore.getState().scene
+      if (prevScene) useChatStore.getState().pushGenerationHistory(prevScene)
       setScene(model)
       // 生成的是全新的未保存场景：解绑项目，重置已保存快照
       useProjectStore.getState().clearProject()
@@ -284,11 +288,19 @@ export function HomePage() {
     setScene(parsed)
     lastSavedJsonRef.current = JSON.stringify(useModelStore.getState().scene)
     useProjectStore.getState().setProject(id, name)
+    useChatStore.getState().clearGenerationHistory()
   }
 
   const handleProjectCreated = (id: number, name: string) => {
     lastSavedJsonRef.current = JSON.stringify(useModelStore.getState().scene)
     useProjectStore.getState().setProject(id, name)
+  }
+
+  /** 撤销最近一次生成：恢复生成前的场景，并移除对话中对应的 user+assistant 对 */
+  const undoGeneration = () => {
+    const prev = useChatStore.getState().undoLastGeneration()
+    if (!prev) return
+    setScene(prev)
   }
 
   return (
@@ -300,6 +312,7 @@ export function HomePage() {
             onClick={() => {
               if (!confirmDiscardUnsaved(true)) return
               useProjectStore.getState().clearProject()
+              useChatStore.getState().clearGenerationHistory()
               lastSavedJsonRef.current = null
               setScene(createSampleModel())
             }}
@@ -311,6 +324,7 @@ export function HomePage() {
             onClick={() => {
               if (!confirmDiscardUnsaved(false)) return
               useProjectStore.getState().clearProject()
+              useChatStore.getState().clearGenerationHistory()
               lastSavedJsonRef.current = null
               resetScene()
             }}
@@ -367,6 +381,14 @@ export function HomePage() {
         <section className="panel home__chat">
           <div className="home__chat-header">
             <h2 className="panel__title">对话生成</h2>
+            <Button
+              variant="ghost"
+              onClick={undoGeneration}
+              disabled={!canUndoGeneration}
+              title="撤销最近一次生成，回到生成前的场景（并移除对应对话）"
+            >
+              撤销生成
+            </Button>
             <Button variant="ghost" onClick={clearConversation} disabled={messages.length === 0}>
               清空对话
             </Button>

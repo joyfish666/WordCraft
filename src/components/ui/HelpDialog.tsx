@@ -51,6 +51,9 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
             <strong>保存 / 项目库</strong> — 工具栏「保存」把当前场景存入本地项目库；「项目库」可新建 / 打开 / 重命名 / 删除多个方案
           </li>
           <li>
+            <strong>撤销生成</strong> — 多轮修改不满意时，点对话栏「撤销生成」回到本次生成前的场景并移除对应对话
+          </li>
+          <li>
             <strong>2D 平面图</strong> — 视口左上角「平面图」切换俯视平面图（正北朝上，可平移缩放），再点「3D」返回
           </li>
         </ul>

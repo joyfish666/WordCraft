@@ -228,6 +228,8 @@ Beyond the checked roadmap items above:
 - **Local project library (v1.1.0)**: Dexie (IndexedDB) stores multiple designs; toolbar "保存" writes the scene to the current project, "项目库" dialog supports new / open / rename / delete; unsaved changes are confirmed before switching / loading sample / clearing; the active project survives reload
 - **2D top-down plan view (v1.1.0)**: "3D / 平面图" toggle at the viewport's top-left; orthographic top-down camera (north up, pan + zoom only, auto-framed to the house); per-room "name W×L" labels colored exactly like 3D; overall "length / width" dimension lines outside the house outline; selection / focus syncs with 3D
 - **v1.1.0 release**: on 2026-08-05 adds the project library and 2D plan view; tests grow to 109, all green, lint/build pass
+- **Undo generation (conversation)**: when a multi-turn modification isn't to your liking, the chat header "撤销生成" reverts the scene to before that generation and removes the corresponding messages (session-only snapshot stack, cap 20); failed generations are not recorded
+- **Part selection fix**: the house wireframe box and the room selection outline no longer take part in raycasting — you can select furniture inside a selected room directly, and the focus state is no longer cleared by accident
 
 ## License
 
@@ -242,5 +244,5 @@ MIT — see the [LICENSE](LICENSE) file.
 ---
 
 **Last updated**: 2026-08-05
-**Doc version**: v1.10
+**Doc version**: v1.11
 **Maintainer**: JoyFish

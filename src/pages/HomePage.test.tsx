@@ -12,8 +12,13 @@ import { HomePage } from './HomePage'
 
 // jsdom 无 WebGL，mock 掉 3D 视口以聚焦对话交互；暴露 planMode 供视图切换断言
 vi.mock('../components/viewport/SceneViewer', () => ({
-  SceneViewer: forwardRef(function MockSceneViewer(props: { planMode?: boolean }) {
-    return <div data-testid="scene-viewer" data-planmode={String(props?.planMode ?? false)} />
+  SceneViewer: forwardRef(function MockSceneViewer(
+    props: { planMode?: boolean },
+    ref: React.Ref<HTMLDivElement>,
+  ) {
+    return (
+      <div ref={ref} data-testid="scene-viewer" data-planmode={String(props?.planMode ?? false)} />
+    )
   }),
 }))
 
@@ -25,7 +30,7 @@ vi.mock('../lib/chat', async (importOriginal) => {
 const mockGenerate = vi.mocked(generateModelFromChat)
 
 function resetStores() {
-  useChatStore.setState({ messages: [], isGenerating: false })
+  useChatStore.setState({ messages: [], isGenerating: false, generationStack: [] })
   useModelStore.setState({ scene: null, selectedId: null })
   useProjectStore.setState({ currentId: null, currentName: null, dirty: false })
   useSettingsStore.setState({
@@ -111,6 +116,27 @@ describe('HomePage 对话交互', () => {
     expect(viewer().getAttribute('data-planmode')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: '3D' }))
     expect(viewer().getAttribute('data-planmode')).toBe('false')
+  })
+
+  it('撤销生成恢复生成前的场景', async () => {
+    useSettingsStore.getState().addApiKey({ name: '测试', key: 'sk-test' })
+    const prev = createSampleModel()
+    const next = createSampleModel()
+    next.root.name = '二次生成'
+    useModelStore.setState({ scene: prev })
+    mockGenerate.mockResolvedValue({ reply: '', model: next })
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    typeAndSend('再改一下')
+    await waitFor(() => expect(useModelStore.getState().scene?.root.name).toBe('二次生成'))
+
+    fireEvent.click(screen.getByRole('button', { name: '撤销生成' }))
+    await waitFor(() => expect(useModelStore.getState().scene?.root.name).toBe('示例小屋'))
+    expect(useChatStore.getState().messages).toHaveLength(0)
   })
 
   it('工具栏「项目库」按钮打开本地项目库对话框', async () => {
