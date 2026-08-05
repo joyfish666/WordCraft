@@ -1049,3 +1049,28 @@ button {
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* ---------- 语言切换 ---------- */
+
+.sidebar__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.lang-toggle {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.lang-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

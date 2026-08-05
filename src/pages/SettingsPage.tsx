@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
+import { useT } from '../i18n'
 import { testConnection, type ConnectionTestResult } from '../lib/api'
 import { clearDebug } from '../lib/debugLog'
 import { useSettingsStore } from '../store/useSettingsStore'
@@ -20,6 +21,7 @@ export function SettingsPage() {
   const colorMode = useSettingsStore((s) => s.colorMode)
   const wireframe = useSettingsStore((s) => s.wireframe)
   const debugMode = useSettingsStore((s) => s.debugMode)
+  const t = useT()
 
   const addApiKey = useSettingsStore((s) => s.addApiKey)
   const removeApiKey = useSettingsStore((s) => s.removeApiKey)
@@ -63,89 +65,85 @@ export function SettingsPage() {
 
   return (
     <div className="settings">
-      <h2 className="page-title">设置</h2>
+      <h2 className="page-title">{t('settings.title')}</h2>
 
       <section className="panel settings__section">
-        <h3 className="panel__title">API Key 配置</h3>
-        <p className="settings__desc">
-          Key 仅保存在浏览器本地，用于调用大模型生成模型。支持 OpenAI / DeepSeek / LocalAI 等兼容接口。
-        </p>
+        <h3 className="panel__title">{t('settings.apiSection')}</h3>
+        <p className="settings__desc">{t('settings.apiDesc')}</p>
 
         <div className="field">
           <label className="field__label" htmlFor="default-base-url">
-            全局默认 Base URL（可选）
+            {t('settings.defaultBaseUrl')}
           </label>
           <Input
             id="default-base-url"
             value={defaultBaseUrl}
             onChange={(e) => setDefaultBaseUrl(e.target.value)}
-            placeholder="如 https://api.deepseek.com/v1，留空使用 https://api.openai.com/v1"
+            placeholder={t('settings.baseUrlPlaceholder')}
           />
         </div>
 
         <div className="field">
           <label className="field__label" htmlFor="default-model">
-            默认模型名
+            {t('settings.defaultModel')}
           </label>
           <Input
             id="default-model"
             value={defaultModel}
             onChange={(e) => setDefaultModel(e.target.value)}
-            placeholder="如 gpt-3.5-turbo / deepseek-chat，由你的服务商决定"
+            placeholder={t('settings.modelPlaceholder')}
           />
         </div>
 
         <div className="field">
-          <span className="field__label">深度思考</span>
+          <span className="field__label">{t('settings.thinking')}</span>
           <div className="segmented">
             <button
               className={`segmented__btn ${thinking === 'disabled' ? 'segmented__btn--active' : ''}`}
               onClick={() => setThinking('disabled')}
             >
-              快速生成（推荐）
+              {t('settings.thinkingFast')}
             </button>
             <button
               className={`segmented__btn ${thinking === 'enabled' ? 'segmented__btn--active' : ''}`}
               onClick={() => setThinking('enabled')}
             >
-              深度思考
+              {t('settings.thinkingDeep')}
             </button>
             <button
               className={`segmented__btn ${thinking === 'default' ? 'segmented__btn--active' : ''}`}
               onClick={() => setThinking('default')}
             >
-              跟随模型
+              {t('settings.thinkingFollow')}
             </button>
           </div>
-          <p className="field__hint">
-            推理型模型（如 DeepSeek v4）默认会先思考再回答，较慢但更聪明；关闭后响应更实时。
-          </p>
+          <p className="field__hint">{t('settings.thinkingHint')}</p>
         </div>
 
         <div className="api-form">
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="名称，如 DeepSeek 主账号"
+            placeholder={t('settings.keyNamePlaceholder')}
           />
           <Input
             type="password"
             value={key}
             onChange={(e) => setKey(e.target.value)}
-            placeholder="API Key"
+            placeholder={t('settings.keyPlaceholder')}
           />
           <Input
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="Base URL（可选，覆盖全局默认）"
+            placeholder={t('settings.keyBaseUrlPlaceholder')}
           />
           <Button onClick={submit} disabled={!name.trim() || !key.trim()}>
-            添加
+            {t('settings.addKey')}
           </Button>
         </div>
 
         {apiKeys.length === 0 ? (
-          <p className="settings__empty">尚未添加 API Key。</p>
+          <p className="settings__empty">{t('settings.noKeys')}</p>
         ) : (
           <ul className="api-list">
             {apiKeys.map((entry) => {
@@ -163,10 +161,10 @@ export function SettingsPage() {
                   <div className="api-item__info">
                     <span className="api-item__name">
                       {entry.name}
-                      {entry.id === activeKeyId && <em className="api-item__tag">当前</em>}
+                      {entry.id === activeKeyId && <em className="api-item__tag">{t('settings.currentTag')}</em>}
                     </span>
                     <span className="api-item__meta">
-                      {maskKey(entry.key)} · {entry.baseUrl || defaultBaseUrl || '默认 Base URL'}
+                      {maskKey(entry.key)} · {entry.baseUrl || defaultBaseUrl || t('settings.defaultBaseUrlFallback')}
                     </span>
                     {result && (
                       <span className={`test-result ${result.ok ? 'test-result--ok' : 'test-result--error'}`}>
@@ -180,10 +178,10 @@ export function SettingsPage() {
                       onClick={() => runTest(entry.id)}
                       disabled={testingId !== null}
                     >
-                      {testingId === entry.id ? '检测中…' : '检测连通性'}
+                      {testingId === entry.id ? t('settings.testing') : t('settings.testConnectivity')}
                     </Button>
                     <Button variant="danger" onClick={() => removeApiKey(entry.id)}>
-                      删除
+                      {t('settings.delete')}
                     </Button>
                   </div>
                 </li>
@@ -194,22 +192,22 @@ export function SettingsPage() {
       </section>
 
       <section className="panel settings__section">
-        <h3 className="panel__title">视觉偏好</h3>
+        <h3 className="panel__title">{t('settings.visualSection')}</h3>
 
         <div className="field">
-          <span className="field__label">颜色模式</span>
+          <span className="field__label">{t('settings.colorMode')}</span>
           <div className="segmented">
             <button
               className={`segmented__btn ${colorMode === 'standard' ? 'segmented__btn--active' : ''}`}
               onClick={pickColorMode('standard')}
             >
-              标准模式
+              {t('settings.colorStandard')}
             </button>
             <button
               className={`segmented__btn ${colorMode === 'colorblind' ? 'segmented__btn--active' : ''}`}
               onClick={pickColorMode('colorblind')}
             >
-              色盲模式
+              {t('settings.colorColorblind')}
             </button>
           </div>
         </div>
@@ -217,10 +215,10 @@ export function SettingsPage() {
         <div className="field">
           <label className="field__label field__label--row">
             <input type="checkbox" checked={wireframe.enabled} onChange={toggleWireframe} />
-            显示线框
+            {t('settings.showWireframe')}
           </label>
           <div className="field__slider">
-            <span className="field__hint">线框粗细</span>
+            <span className="field__hint">{t('settings.wireframeWidth')}</span>
             <input
               type="range"
               min={1}
@@ -235,7 +233,7 @@ export function SettingsPage() {
       </section>
 
       <section className="panel settings__section">
-        <h3 className="panel__title">调试</h3>
+        <h3 className="panel__title">{t('settings.debugSection')}</h3>
         <div className="field">
           <label className="field__label field__label--row">
             <input
@@ -243,13 +241,11 @@ export function SettingsPage() {
               checked={debugMode}
               onChange={(e) => setDebugMode(e.target.checked)}
             />
-            开启调试模式
+            {t('settings.debugMode')}
           </label>
-          <p className="field__hint">
-            开启后，对话生成的全过程（请求参数、模型原始回复、v2 解析、布局平铺结果）会记录到首页的「调试日志」面板，便于排查问题。
-          </p>
+          <p className="field__hint">{t('settings.debugHint')}</p>
           <Button variant="ghost" onClick={clearDebug}>
-            清空日志
+            {t('settings.clearLogs')}
           </Button>
         </div>
       </section>

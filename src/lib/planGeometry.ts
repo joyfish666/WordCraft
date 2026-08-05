@@ -1,3 +1,4 @@
+import { translate, type Lang } from '../i18n/translations'
 import type { ContainerNode, Dimensions, SceneModel } from '../types/model'
 
 /**
@@ -79,19 +80,23 @@ export interface DimLine {
 
 /**
  * 整屋外廓尺寸线：南侧总长 + 东侧总宽，绘制在包围盒外（offset 米）、y 高度处（应高于墙顶）。
+ * 标签随语言（lang 缺省 zh）。
  */
-export function dimensionLines(bounds: Bounds2D, opts: { offset?: number; y: number }): DimLine[] {
-  const { offset = 0.6, y } = opts
+export function dimensionLines(
+  bounds: Bounds2D,
+  opts: { offset?: number; y: number; lang?: Lang },
+): DimLine[] {
+  const { offset = 0.6, y, lang = 'zh' } = opts
   return [
     {
       from: [bounds.minX, y, bounds.minZ - offset],
       to: [bounds.maxX, y, bounds.minZ - offset],
-      label: `总长 ${fmt(bounds.width)}m`,
+      label: translate(lang, 'plan.length', { width: fmt(bounds.width) }),
     },
     {
       from: [bounds.maxX + offset, y, bounds.minZ],
       to: [bounds.maxX + offset, y, bounds.maxZ],
-      label: `总宽 ${fmt(bounds.height)}m`,
+      label: translate(lang, 'plan.width', { height: fmt(bounds.height) }),
     },
   ]
 }

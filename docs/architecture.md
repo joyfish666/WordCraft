@@ -1,6 +1,6 @@
 # 言筑（WordCraft）技术文档
 
-> 版本：v1.11 · 更新：2026-08-05（v1.0.0 已发布；v1.1.0 新增本地项目库与 2D 俯视平面图；后随修复增加对话撤销生成与部件点选修复）
+> 版本：v1.12 · 更新：2026-08-06（v1.0.0 已发布；v1.1.0 本地项目库 + 2D 俯视平面图；v1.2.0 中英双语切换）
 
 本文档面向开发者和贡献者，描述言筑的核心架构、数据契约与实现细节。项目为**纯前端**应用，无需后端。
 
@@ -152,7 +152,7 @@ interface WallFace {
 
 ## 6. 状态管理（store/*）
 
-- **useSettingsStore**（Zustand + persist → localStorage `wordcraft.settings`）：API Keys、Base URL、默认模型、深度思考模式、颜色模式、线框、调试开关。
+- **useSettingsStore**（Zustand + persist → localStorage `wordcraft.settings`）：API Keys、Base URL、默认模型、深度思考模式、颜色模式、线框、调试开关、`language`（`'zh'|'en'`，默认 zh，`setLanguage` 切换）。`version: 3` + migrate：旧数据缺 `language` 时回退 `'zh'`。
 - **useModelStore**（persist → `wordcraft.model`）：当前场景（已解析模型）、选中节点、聚焦房间、初始位置快照、**撤销/重做历史栈（`past`/`future`，仅会话内不持久化）**；`setScene` 应用 `normalizeContainment` 并清空历史。
   - 编辑提交统一走 `updateSelected(patch)`（名称/尺寸/位置部分补丁）：不可变更新 `updateNodeFields` → `normalizeContainment` 约束进墙内 → 旧场景压入 `past` 并清空 `future`。
   - `translateSelected`（位置微调/方向键）与 `resetSelectedPosition`（复位）每次调用也各记一步历史；新编辑会使 redo 失效；历史上限 50 步。
@@ -175,6 +175,16 @@ interface WallFace {
 - **取景**（`PlanRig`）：`camera.up.set(0,0,1)` + `lookAt(整屋中心)` 使正北朝上；`camera.zoom = computePlanCamera().zoom`、`controls.update()`、`controls.saveState()`（复位视角回到取景）。依赖 scene/size 变化自动重新取景。
 - **标注**（`PlanAnnotations`）：drei `Html`（正交相机兼容）绘制房间「名称 长×宽」标签（颜色用共享 `roomFaceColor(name, siblingIndex, colorMode)`，走廊默认色）+ 整屋「总长/总宽」尺寸线（细长 mesh + Html 文案，墙顶之上、包围盒外）。`zIndexRange={[9,0]}` 保证在属性面板（z-10）之下。
 - **平移**：`pan()` 增加正交分支（scale = `1/zoom`；drei ortho frustum = 像素尺寸）；透视分支保持原 fov 公式。
+
+## 6.6 中英双语（i18n，v1.2.0）
+
+- **轻量自研，零依赖**：
+  - `src/i18n/translations.ts` — 纯模块，`zh` 词典为 key 真源（`as const`）、`en: Record<TKey, string>` 保证 key 一致；`translate(lang, key, params)` 纯函数，`{name}`/`{count}` 插值（`split/join`），缺 key 回退 zh → key。
+  - `src/i18n/index.ts` — `useT()`（响应式 hook，订阅 `useSettingsStore.language`，供组件）+ `t(key, params)`（非响应式，内部读 `getState().language`，供 lib 抛错时用）。
+- **状态**：`useSettingsStore.language`，persist version 3 + migrate（旧数据回退 zh）。
+- **切换**：`AppShell` 侧边栏页脚按钮（zh 显示 EN / en 显示 中文）→ `setLanguage`；`App.tsx` 随语言更新 `document.documentElement.lang`、`document.title` 与 meta description。
+- **范围边界**：只覆盖 UI 界面层。**生成数据不翻译**——LLM 系统提示词保持中文，房间/家具名由大模型按提示词产出；`roomGeometry`/`furniturePlacement` 的分类器为中文词表，故英文房间名会破坏走廊/开放/私密房/家具贴墙分类（属已知边界）。示例模型名、已保存项目内容保持原样。
+- **错误本地化**：`chat.ts` 的 `ChatGenerationError` 与 `api.ts` 的错误字符串用 `t()` 在抛出时按当前语言生成（默认 zh 与原文逐字一致，既有测试不受影响）。
 
 ## 7. 生成链路（lib/chat.ts）
 
@@ -226,4 +236,4 @@ src/
 
 ---
 
-**维护者**：JoyFish · 文档版本 v1.11
+**维护者**：JoyFish · 文档版本 v1.12

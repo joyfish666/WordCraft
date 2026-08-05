@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useT, type TKey } from '../../i18n'
 import { useModelStore } from '../../store/useModelStore'
 import type { Dimensions, ModelNode, Position } from '../../types/model'
 import { Button } from '../ui/Button'
@@ -85,11 +86,11 @@ function NameField({ value, onCommit }: NameFieldProps) {
   )
 }
 
-const TYPE_LABEL: Record<ModelNode['type'], string> = {
-  house: '整屋',
-  room: '房间',
-  furniture: '家具',
-  wall: '墙体',
+const TYPE_LABEL: Record<ModelNode['type'], TKey> = {
+  house: 'property.typeHouse',
+  room: 'property.typeRoom',
+  furniture: 'property.typeFurniture',
+  wall: 'property.typeWall',
 }
 
 export interface PropertyPanelProps {
@@ -110,6 +111,7 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
   const stepSize = useModelStore((s) => s.stepSize)
   const setStepSize = useModelStore((s) => s.setStepSize)
   const initialPositions = useModelStore((s) => s.initialPositions)
+  const t = useT()
 
   const canReset = initialPositions[node.id] !== undefined
   const patchDim = (key: keyof Dimensions, v: number) => updateSelected({ dimensions: { [key]: v } })
@@ -119,13 +121,13 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
     <aside className="prop-panel">
       <header className="prop-panel__header">
         <div className="prop-panel__title-wrap">
-          <span className="prop-panel__type">{TYPE_LABEL[node.type]}</span>
+          <span className="prop-panel__type">{t(TYPE_LABEL[node.type])}</span>
           <h3 className="prop-panel__title">{node.name}</h3>
         </div>
         <Button
           variant="ghost"
           className="prop-panel__close"
-          title="关闭属性面板"
+          title={t('property.closeTitle')}
           onClick={() => selectNode(null)}
         >
           ×
@@ -133,21 +135,21 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
       </header>
 
       <div className="prop-field">
-        <span className="prop-field__label">名称</span>
+        <span className="prop-field__label">{t('property.name')}</span>
         <NameField value={node.name} onCommit={(name) => updateSelected({ name })} />
       </div>
 
       <div className="prop-panel__section">
-        <span className="prop-panel__section-title">尺寸（米）</span>
+        <span className="prop-panel__section-title">{t('property.dimSection')}</span>
         <div className="prop-panel__grid">
-          <NumberField label="长" value={node.dimensions.length} min={0.1} onCommit={(v) => patchDim('length', v)} />
-          <NumberField label="宽" value={node.dimensions.width} min={0.1} onCommit={(v) => patchDim('width', v)} />
-          <NumberField label="高" value={node.dimensions.height} min={0.1} onCommit={(v) => patchDim('height', v)} />
+          <NumberField label={t('property.length')} value={node.dimensions.length} min={0.1} onCommit={(v) => patchDim('length', v)} />
+          <NumberField label={t('property.width')} value={node.dimensions.width} min={0.1} onCommit={(v) => patchDim('width', v)} />
+          <NumberField label={t('property.height')} value={node.dimensions.height} min={0.1} onCommit={(v) => patchDim('height', v)} />
         </div>
       </div>
 
       <div className="prop-panel__section">
-        <span className="prop-panel__section-title">位置（米）</span>
+        <span className="prop-panel__section-title">{t('property.posSection')}</span>
         <div className="prop-panel__grid">
           <NumberField label="X" value={node.position.x} onCommit={(v) => patchPos('x', v)} />
           <NumberField label="Y" value={node.position.y} onCommit={(v) => patchPos('y', v)} />
@@ -158,14 +160,14 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
           className="prop-panel__reset"
           onClick={resetSelectedPosition}
           disabled={!canReset}
-          title={canReset ? '回到加载时的初始位置' : '本次会话未记录初始位置'}
+          title={canReset ? t('property.resetTitle') : t('property.resetUnavailable')}
         >
-          复位位置
+          {t('property.reset')}
         </Button>
       </div>
 
       <div className="prop-panel__section">
-        <span className="prop-panel__section-title">位置微调</span>
+        <span className="prop-panel__section-title">{t('property.nudgeSection')}</span>
         <div className="prop-panel__step">
           {STEP_OPTIONS.map((s) => (
             <button
@@ -181,23 +183,23 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
         {/* 方向说明：默认南视角下世界 +x 投影在屏幕左侧、罗盘 E 在屏幕右侧（罗盘 E=世界 -x）。
             按钮按罗盘方向移动：东=-x、西=+x；北=+z、南=-z。内部墙/走廊的 east=+x 只是代码内部约定。 */}
         <div className="prop-nudge">
-          <button type="button" className="prop-nudge__btn" title="向西移" onClick={() => translateSelected(stepSize, 0, 0)}>
-            ◀ 西
+          <button type="button" className="prop-nudge__btn" title={t('property.nudgeWest')} onClick={() => translateSelected(stepSize, 0, 0)}>
+            {t('property.west')}
           </button>
-          <button type="button" className="prop-nudge__btn" title="向北移" onClick={() => translateSelected(0, 0, stepSize)}>
-            ▲ 北
+          <button type="button" className="prop-nudge__btn" title={t('property.nudgeNorth')} onClick={() => translateSelected(0, 0, stepSize)}>
+            {t('property.north')}
           </button>
-          <button type="button" className="prop-nudge__btn" title="向东移" onClick={() => translateSelected(-stepSize, 0, 0)}>
-            ▶ 东
+          <button type="button" className="prop-nudge__btn" title={t('property.nudgeEast')} onClick={() => translateSelected(-stepSize, 0, 0)}>
+            {t('property.east')}
           </button>
-          <button type="button" className="prop-nudge__btn" title="向南移" onClick={() => translateSelected(0, 0, -stepSize)}>
-            ▼ 南
+          <button type="button" className="prop-nudge__btn" title={t('property.nudgeSouth')} onClick={() => translateSelected(0, 0, -stepSize)}>
+            {t('property.south')}
           </button>
-          <button type="button" className="prop-nudge__btn" title="向上移" onClick={() => translateSelected(0, stepSize, 0)}>
-            ↑ 上
+          <button type="button" className="prop-nudge__btn" title={t('property.nudgeUp')} onClick={() => translateSelected(0, stepSize, 0)}>
+            {t('property.up')}
           </button>
-          <button type="button" className="prop-nudge__btn" title="向下移" onClick={() => translateSelected(0, -stepSize, 0)}>
-            ↓ 下
+          <button type="button" className="prop-nudge__btn" title={t('property.nudgeDown')} onClick={() => translateSelected(0, -stepSize, 0)}>
+            {t('property.down')}
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { t } from '../i18n'
 import { logDebug } from './debugLog'
 import type { ThinkingMode } from '../types/settings'
 
@@ -61,7 +62,7 @@ function extractErrorMessage(text: string): string | null {
 /** 描述 fetch 网络层错误（区分用户中止 / 超时 / 连接失败） */
 function describeNetworkError(error: unknown): string {
   if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') {
-    return '请求超时，请检查网络或稍后重试'
+    return t('error.timeout')
   }
   return error instanceof Error ? error.message : String(error)
 }
@@ -102,18 +103,20 @@ export async function streamChatCompletion(
       signal,
     })
   } catch (error) {
-    throw new Error(`请求失败：${describeNetworkError(error)}`)
+    throw new Error(t('error.requestFailed', { detail: describeNetworkError(error) }))
   }
 
   if (!response.ok) {
     const text = await response.text().catch(() => '')
     const detail = extractErrorMessage(text)
     throw new Error(
-      detail ? `HTTP ${response.status}：${detail}` : `HTTP ${response.status}，无详细错误信息`,
+      detail
+        ? t('error.httpStatus', { status: response.status, detail })
+        : t('error.httpNoDetail', { status: response.status }),
     )
   }
   if (!response.body) {
-    throw new Error('网络错误：服务未返回数据流')
+    throw new Error(t('error.noStream'))
   }
 
   const reader = response.body.getReader()
@@ -127,7 +130,7 @@ export async function streamChatCompletion(
     try {
       chunk = await reader.read()
     } catch (error) {
-      throw new Error(`网络错误：读取响应流中断（${describeNetworkError(error)}）`)
+      throw new Error(t('error.streamInterrupted', { detail: describeNetworkError(error) }))
     }
     if (chunk.done) break
     buffer += decoder.decode(chunk.value, { stream: true })
@@ -167,12 +170,12 @@ export function describeAxiosError(error: unknown): string {
       | undefined
     const detail = data?.error?.message ?? data?.message
     if (typeof detail === 'string' && detail.trim()) {
-      return status ? `HTTP ${status}：${detail}` : detail
+      return status ? t('error.httpStatus', { status, detail }) : detail
     }
-    if (status) return `HTTP ${status}，无详细错误信息`
-    if (error.code === 'ECONNABORTED') return '请求超时，请检查网络或稍后重试'
-    if (error.message) return `网络错误：${error.message}`
-    return '网络错误，无法连接服务'
+    if (status) return t('error.httpNoDetail', { status })
+    if (error.code === 'ECONNABORTED') return t('error.timeout')
+    if (error.message) return t('error.network', { detail: error.message })
+    return t('error.networkFallback')
   }
   return error instanceof Error ? error.message : String(error)
 }
@@ -195,14 +198,14 @@ export async function testConnection(options: ApiClientOptions): Promise<Connect
       max_tokens: 1,
     } satisfies ChatCompletionRequest)
     logDebug('连通性检测成功', data, 'info')
-    return { ok: true, message: `连接成功：模型 ${data?.model ?? '未知'}` }
+    return { ok: true, message: t('error.connected', { model: data?.model ?? t('error.unknownModel') }) }
   } catch (error) {
     const message = axios.isAxiosError(error)
       ? (() => {
           const status = error.response?.status
-          if (status === 401 || status === 403) return 'API Key 无效或无权限（401/403）'
-          if (status === 404) return 'API 可达，但模型不存在，请检查模型名与 Base URL'
-          return `请求失败：${describeAxiosError(error)}`
+          if (status === 401 || status === 403) return t('error.authFailed')
+          if (status === 404) return t('error.modelMissing')
+          return t('error.requestFailed', { detail: describeAxiosError(error) })
         })()
       : describeAxiosError(error)
     logDebug('连通性检测失败', message, 'error')

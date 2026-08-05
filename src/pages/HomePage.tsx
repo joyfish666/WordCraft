@@ -6,6 +6,7 @@ import { ProjectLibraryDialog } from '../components/ui/ProjectLibraryDialog'
 import { PropertyPanel } from '../components/viewport/PropertyPanel'
 import { SceneViewer, type SceneViewerHandle } from '../components/viewport/SceneViewer'
 import { getProject, updateProject } from '../db/database'
+import { useT } from '../i18n'
 import { ChatGenerationError, generateModelFromChat } from '../lib/chat'
 import { clearDebug, useDebugEntries, type DebugEntry } from '../lib/debugLog'
 import { countNodes, getPathToNode, isContainer } from '../lib/modelTree'
@@ -44,9 +45,9 @@ function downloadDebug(entries: DebugEntry[]): void {
 }
 
 /** 助手消息的展示文本：携带模型时显示摘要，否则显示回复（跳过纯 JSON） */
-function assistantDisplay(m: ChatMessageItem): string {
+function assistantDisplay(m: ChatMessageItem, t: ReturnType<typeof useT>): string {
   if (m.model) {
-    return `已生成「${m.model.root.name}」模型，共 ${countNodes(m.model.root)} 个模块。可点击模块查看/修改尺寸，或用方向键移动视角。`
+    return t('chat.generatedModel', { name: m.model.root.name, count: countNodes(m.model.root) })
   }
   const content = m.content.trim()
   if (content && !content.startsWith('{')) return content
@@ -87,6 +88,7 @@ export function HomePage() {
   const debugRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<SceneViewerHandle>(null)
 
+  const t = useT()
   const projectDirty = useProjectStore((s) => s.dirty)
 
   // 项目库脏标记：记录"上次保存的场景"快照，场景变化与其不一致即视为有未保存修改。
@@ -204,7 +206,7 @@ export function HomePage() {
     const config = getActiveApiConfig(useSettingsStore.getState())
     setDraft('')
     if (!config) {
-      addMessage({ role: 'error', content: '尚未配置 API Key，请先前往设置页配置后再试。' })
+      addMessage({ role: 'error', content: t('home.noApiKey') })
       return
     }
     // 先快照历史，避免把即将新增的用户消息重复发送
@@ -231,7 +233,7 @@ export function HomePage() {
     } catch (error) {
       addMessage({
         role: 'error',
-        content: error instanceof ChatGenerationError ? error.message : '生成失败，请重试',
+        content: error instanceof ChatGenerationError ? error.message : t('home.genFailed'),
       })
     } finally {
       setIsGenerating(false)
@@ -248,10 +250,10 @@ export function HomePage() {
   const confirmDiscardUnsaved = (includeOrphan: boolean): boolean => {
     const { currentId, dirty } = useProjectStore.getState()
     if (currentId !== null && dirty) {
-      return window.confirm('当前项目有未保存的修改，此操作将放弃这些修改，确定继续吗？')
+      return window.confirm(t('home.confirmDiscardProject'))
     }
     if (includeOrphan && currentId === null && useModelStore.getState().scene !== null) {
-      return window.confirm('当前场景尚未保存到项目库，此操作将覆盖当前场景，确定继续吗？')
+      return window.confirm(t('home.confirmDiscardScene'))
     }
     return true
   }
@@ -278,11 +280,11 @@ export function HomePage() {
     try {
       parsed = JSON.parse(rec.data) as SceneModel
     } catch {
-      window.alert('项目数据损坏，无法打开')
+      window.alert(t('home.alertCorrupt'))
       return
     }
     if (!parsed || parsed.version !== 1 || !parsed.root || parsed.root.type !== 'house') {
-      window.alert('项目数据格式不正确，无法打开')
+      window.alert(t('home.alertInvalid'))
       return
     }
     setScene(parsed)
@@ -317,7 +319,7 @@ export function HomePage() {
               setScene(createSampleModel())
             }}
           >
-            加载示例
+            {t('home.loadSample')}
           </Button>
           <Button
             variant="ghost"
@@ -330,29 +332,29 @@ export function HomePage() {
             }}
             disabled={!scene}
           >
-            清空场景
+            {t('home.clearScene')}
           </Button>
           <span className="toolbar-sep" />
-          <Button variant="ghost" onClick={undo} disabled={!canUndo} title="撤销 (Ctrl+Z)">
-            撤销
+          <Button variant="ghost" onClick={undo} disabled={!canUndo} title={t('home.undoTitle')}>
+            {t('home.undo')}
           </Button>
-          <Button variant="ghost" onClick={redo} disabled={!canRedo} title="重做 (Ctrl+Y / Ctrl+Shift+Z)">
-            重做
+          <Button variant="ghost" onClick={redo} disabled={!canRedo} title={t('home.redoTitle')}>
+            {t('home.redo')}
           </Button>
           <span className="toolbar-sep" />
           <Button
             variant="ghost"
             onClick={() => void handleSave()}
             disabled={!scene}
-            title={projectDirty ? '保存到本地项目库（有未保存的修改）' : '保存到本地项目库'}
+            title={projectDirty ? t('home.saveTitleDirty') : t('home.saveTitle')}
           >
-            保存
+            {t('home.save')}
           </Button>
           <Button variant="ghost" onClick={() => setProjectDialogOpen(true)}>
-            项目库
+            {t('home.library')}
           </Button>
           <Button variant="ghost" onClick={() => setHelpOpen(true)}>
-            操作说明
+            {t('home.help')}
           </Button>
         </div>
         <div className="home__toolbar-right">
@@ -364,14 +366,14 @@ export function HomePage() {
                 selectNode(null)
               }}
             >
-              返回整屋
+              {t('home.backToHouse')}
             </Button>
           )}
           {hasApiKey ? (
-            <span className="badge badge--ok">API Key 已配置</span>
+            <span className="badge badge--ok">{t('home.apiOk')}</span>
           ) : (
             <Link to="/settings" className="badge badge--warn">
-              未配置 API Key · 前往设置
+              {t('home.apiMissing')}
             </Link>
           )}
         </div>
@@ -380,40 +382,42 @@ export function HomePage() {
       <div className="home__body">
         <section className="panel home__chat">
           <div className="home__chat-header">
-            <h2 className="panel__title">对话生成</h2>
+            <h2 className="panel__title">{t('chat.title')}</h2>
             <Button
               variant="ghost"
               onClick={undoGeneration}
               disabled={!canUndoGeneration}
-              title="撤销最近一次生成，回到生成前的场景（并移除对应对话）"
+              title={t('chat.undoGenTitle')}
             >
-              撤销生成
+              {t('chat.undoGen')}
             </Button>
             <Button variant="ghost" onClick={clearConversation} disabled={messages.length === 0}>
-              清空对话
+              {t('chat.clear')}
             </Button>
           </div>
           <div className="chat-log" ref={logRef}>
             {messages.length === 0 && !isGenerating ? (
-              <p className="chat-log__hint">
-                在下方输入需求开始生成 3D 模型，支持多轮对话逐步完善细节。
-              </p>
+              <p className="chat-log__hint">{t('chat.hint')}</p>
             ) : (
               <ul className="chat-log__list">
                 {messages.map((m) => (
                   <li key={m.id} className={`chat-msg chat-msg--${m.role}`}>
                     <span className="chat-msg__label">
-                      {m.role === 'user' ? '我' : m.role === 'assistant' ? '言筑' : '错误'}
+                      {m.role === 'user'
+                        ? t('chat.roleMe')
+                        : m.role === 'assistant'
+                          ? t('chat.roleAssistant')
+                          : t('chat.roleError')}
                     </span>
                     <div className="chat-msg__body">
-                      {m.role === 'assistant' ? assistantDisplay(m) : m.content}
+                      {m.role === 'assistant' ? assistantDisplay(m, t) : m.content}
                     </div>
                   </li>
                 ))}
                 {isGenerating && (
                   <li className="chat-msg chat-msg--assistant">
-                    <span className="chat-msg__label">言筑</span>
-                    <div className="chat-msg__body">正在生成模型…（已 {elapsed} 秒）</div>
+                    <span className="chat-msg__label">{t('chat.roleAssistant')}</span>
+                    <div className="chat-msg__body">{t('chat.generating', { elapsed })}</div>
                   </li>
                 )}
               </ul>
@@ -429,17 +433,17 @@ export function HomePage() {
                   void send()
                 }
               }}
-              placeholder="例如：帮我设计一个 3×3 米的卧室，放一张双人床…"
+              placeholder={t('chat.placeholder')}
               rows={3}
             />
             <Button onClick={() => void send()} disabled={!draft.trim() || isGenerating}>
-              {isGenerating ? `生成中…（已 ${elapsed}s）` : '生成模型'}
+              {isGenerating ? t('chat.generatingBtn', { elapsed }) : t('chat.generateBtn')}
             </Button>
           </div>
         </section>
 
         <section className="panel home__viewport">
-          <div className="view-mode-toggle segmented" role="group" aria-label="视图模式">
+          <div className="view-mode-toggle segmented" role="group" aria-label={t('home.viewModeAria')}>
             <button
               type="button"
               className={`segmented__btn ${!planMode ? 'segmented__btn--active' : ''}`}
@@ -451,9 +455,9 @@ export function HomePage() {
               type="button"
               className={`segmented__btn ${planMode ? 'segmented__btn--active' : ''}`}
               onClick={() => setViewMode('plan')}
-              title="切换至俯视平面图"
+              title={t('home.viewPlanTitle')}
             >
-              平面图
+              {t('home.viewPlan')}
             </button>
           </div>
           <SceneViewer ref={viewportRef} planMode={planMode} />
@@ -465,40 +469,38 @@ export function HomePage() {
         <section className="debug-panel">
           <div className="debug-panel__header">
             <button className="debug-panel__toggle" onClick={() => setDebugOpen((o) => !o)}>
-              {debugOpen ? '▾' : '▸'} 调试日志
+              {debugOpen ? '▾' : '▸'} {t('home.debugLog')}
             </button>
-            <span className="debug-panel__count">{debugEntries.length} 条</span>
+            <span className="debug-panel__count">{t('home.debugCount', { count: debugEntries.length })}</span>
             <div className="debug-panel__actions">
               <Button
                 variant="ghost"
                 onClick={() => copyDebug(debugEntries)}
                 disabled={debugEntries.length === 0}
               >
-                复制
+                {t('home.copy')}
               </Button>
               <Button
                 variant="ghost"
                 onClick={() => downloadDebug(debugEntries)}
                 disabled={debugEntries.length === 0}
-                title="下载 .log 文件（保存到浏览器下载目录）"
+                title={t('home.downloadTitle')}
               >
-                下载
+                {t('home.download')}
               </Button>
               <Button
                 variant="ghost"
                 onClick={clearDebug}
                 disabled={debugEntries.length === 0}
               >
-                清空
+                {t('home.clear')}
               </Button>
             </div>
           </div>
           {debugOpen && (
             <div className="debug-panel__body" ref={debugRef}>
               {debugEntries.length === 0 ? (
-                <p className="debug-panel__empty">
-                  暂无日志（调试模式已开启，生成模型或检测连通性时会记录）
-                </p>
+                <p className="debug-panel__empty">{t('home.debugEmpty')}</p>
               ) : (
                 debugEntries.map((e) => (
                   <div key={e.id} className={`debug-entry debug-entry--${e.level}`}>
@@ -528,11 +530,11 @@ export function HomePage() {
         )}
 
         <div className="move-controls">
-          <span className="move-controls__title">视角</span>
+          <span className="move-controls__title">{t('home.viewTitle')}</span>
           <Button
             variant="ghost"
             className="move-controls__btn"
-            title="视角左移 (←)"
+            title={t('home.panLeftTitle')}
             onClick={() => viewportRef.current?.pan(-PAN_STEP, 0)}
           >
             ◀
@@ -540,7 +542,7 @@ export function HomePage() {
           <Button
             variant="ghost"
             className="move-controls__btn"
-            title="视角右移 (→)"
+            title={t('home.panRightTitle')}
             onClick={() => viewportRef.current?.pan(PAN_STEP, 0)}
           >
             ▶
@@ -548,7 +550,7 @@ export function HomePage() {
           <Button
             variant="ghost"
             className="move-controls__btn"
-            title="视角上移 (↑)"
+            title={t('home.panUpTitle')}
             onClick={() => viewportRef.current?.pan(0, PAN_STEP)}
           >
             ▲
@@ -556,28 +558,33 @@ export function HomePage() {
           <Button
             variant="ghost"
             className="move-controls__btn"
-            title="视角下移 (↓)"
+            title={t('home.panDownTitle')}
             onClick={() => viewportRef.current?.pan(0, -PAN_STEP)}
           >
             ▼
           </Button>
           <Button variant="ghost" onClick={() => viewportRef.current?.resetView()}>
-            复位视角
+            {t('home.resetView')}
           </Button>
         </div>
 
         <span className="dim-info">
           {selected ? (
             <>
-              已选：{selected.name} · 长 {selected.dimensions.length}m × 宽{' '}
-              {selected.dimensions.width}m × 高 {selected.dimensions.height}m · 中心 (
-              {selected.position.x.toFixed(2)}, {selected.position.z.toFixed(2)})
-              {isContainer(selected) ? ` · ${selected.children.length} 个子模块` : ''}
+              {t('home.selectedInfo', {
+                name: selected.name,
+                l: selected.dimensions.length,
+                w: selected.dimensions.width,
+                h: selected.dimensions.height,
+                x: selected.position.x.toFixed(2),
+                z: selected.position.z.toFixed(2),
+              })}
+              {isContainer(selected) ? t('home.selectedChildren', { count: selected.children.length }) : ''}
             </>
           ) : focusId ? (
-            '已进入房间聚焦视图'
+            t('home.focusedHint')
           ) : (
-            '点击模型模块查看尺寸信息'
+            t('home.selectHint')
           )}
         </span>
       </footer>

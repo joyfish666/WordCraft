@@ -6,6 +6,7 @@ import {
   updateProject,
   type ProjectRecord,
 } from '../../db/database'
+import { useT } from '../../i18n'
 import { useModelStore } from '../../store/useModelStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { Button } from './Button'
@@ -39,6 +40,7 @@ export function ProjectLibraryDialog({
   const scene = useModelStore((s) => s.scene)
   const currentId = useProjectStore((s) => s.currentId)
   const setCurrentName = useProjectStore((s) => s.setCurrentName)
+  const t = useT()
 
   const [projects, setProjects] = useState<ProjectRecord[]>([])
   const [name, setName] = useState('')
@@ -79,7 +81,7 @@ export function ProjectLibraryDialog({
 
   const handleDelete = async (rec: ProjectRecord) => {
     if (!rec.id) return
-    if (!window.confirm(`确定删除项目「${rec.name}」吗？删除后无法恢复。`)) return
+    if (!window.confirm(t('project.deleteConfirm', { name: rec.name }))) return
     await deleteProject(rec.id)
     if (!aliveRef.current) return
     if (rec.id === currentId) useProjectStore.getState().clearProject()
@@ -100,13 +102,13 @@ export function ProjectLibraryDialog({
   return (
     <div className="dialog-overlay" onClick={onClose} role="dialog" aria-modal="true">
       <div className="dialog dialog--project" onClick={(e) => e.stopPropagation()}>
-        <h3 className="dialog__title">本地项目库</h3>
+        <h3 className="dialog__title">{t('project.title')}</h3>
 
         <div className="project-create">
           <input
             className="input"
             autoFocus
-            placeholder="项目名称"
+            placeholder={t('project.namePlaceholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
@@ -114,13 +116,13 @@ export function ProjectLibraryDialog({
             }}
           />
           <Button onClick={() => void handleCreate()} disabled={!name.trim() || !scene}>
-            保存当前场景
+            {t('project.saveCurrent')}
           </Button>
         </div>
 
         <div className="project-list">
           {projects.length === 0 ? (
-            <p className="project-list__empty">暂无项目。保存当前场景以创建第一个项目。</p>
+            <p className="project-list__empty">{t('project.empty')}</p>
           ) : (
             projects.map((rec) => {
               const isCurrent = rec.id === currentId
@@ -150,16 +152,16 @@ export function ProjectLibraryDialog({
                     <div className="project-row__info">
                       <span className="project-row__name">
                         {rec.name}
-                        {isCurrent && <span className="project-row__tag">当前</span>}
+                        {isCurrent && <span className="project-row__tag">{t('project.currentTag')}</span>}
                       </span>
                       <span className="project-row__meta">
-                        {formatTime(rec.updatedAt)} · {nodeCount} 个房间
+                        {formatTime(rec.updatedAt)} · {t('project.roomCount', { count: nodeCount })}
                       </span>
                     </div>
                   )}
                   <div className="project-row__actions">
                     <Button variant="ghost" onClick={() => onOpenProject(rec.id!, rec.name)}>
-                      打开
+                      {t('project.open')}
                     </Button>
                     <Button
                       variant="ghost"
@@ -168,10 +170,10 @@ export function ProjectLibraryDialog({
                         setRenameDraft(rec.name)
                       }}
                     >
-                      重命名
+                      {t('project.rename')}
                     </Button>
                     <Button variant="danger" onClick={() => void handleDelete(rec)}>
-                      删除
+                      {t('project.delete')}
                     </Button>
                   </div>
                 </div>
@@ -182,7 +184,7 @@ export function ProjectLibraryDialog({
 
         <div className="dialog__actions">
           <Button variant="ghost" onClick={onClose}>
-            关闭
+            {t('project.close')}
           </Button>
         </div>
       </div>
