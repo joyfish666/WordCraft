@@ -1,9 +1,8 @@
 import { z } from 'zod'
-import type { ContainerNode, ModelNode } from '../types/model'
 
 /**
- * 大模型输出的层级化模型 JSON Schema（Phase 1 对话生成校验所用）。
- * 使用 z.lazy 处理「容器节点 ↔ 子节点」的循环引用。
+ * 大模型输出的 v2 语义模型 JSON Schema。
+ * 房间不携带绝对坐标（auto 模式由布局引擎平铺），家具位置相对所在房间中心。
  */
 export const dimensionsSchema = z.object({
   length: z.number().positive(),
@@ -17,7 +16,7 @@ export const positionSchema = z.object({
   z: z.number(),
 })
 
-export const furnitureNodeSchema = z.object({
+export const furnitureNodeV2Schema = z.object({
   id: z.string().min(1),
   type: z.enum(['furniture', 'wall']),
   name: z.string().min(1),
@@ -27,26 +26,49 @@ export const furnitureNodeSchema = z.object({
   description: z.string().optional(),
 })
 
-const baseContainerNodeSchema = z.object({
+export const roomNodeV2Schema = z.object({
   id: z.string().min(1),
-  type: z.enum(['room', 'house']),
+  type: z.literal('room'),
+  name: z.string().min(1),
+  dimensions: dimensionsSchema,
+  position: positionSchema.optional(),
+  side: z.string().optional(),
+  children: z.array(furnitureNodeV2Schema).default([]),
+})
+
+export const layoutSpecSchema = z.union([
+  z.object({
+    mode: z.literal('auto'),
+    template: z.literal('corridor'),
+    corridor: z
+      .object({
+        width: z.number().positive().optional(),
+        entranceRoomId: z.string().optional(),
+      })
+      .optional(),
+  }),
+  z.object({
+    mode: z.literal('auto'),
+    template: z.literal('living'),
+    centerRoomId: z.string().min(1),
+  }),
+  z.object({ mode: z.literal('custom') }),
+])
+
+export const houseNodeV2Schema = z.object({
+  id: z.string().min(1),
+  type: z.literal('house'),
   name: z.string().min(1),
   dimensions: dimensionsSchema,
   position: positionSchema,
+  // 布局缺省时按自由模式处理（宽松容错）
+  layout: layoutSpecSchema.default({ mode: 'custom' }),
+  children: z.array(roomNodeV2Schema).default([]),
 })
 
-/** 容器节点：由基础字段扩展出子节点数组（循环引用通过 lazy 惰性解析） */
-export const containerNodeSchema: z.ZodType<ContainerNode> = baseContainerNodeSchema.extend({
-  children: z.array(z.lazy(() => modelNodeSchema)),
+export const sceneModelV2Schema = z.object({
+  version: z.literal(2),
+  root: houseNodeV2Schema,
 })
 
-export const modelNodeSchema: z.ZodType<ModelNode> = z.lazy(() =>
-  z.union([containerNodeSchema, furnitureNodeSchema]),
-)
-
-export const sceneModelSchema = z.object({
-  version: z.literal(1),
-  root: containerNodeSchema,
-})
-
-export type ParsedSceneModel = z.infer<typeof sceneModelSchema>
+export type ParsedSceneModelV2 = z.infer<typeof sceneModelV2Schema>
