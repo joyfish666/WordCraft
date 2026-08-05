@@ -56,8 +56,49 @@ function resolveHouse(house: HouseNodeV2): ContainerNode {
 }
 
 /**
+ * 计算嵌套房间在父房间内的相对位置（相对父中心）：
+ * - 有 side 提示（north/south/east/west）→ 靠父房间对应边（居中于该边）
+ * - 无 side 但有 position → 用相对偏移
+ * - 均无 → 按常理靠父房间东北角
+ * 结果会约束在父房间内部（去墙厚），normalizeContainment 也会再次兜底。
+ */
+function placeNested(n: RoomNodeV2, parentLen: number, parentWid: number): { x: number; z: number } {
+  const halfX = Math.max(0, (parentLen - n.dimensions.length) / 2 - WALL_THICKNESS)
+  const halfZ = Math.max(0, (parentWid - n.dimensions.width) / 2 - WALL_THICKNESS)
+
+  let x = 0
+  let z = 0
+  switch (n.side) {
+    case 'north':
+      z = halfZ
+      break
+    case 'south':
+      z = -halfZ
+      break
+    case 'east':
+      x = halfX
+      break
+    case 'west':
+      x = -halfX
+      break
+    default:
+      if (n.position) {
+        x = n.position.x
+        z = n.position.z
+      } else {
+        // 常理：靠东北角
+        x = halfX
+        z = halfZ
+      }
+  }
+  x = Math.min(Math.max(x, -halfX), halfX)
+  z = Math.min(Math.max(z, -halfZ), halfZ)
+  return { x, z }
+}
+
+/**
  * 由 RoomNodeV2 构建 ContainerNode：房间居地面，家具相对房间中心偏移为绝对坐标；
- * 嵌套子房间（如卧室内卫生间）保留在父房间内部，按相对父中心的位置放置。
+ * 嵌套子房间（如卧室内卫生间）保留在父房间内部，按 side/常理角落放置。
  */
 function makeRoom(r: RoomNodeV2, cx: number, cz: number): ContainerNode {
   const H = r.dimensions.height
@@ -73,8 +114,11 @@ function makeRoom(r: RoomNodeV2, cx: number, cz: number): ContainerNode {
       rotationY: f.rotationY,
       description: f.description,
     })),
-    // 嵌套子房间：位于父房间内部，相对父中心偏移（位置由 normalizeContainment 约束进父房间）
-    ...nested.map((n) => makeRoom(n, cx + (n.position?.x ?? 0), cz + (n.position?.z ?? 0))),
+    // 嵌套子房间：位于父房间内部，按 side 靠边或常理靠角
+    ...nested.map((n) => {
+      const rel = placeNested(n, r.dimensions.length, r.dimensions.width)
+      return makeRoom(n, cx + rel.x, cz + rel.z)
+    }),
   ]
   return {
     id: r.id,

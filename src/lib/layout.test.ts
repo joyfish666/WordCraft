@@ -297,6 +297,78 @@ describe('resolveLayout - 两卫生间布局', () => {
     }
   })
 
+  it('嵌套卫生间按 side 靠边放置（side:north → 卧室北侧）', () => {
+    const v2: SceneModelV2 = {
+      version: 2,
+      root: {
+        id: 'h',
+        type: 'house',
+        name: '带内卫',
+        dimensions: { length: 10, width: 8, height: 2.8 },
+        position: { x: 0, y: 0, z: 0 },
+        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        children: [
+          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 6, width: 4.8, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'bedroom1',
+            type: 'room',
+            name: '主卧',
+            dimensions: { length: 4, width: 3.5, height: 2.8 },
+            side: 'right',
+            children: [
+              { id: 'bathroom1', type: 'room', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 }, side: 'north', children: [] },
+            ],
+          },
+        ],
+      },
+    }
+    const model = resolveLayout(v2)
+    const bedroom = findNodeById(model.root, 'bedroom1')
+    const bath = findNodeById(model.root, 'bathroom1')
+    if (bedroom && bath && isContainer(bedroom) && isContainer(bath)) {
+      // 卫生间在卧室北侧（z 大于卧室中心），且仍在卧室范围内
+      expect(bath.position.z).toBeGreaterThan(bedroom.position.z)
+      expect(bath.position.z).toBeLessThan(bedroom.position.z + bedroom.dimensions.width / 2)
+      expect(bath.position.x).toBeGreaterThanOrEqual(bedroom.position.x - bedroom.dimensions.length / 2)
+      expect(bath.position.x).toBeLessThanOrEqual(bedroom.position.x + bedroom.dimensions.length / 2)
+    }
+  })
+
+  it('嵌套卫生间无 side 时靠角而非中心', () => {
+    const v2: SceneModelV2 = {
+      version: 2,
+      root: {
+        id: 'h',
+        type: 'house',
+        name: '带内卫',
+        dimensions: { length: 10, width: 8, height: 2.8 },
+        position: { x: 0, y: 0, z: 0 },
+        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        children: [
+          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 6, width: 4.8, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'bedroom1',
+            type: 'room',
+            name: '主卧',
+            dimensions: { length: 4, width: 3.5, height: 2.8 },
+            side: 'right',
+            children: [
+              { id: 'bathroom1', type: 'room', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 }, children: [] },
+            ],
+          },
+        ],
+      },
+    }
+    const model = resolveLayout(v2)
+    const bedroom = findNodeById(model.root, 'bedroom1')
+    const bath = findNodeById(model.root, 'bathroom1')
+    if (bedroom && bath && isContainer(bedroom) && isContainer(bath)) {
+      // 不位于中心：x 或 z 至少偏离一半自身尺寸
+      expect(Math.abs(bath.position.x - bedroom.position.x)).toBeGreaterThan(bath.dimensions.length / 4)
+      expect(Math.abs(bath.position.z - bedroom.position.z)).toBeGreaterThan(bath.dimensions.width / 4)
+    }
+  })
+
   it('走廊卫生间只与走廊开门，不连厨房', () => {
     const model = resolveLayout(twoBathScene())
     const rooms: ContainerNode[] = []
