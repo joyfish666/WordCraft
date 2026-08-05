@@ -370,7 +370,8 @@ export function HomePage() {
           {selected ? (
             <>
               已选：{selected.name} · 长 {selected.dimensions.length}m × 宽{' '}
-              {selected.dimensions.width}m × 高 {selected.dimensions.height}m
+              {selected.dimensions.width}m × 高 {selected.dimensions.height}m · 中心 (
+              {selected.position.x.toFixed(2)}, {selected.position.z.toFixed(2)})
               {isContainer(selected) ? ` · ${selected.children.length} 个子模块` : ''}
             </>
           ) : focusId ? (
