@@ -1052,25 +1052,25 @@ button {
 
 /* ---------- 语言切换 ---------- */
 
-.sidebar__footer {
+/* 设置页标题行：标题居左，语言按钮居右 */
+.settings__header {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.lang-toggle {
-  padding: 4px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text);
-  font-size: 12px;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
+.settings__header .page-title {
+  margin-bottom: 0;
 }
 
-.lang-toggle:hover {
-  border-color: var(--accent);
+/* 工具栏语言切换按钮：加粗一点更醒目 */
+.lang-toggle-btn {
+  font-weight: 600;
   color: var(--accent);
+  border-color: var(--accent-soft);
+}
+
+.lang-toggle-btn:hover {
+  border-color: var(--accent);
 }

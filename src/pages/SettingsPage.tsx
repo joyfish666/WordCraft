@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
+import { LanguageToggle } from '../components/ui/LanguageToggle'
 import { useT } from '../i18n'
 import { testConnection, type ConnectionTestResult } from '../lib/api'
 import { clearDebug } from '../lib/debugLog'
@@ -65,7 +66,10 @@ export function SettingsPage() {
 
   return (
     <div className="settings">
-      <h2 className="page-title">{t('settings.title')}</h2>
+      <div className="settings__header">
+        <h2 className="page-title">{t('settings.title')}</h2>
+        <LanguageToggle />
+      </div>
 
       <section className="panel settings__section">
         <h3 className="panel__title">{t('settings.apiSection')}</h3>

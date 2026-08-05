@@ -1,11 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useT } from '../../i18n'
-import { useSettingsStore } from '../../store/useSettingsStore'
 
 export function AppShell() {
   const t = useT()
-  const language = useSettingsStore((s) => s.language)
-  const setLanguage = useSettingsStore((s) => s.setLanguage)
 
   return (
     <div className="shell">
@@ -32,18 +29,7 @@ export function AppShell() {
             {t('nav.settings')}
           </NavLink>
         </nav>
-        <div className="sidebar__footer">
-          <span>{t('nav.footer')}</span>
-          <button
-            type="button"
-            className="lang-toggle"
-            onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
-            title={language === 'zh' ? 'English' : '中文'}
-            aria-label={language === 'zh' ? 'Switch to English' : '切换为中文'}
-          >
-            {language === 'zh' ? 'EN' : '中文'}
-          </button>
-        </div>
+        <div className="sidebar__footer">{t('nav.footer')}</div>
       </aside>
       <main className="main">
         <Outlet />

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HelpDialog } from '../components/ui/HelpDialog'
 import { Button } from '../components/ui/Button'
+import { LanguageToggle } from '../components/ui/LanguageToggle'
 import { ProjectLibraryDialog } from '../components/ui/ProjectLibraryDialog'
 import { PropertyPanel } from '../components/viewport/PropertyPanel'
 import { SceneViewer, type SceneViewerHandle } from '../components/viewport/SceneViewer'
@@ -358,6 +359,7 @@ export function HomePage() {
           </Button>
         </div>
         <div className="home__toolbar-right">
+          <LanguageToggle />
           {focusId && (
             <Button
               variant="ghost"
