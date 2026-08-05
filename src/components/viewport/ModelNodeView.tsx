@@ -148,8 +148,9 @@ function RoomShell({ room, material, isSelected, plan }: RoomShellProps) {
       {/* 四面墙：按分段渲染（开放段留空、共享段按持有方渲染） */}
       {wall('north', [cx, wallBaseY, cz + W / 2], [0, 0, 0])}
       {wall('south', [cx, wallBaseY, cz - W / 2], [0, 0, 0])}
-      {wall('east', [cx + L / 2, wallBaseY, cz], [0, Math.PI / 2, 0])}
-      {wall('west', [cx - L / 2, wallBaseY, cz], [0, Math.PI / 2, 0])}
+      {/* 东/西墙用 -90° 旋转：使墙段局部坐标方向与 wallInfo 一致（否则镜像导致外墙段错位） */}
+      {wall('east', [cx + L / 2, wallBaseY, cz], [0, -Math.PI / 2, 0])}
+      {wall('west', [cx - L / 2, wallBaseY, cz], [0, -Math.PI / 2, 0])}
 
       {/* 选中轮廓 */}
       {isSelected && (
