@@ -44,6 +44,12 @@ describe('isCorridorName / isOpenRoom', () => {
     expect(isOpenRoom('餐厅')).toBe(true)
     expect(isOpenRoom('主卧')).toBe(false)
   })
+
+  it('复合房间名（如"走廊卫生间"）不当作走廊/开放空间', () => {
+    expect(isCorridorName('走廊卫生间')).toBe(false)
+    expect(isOpenRoom('走廊卫生间')).toBe(false)
+    expect(isCorridorName('主卧卫生间')).toBe(false)
+  })
 })
 
 describe('doorDirection（兜底门朝向）', () => {

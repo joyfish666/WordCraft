@@ -19,24 +19,29 @@ const OPPOSITE: Record<DoorDirection, DoorDirection> = {
   west: 'east',
 }
 
-/** 判断房间名是否为走廊/连廊 */
+/** 封闭房间类型词：名字包含这些词的复合名（如"走廊卫生间"）不应被当作走廊/开放空间 */
+const ROOM_TYPE_RE = /卫生间|浴室|卧室|书房|厕所|储物|衣帽|阳台/
+
+/** 判断房间名是否为走廊/连廊（排除"走廊卫生间"等复合名） */
 export function isCorridorName(name: string): boolean {
-  return (
-    name.includes('走廊') ||
-    name.includes('连廊') ||
-    name.includes('过道') ||
-    name.includes('通道')
-  )
+  return /走廊|连廊|过道|通道/.test(name) && !ROOM_TYPE_RE.test(name)
 }
 
 /** 判断是否为开放空间（客厅/餐厅/厨房等）：与走廊/开放空间之间不设墙 */
 export function isOpenRoom(name: string): boolean {
-  return /客厅|餐厅|厨房|起居室|玄关|门厅|走廊|连廊|过道|通道|中庭/.test(name)
+  return /客厅|餐厅|厨房|起居室|玄关|门厅|走廊|连廊|过道|通道|中庭/.test(name) && !ROOM_TYPE_RE.test(name)
 }
 
 /** 判断是否为私密房间（卧室/书房等）：彼此之间不直接开门，经走廊/卫生间连通 */
 export function isPrivateRoom(name: string): boolean {
   return /卧室|主卧|次卧|书房|客房|儿童房|榻榻米/.test(name)
+}
+
+/** 卫生间的归属房间名：'主卧卫生间'→'主卧'，'走廊卫生间'→'走廊'；非卫生间返回 null */
+export function bathroomOwner(name: string): string | null {
+  const idx = name.indexOf('卫生间')
+  if (idx <= 0) return null
+  return name.slice(0, idx)
 }
 
 /**
@@ -278,8 +283,18 @@ export function computeWallPlan(
           continue
         }
         if (ownerIsA(R, N)) {
-          const bothPrivate = isPrivateRoom(R.name) && isPrivateRoom(N.name)
-          segs = splitSegments(segs, nb.from, nb.to, bothPrivate ? 'wall' : 'door')
+          // 决定是否开门：
+          // - 涉及卫生间时，用卫生间的归属规则（主卧卫生间→主卧、走廊卫生间→走廊），其余连接为实心墙
+          // - 两侧都不是卫生间且都是私密房间（卧室/书房）时，不直接开门
+          const rBath = bathroomOwner(R.name)
+          const nBath = bathroomOwner(N.name)
+          let hasDoor = true
+          if (rBath || nBath) {
+            hasDoor = (rBath ? N.name === rBath : false) || (nBath ? R.name === nBath : false)
+          } else if (isPrivateRoom(R.name) && isPrivateRoom(N.name)) {
+            hasDoor = false
+          }
+          segs = splitSegments(segs, nb.from, nb.to, hasDoor ? 'door' : 'wall')
         } else {
           segs = splitSegments(segs, nb.from, nb.to, 'open')
         }
