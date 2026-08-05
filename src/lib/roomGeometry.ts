@@ -63,6 +63,8 @@ export interface WallSegment {
   from: number
   to: number
   kind: WallSegmentKind
+  /** 是否为入户门（用于渲染醒目标记） */
+  entrance?: boolean
 }
 
 export interface WallFace {
@@ -137,7 +139,7 @@ function splitSegments(segs: WallSegment[], from: number, to: number, kind: Wall
 }
 
 /** 在墙段 [from,to] 范围内靠近中心的位置开一扇门（选择最近的实体墙段） */
-function addDoorOnFace(face: WallFace, from: number, to: number): void {
+function addDoorOnFace(face: WallFace, from: number, to: number, markEntrance = false): void {
   const center = (from + to) / 2
   let best: { s: WallSegment; a: number; b: number } | null = null
   let bestDist = Infinity
@@ -156,7 +158,17 @@ function addDoorOnFace(face: WallFace, from: number, to: number): void {
   const segLen = best.b - best.a
   const doorW = Math.min(DOOR_WIDTH, segLen)
   const mid = (best.a + best.b) / 2
-  face.segments = splitSegments(face.segments, mid - doorW / 2, mid + doorW / 2, 'door')
+  const d0 = mid - doorW / 2
+  const d1 = mid + doorW / 2
+  face.segments = splitSegments(face.segments, d0, d1, 'door')
+  if (markEntrance) {
+    // 标记刚创建的入户门段
+    face.segments = face.segments.map((s) =>
+      s.kind === 'door' && Math.abs(s.from - d0) < 1e-6 && Math.abs(s.to - d1) < 1e-6
+        ? { ...s, entrance: true }
+        : s,
+    )
+  }
 }
 
 function hasAnyDoor(p: WallPlan): boolean {
@@ -221,7 +233,7 @@ function addEntranceDoor(
   }
   if (!target) return
   const info = wallInfo(target, entrance)
-  addDoorOnFace(plan.get(target.id)![entrance], -info.length / 2, info.length / 2)
+  addDoorOnFace(plan.get(target.id)![entrance], -info.length / 2, info.length / 2, true)
 }
 
 /**

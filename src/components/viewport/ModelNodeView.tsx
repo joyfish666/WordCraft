@@ -3,6 +3,7 @@ import { isContainer } from '../../lib/modelTree'
 import {
   CORRIDOR_COLOR,
   CORRIDOR_COLORBLIND,
+  ENTRANCE_DOOR_COLOR,
   FURNITURE_COLOR,
   FURNITURE_COLORBLIND,
   roomColor,
@@ -36,11 +37,13 @@ interface WallSegmentBoxProps {
   height: number
   thickness: number
   kind: WallSegmentKind
+  /** 是否为入户门（渲染醒目门扇） */
+  entrance?: boolean
   material: ShellMaterial
 }
 
 /** 渲染沿局部 X 轴的一段墙；kind='door' 时在中部留出与墙等高的门洞 */
-function WallSegmentBox({ from, to, height, thickness, kind, material }: WallSegmentBoxProps) {
+function WallSegmentBox({ from, to, height, thickness, kind, entrance, material }: WallSegmentBoxProps) {
   if (kind === 'open') return null
   const len = to - from
   const center = (from + to) / 2
@@ -64,6 +67,13 @@ function WallSegmentBox({ from, to, height, thickness, kind, material }: WallSeg
         <boxGeometry args={[sideLen, height, thickness]} />
         <meshStandardMaterial {...material} />
       </mesh>
+      {/* 入户门：渲染醒目门扇，与室内门洞区分 */}
+      {entrance && (
+        <mesh position={[center, Math.min(height, 2.1) / 2, 0]}>
+          <boxGeometry args={[Math.min(DOOR_WIDTH, len), Math.min(height, 2.1), 0.06]} />
+          <meshStandardMaterial color={ENTRANCE_DOOR_COLOR} />
+        </mesh>
+      )}
     </>
   )
 }
@@ -103,6 +113,7 @@ function RoomShell({ room, material, isSelected, plan }: RoomShellProps) {
           height={H}
           thickness={WALL_THICKNESS}
           kind={seg.kind}
+          entrance={seg.entrance}
           material={material}
         />
       ))}

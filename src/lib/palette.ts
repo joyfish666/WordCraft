@@ -14,6 +14,9 @@ export const FURNITURE_COLORBLIND = '#d3d3d3'
 export const CORRIDOR_COLOR = '#b8c0cc'
 export const CORRIDOR_COLORBLIND = '#c2c6cd'
 
+/** 入户门扇颜色（醒目的暖色，与室内门洞区分） */
+export const ENTRANCE_DOOR_COLOR = '#e8644a'
+
 /** 按索引取房间颜色，超出色板长度自动循环 */
 export function roomColor(index: number, colorMode: ColorMode): string {
   const palette = colorMode === 'colorblind' ? COLORBLIND_ROOM_COLORS : ROOM_COLORS
