@@ -10,6 +10,10 @@ export const COLORBLIND_ROOM_COLORS = ['#1a1a2e', '#16213e', '#0f3460', '#533483
 /** 家具 / 墙体默认色 */
 export const FURNITURE_COLOR = '#b8c0cc'
 export const FURNITURE_COLORBLIND = '#d3d3d3'
+/** 家具副部件色（床垫/桌腿/座面等）：中性偏深，标准与色盲模式下均与主色可辨 */
+export const FURNITURE_PART_DARK = '#9aa2ad'
+/** 家具深色强调部件（床头板/柜门/电视屏等）：与浅色主色对比鲜明，两种模式均可辨 */
+export const FURNITURE_PART_INK = '#5d6472'
 
 /** 走廊默认色（共享墙优先按房间标色，走廊自身墙用此默认色） */
 export const CORRIDOR_COLOR = '#b8c0cc'

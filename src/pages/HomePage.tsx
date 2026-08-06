@@ -181,22 +181,23 @@ export function HomePage() {
       if (!controls) return
       let dx = 0
       let dy = 0
+      // 方向与自然观感一致（W/↑=看向北/前，A/←=看向西/左）；属性面板微调按钮不受影响
       switch (e.key.toLowerCase()) {
         case 'arrowleft':
         case 'a':
-          dx = -PAN_STEP
+          dx = PAN_STEP
           break
         case 'arrowright':
         case 'd':
-          dx = PAN_STEP
+          dx = -PAN_STEP
           break
         case 'arrowup':
         case 'w':
-          dy = PAN_STEP
+          dy = -PAN_STEP
           break
         case 'arrowdown':
         case 's':
-          dy = -PAN_STEP
+          dy = PAN_STEP
           break
         default:
           return

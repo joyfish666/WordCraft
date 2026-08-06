@@ -1,10 +1,19 @@
 import { Edges } from '@react-three/drei'
+import {
+  BACK_AXIS,
+  buildFurnitureParts,
+  facingFromRoom,
+  furnitureKind,
+  partsBounds,
+} from '../../lib/furniturePresets'
 import { isContainer } from '../../lib/modelTree'
 import {
   ENTRANCE_DOOR_COLOR,
   ENTRANCE_MARKER_COLOR,
   FURNITURE_COLOR,
   FURNITURE_COLORBLIND,
+  FURNITURE_PART_DARK,
+  FURNITURE_PART_INK,
   roomFaceColor,
 } from '../../lib/palette'
 import {
@@ -177,6 +186,8 @@ interface ModelNodeViewProps {
   wallPlan?: Map<string, WallPlan>
   /** 父房间中心（嵌套房间据此决定门朝向父房间内部） */
   parentCenter?: Position
+  /** 直接父房间（家具据此计算贴靠的墙来决定朝向） */
+  parentRoom?: ContainerNode
 }
 
 /**
@@ -191,6 +202,7 @@ export function ModelNodeView({
   ancestors = [],
   wallPlan,
   parentCenter,
+  parentRoom,
 }: ModelNodeViewProps) {
   const selectNode = useModelStore((s) => s.selectNode)
   const setFocus = useModelStore((s) => s.setFocus)
@@ -289,6 +301,7 @@ export function ModelNodeView({
             ancestors={childAncestors}
             wallPlan={wallPlan}
             parentCenter={node.position}
+            parentRoom={node}
           />
         ))}
       </group>
@@ -296,9 +309,32 @@ export function ModelNodeView({
   }
 
   // 家具 / 墙体：实体 vs 虚化两种状态（y 抬升一个地板厚度，使其立在地板顶面）
+  // 按名称识别家具种类并拼装部件（床/衣柜/沙发…），未识别回退为单个整盒；
+  // 朝向由家具在父房间内贴靠（或最近）的墙决定——床头板朝墙、柜门朝房间内
   const fill = colorMode === 'colorblind' ? FURNITURE_COLORBLIND : FURNITURE_COLOR
+  const kind = furnitureKind(node.name)
+  const facing = parentRoom ? facingFromRoom(node, parentRoom, BACK_AXIS[kind]) : 'north'
+  const parts = buildFurnitureParts(
+    kind,
+    node.dimensions.length,
+    node.dimensions.height,
+    node.dimensions.width,
+    facing,
+  )
+  const bounds = partsBounds(parts)
+  const outlineSize: [number, number, number] = [
+    bounds.max[0] - bounds.min[0],
+    bounds.max[1] - bounds.min[1],
+    bounds.max[2] - bounds.min[2],
+  ]
+  const outlineCenter: [number, number, number] = [
+    (bounds.max[0] + bounds.min[0]) / 2,
+    (bounds.max[1] + bounds.min[1]) / 2,
+    (bounds.max[2] + bounds.min[2]) / 2,
+  ]
+  const showOutline = !screenshotMode && (isSelected || !ghosted)
   return (
-    <mesh
+    <group
       position={[node.position.x, node.position.y + FLOOR_THICKNESS, node.position.z]}
       onClick={(e) => {
         // 停止冒泡：选中部件而非冒泡到父房间
@@ -306,14 +342,35 @@ export function ModelNodeView({
         handleClick()
       }}
     >
-      <boxGeometry args={[node.dimensions.length, node.dimensions.height, node.dimensions.width]} />
-      <meshStandardMaterial
-        color={fill}
-        transparent={ghosted}
-        opacity={ghosted ? 0.2 : 1}
-        wireframe={wireframeEnabled}
-      />
-      {!screenshotMode && (isSelected || !ghosted) && <Edges color={isSelected ? '#ffd93d' : '#8a93a5'} />}
-    </mesh>
+      {parts.map((part, i) => (
+        <mesh key={i} position={part.center}>
+          {part.shape === 'cylinder' ? (
+            <cylinderGeometry args={[part.size[0], part.size[0], part.size[1], 24]} />
+          ) : (
+            <boxGeometry args={part.size} />
+          )}
+          <meshStandardMaterial
+            color={
+              part.shade === 'dark'
+                ? FURNITURE_PART_INK
+                : part.shade === 'secondary'
+                  ? FURNITURE_PART_DARK
+                  : fill
+            }
+            transparent={ghosted}
+            opacity={ghosted ? 0.2 : 1}
+            wireframe={wireframeEnabled}
+          />
+        </mesh>
+      ))}
+      {/* 并集包围盒轮廓（不参与射线检测：否则会挡在部件上，使部件点不到） */}
+      {showOutline && (
+        <mesh position={outlineCenter} raycast={() => null}>
+          <boxGeometry args={outlineSize} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          <Edges color={isSelected ? '#ffd93d' : '#8a93a5'} />
+        </mesh>
+      )}
+    </group>
   )
 }

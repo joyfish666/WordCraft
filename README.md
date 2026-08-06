@@ -237,6 +237,7 @@ Beyond the checked roadmap items above:
 - **True embedded nested rooms (v1.3.0)**: nested sub-rooms (e.g. an en-suite bathroom) are no longer an independent box with double walls on lines shared with the parent — faces collinear with and covered by any already-rendered wall are left open (enclosed by the outer wall), the remaining faces are interior partition walls, and the door opens toward the parent's center; `normalizeContainment` also pushes parent-room furniture (incl. manual edits) out of the nested footprint, so the parent's usable space truly excludes it
 - **Gizmo editing (v1.3.0)**: selecting a room / furniture shows a 3D transform gizmo (drei TransformControls); the property panel toggles Move / Scale; drag previews in real time (no history, no constraint), and on drag end one undo step is recorded and the result is clamped inside walls; the property panel stays in sync; hidden in the 2D plan mode
 - **Screenshot share + share code (v1.3.0)**: the toolbar "Share" button captures a high-resolution PNG from the current 3D view (scene cleanup hides grid / axes / gizmo / selection / plan annotations) and stamps the share code as a bottom-right watermark; the code is lz-string compressed (`lib/compression.ts`), copyable, paste-restorable (validated then `setScene`), and the last 20 codes are persisted to localStorage as history
+- **Furniture part models (v1.4.0)**: furniture is no longer a uniform cuboid — kinds are detected by name and assembled from procedural parts (bed / wardrobe / desk / sofa / chair / toilet / sink / fridge / TV cabinet / table / round table / bookcase / washer, `lib/furniturePresets.ts`); main parts use the furniture color, secondary parts a neutral tone, and key parts (headboard / cabinet doors / TV screen) a dark accent; **facing follows the wall the piece sits against** — the headboard sits on the long-axis end (middle of the short edge), cabinet doors / TV screen face into the room (the nearest wall is derived from the furniture's position inside its parent room at render time; for east/west walls the assembly is built with swapped dimensions + a 90° rotation so the footprint stays intact); parts are clamped horizontally to the L×W footprint and sit on the floor, so they follow property-panel / Gizmo edits automatically; unrecognized names fall back to a plain box, and new kinds can be added incrementally
 
 ## License
 
@@ -251,5 +252,5 @@ MIT — see the [LICENSE](LICENSE) file.
 ---
 
 **Last updated**: 2026-08-06
-**Doc version**: v1.12
+**Doc version**: v1.13
 **Maintainer**: JoyFish
