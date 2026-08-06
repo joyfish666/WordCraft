@@ -83,23 +83,23 @@ describe('useModelStore', () => {
   it('updateSelected 提交后把越墙字段约束进墙内', () => {
     useModelStore.getState().setScene(createSampleModel())
     useModelStore.getState().selectNode('bed-master')
-    // 床已旋转（半宽 0.75），主卧内缩后可活动 X ∈ [-2.6, -1.4]；-1 出界 → 拉到 -1.4
-    useModelStore.getState().updateSelected({ position: { x: -1 } })
+    // 床已旋转（半宽 0.75），主卧内缩后可活动 X ∈ [-1.6, 1.1]；-2 出界 → 拉到 -1.6
+    useModelStore.getState().updateSelected({ position: { x: -2 } })
     const bed = findNodeById(useModelStore.getState().scene!.root, 'bed-master')!
-    expect(bed.position.x).toBe(-1.4)
+    expect(bed.position.x).toBe(-1.6)
   })
 
   it('undo / redo 回退与重做编辑', () => {
     useModelStore.getState().setScene(createSampleModel())
     useModelStore.getState().selectNode('bed-master')
-    // 床已旋转（Z 半宽 1.0），可活动范围 [-0.35, 0.35]，取 0.2 在界内
-    useModelStore.getState().updateSelected({ position: { z: 0.2 } })
-    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBe(0.2)
+    // 床已旋转（Z 半宽 1.0），可活动范围 [2.0, 3.7]，取 2.5 在界内
+    useModelStore.getState().updateSelected({ position: { z: 2.5 } })
+    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBe(2.5)
     useModelStore.getState().undo()
-    // 撤销回到床的原始位置（现贴南墙 z=-0.35）
-    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBeCloseTo(-0.35, 5)
+    // 撤销回到床的原始位置（现贴北墙 z=2.0）
+    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBeCloseTo(2, 5)
     useModelStore.getState().redo()
-    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBe(0.2)
+    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBe(2.5)
   })
 
   it('translateSelected / resetSelectedPosition 每次调用记入历史', () => {
@@ -147,9 +147,9 @@ describe('useModelStore', () => {
     useModelStore.getState().setScene(createSampleModel())
     useModelStore.getState().selectNode('bed-master')
     // 把床移到界外（越墙）
-    useModelStore.getState().previewSelected({ position: { x: -0.5 } })
+    useModelStore.getState().previewSelected({ position: { x: -2 } })
     const bed = findNodeById(useModelStore.getState().scene!.root, 'bed-master')!
-    expect(bed.position.x).toBe(-0.5) // 拖拽中不约束
+    expect(bed.position.x).toBe(-2) // 拖拽中不约束
     expect(useModelStore.getState().past.length).toBe(0) // 不记历史
   })
 
@@ -167,11 +167,11 @@ describe('useModelStore', () => {
     useModelStore.getState().setScene(createSampleModel())
     const base = useModelStore.getState().scene
     useModelStore.getState().selectNode('bed-master')
-    useModelStore.getState().previewSelected({ position: { x: -0.5 } }) // 越墙
+    useModelStore.getState().previewSelected({ position: { x: -2 } }) // 越墙
     useModelStore.getState().commitDrag(base)
     const bed = findNodeById(useModelStore.getState().scene!.root, 'bed-master')!
-    // 床已旋转（半宽 0.75），主卧可活动 X ∈ [-2.6, -1.4]；-0.5 → 拉回 -1.4
-    expect(bed.position.x).toBe(-1.4)
+    // 床已旋转（半宽 0.75），主卧可活动 X ∈ [-1.6, 1.1]；-2 → 拉回 -1.6
+    expect(bed.position.x).toBe(-1.6)
     expect(useModelStore.getState().past.length).toBe(1)
     // 撤销回到拖拽前
     useModelStore.getState().undo()

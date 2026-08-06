@@ -12,16 +12,16 @@ import {
 const scene = createSampleModel()
 
 describe('houseBounds', () => {
-  it('整屋包围盒来自整屋节点尺寸（示例 7×4）', () => {
+  it('整屋包围盒来自整屋节点尺寸（示例 12.3×10）', () => {
     expect(houseBounds(scene)).toEqual({
-      minX: -3.5,
-      maxX: 3.5,
-      minZ: -2,
-      maxZ: 2,
+      minX: -6.15,
+      maxX: 6.15,
+      minZ: -5,
+      maxZ: 5,
       centerX: 0,
       centerZ: 0,
-      width: 7,
-      height: 4,
+      width: 12.3,
+      height: 10,
     })
   })
 })
@@ -40,27 +40,21 @@ describe('fmt / roomLabelText', () => {
 })
 
 describe('walkRooms', () => {
-  it('递归收集所有房间，含嵌套，siblingIndex 与 3D 配色一致', () => {
+  it('递归收集所有房间，含嵌套，深度优先', () => {
     const rooms = walkRooms(scene.root)
-    expect(rooms.map((r) => r.node.name)).toEqual(['走廊', '主卧', '客厅'])
-    expect(rooms.map((r) => r.siblingIndex)).toEqual([0, 1, 2])
-    expect(rooms.map((r) => r.depth)).toEqual([1, 1, 1])
-
-    // 含嵌套房间：主卧内加一个卫生间 → 深度 2
-    const nested = JSON.parse(JSON.stringify(scene)) as typeof scene
-    ;(nested.root.children[1] as { children: unknown[] }).children.push({
-      id: 'bath-master',
-      type: 'room',
-      name: '主卧卫生间',
-      dimensions: { length: 1.5, width: 1.5, height: 2.8 },
-      position: { x: -1, y: 1.4, z: -1 },
-      children: [],
-    })
-    const all = walkRooms(nested.root)
-    // 深度优先：推入主卧后立即递归，卫生间排在客厅之前
-    expect(all).toHaveLength(4)
-    expect(all.map((r) => r.node.name)).toEqual(['走廊', '主卧', '主卧卫生间', '客厅'])
-    expect(all[2]).toMatchObject({ node: { name: '主卧卫生间' }, siblingIndex: 2, depth: 2 })
+    expect(rooms.map((r) => r.node.name)).toEqual([
+      '走廊',
+      '客厅',
+      '厨房',
+      '餐厅',
+      '主卧',
+      '主卧卫生间',
+      '次卧',
+      '公共卫生间',
+    ])
+    expect(rooms.map((r) => r.depth)).toEqual([1, 1, 1, 1, 1, 2, 1, 1])
+    // 嵌套卫生间深度 2（随父房间之后立即递归）
+    expect(rooms[5]).toMatchObject({ node: { name: '主卧卫生间' }, depth: 2 })
   })
 })
 
@@ -69,12 +63,12 @@ describe('dimensionLines', () => {
     const bounds = houseBounds(scene)
     const lines = dimensionLines(bounds, { y: 3.5 })
     expect(lines).toHaveLength(2)
-    expect(lines[0].label).toBe('总长 7m')
-    expect(lines[0].from).toEqual([-3.5, 3.5, -2.6])
-    expect(lines[0].to).toEqual([3.5, 3.5, -2.6])
-    expect(lines[1].label).toBe('总宽 4m')
-    expect(lines[1].from).toEqual([4.1, 3.5, -2])
-    expect(lines[1].to).toEqual([4.1, 3.5, 2])
+    expect(lines[0].label).toBe('总长 12.3m')
+    expect(lines[0].from).toEqual([-6.15, 3.5, -5.6])
+    expect(lines[0].to).toEqual([6.15, 3.5, -5.6])
+    expect(lines[1].label).toBe('总宽 10m')
+    expect(lines[1].from).toEqual([6.75, 3.5, -5])
+    expect(lines[1].to).toEqual([6.75, 3.5, 5])
   })
 })
 
@@ -83,8 +77,8 @@ describe('computePlanCamera', () => {
     const spec = computePlanCamera(houseBounds(scene), { width: 800, height: 600 })
     expect(spec.position).toEqual([0, 60, 0])
     expect(spec.target).toEqual([0, 0, 0])
-    const fitX = 7 + 2
-    const fitZ = 4 + 2
+    const fitX = 12.3 + 2
+    const fitZ = 10 + 2
     expect(spec.zoom).toBeCloseTo(Math.min(800 / fitX, 600 / fitZ) * 0.9, 5)
   })
 

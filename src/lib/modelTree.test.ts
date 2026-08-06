@@ -24,8 +24,8 @@ describe('modelTree', () => {
   })
 
   it('countNodes 统计全部模块', () => {
-    // 整屋 + 3 房间（含走廊） + 4 家具
-    expect(countNodes(scene.root)).toBe(8)
+    // 整屋 + 走廊 + 6 房间 + 内嵌卫生间 + 18 家具
+    expect(countNodes(scene.root)).toBe(27)
   })
 
   it('updateNodePosition 不可变更新指定节点', () => {
@@ -77,10 +77,10 @@ describe('modelTree', () => {
     }
     const normalized = normalizeContainment(sceneOut)
     const bed = findNodeById(normalized.root, 'bed-master')!
-    // 示例床已旋转为 1.5×2.0（半宽 0.75），可活动范围：x ∈ [-3.35+0.75, -0.65-0.75] = [-2.6, -1.4]
-    // 床现贴南墙（z=-0.35，短边靠墙），仅 x 被拉回
-    expect(bed.position.x).toBe(-2.6)
-    expect(bed.position.z).toBeCloseTo(-0.35, 5)
+    // 示例床已旋转为 1.5×2.0（半宽 0.75），可活动范围：x ∈ [-2.35+0.75, 1.85-0.75] = [-1.6, 1.1]
+    // 床现贴北墙（z=2.0），仅 x 被拉回
+    expect(bed.position.x).toBe(-1.6)
+    expect(bed.position.z).toBeCloseTo(2, 5)
   })
 
   it('父房间内嵌套子房间：家具被推出其占地（真·内嵌）', () => {
