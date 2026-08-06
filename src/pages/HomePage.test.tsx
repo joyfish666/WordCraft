@@ -3,10 +3,12 @@ import { forwardRef } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChatGenerationError, generateModelFromChat } from '../lib/chat'
+import { encodeShareCode } from '../lib/compression'
 import { createSampleModel } from '../lib/sampleModel'
 import { useChatStore } from '../store/useChatStore'
 import { useModelStore } from '../store/useModelStore'
 import { useProjectStore } from '../store/useProjectStore'
+import { useShareStore } from '../store/useShareStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { HomePage } from './HomePage'
 
@@ -33,6 +35,7 @@ function resetStores() {
   useChatStore.setState({ messages: [], isGenerating: false, generationStack: [] })
   useModelStore.setState({ scene: null, selectedId: null })
   useProjectStore.setState({ currentId: null, currentName: null, dirty: false })
+  useShareStore.setState({ records: [] })
   useSettingsStore.setState({
     apiKeys: [],
     activeKeyId: null,
@@ -164,5 +167,58 @@ describe('HomePage 对话交互', () => {
     fireEvent.click(screen.getByRole('button', { name: '项目库' }))
     expect(await screen.findByRole('heading', { name: '本地项目库' })).toBeInTheDocument()
     expect(await screen.findByText(/暂无项目/)).toBeInTheDocument()
+  })
+
+  it('工具栏「分享」按钮打开分享对话框并记录口令', async () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '加载示例' }))
+    fireEvent.click(screen.getByRole('button', { name: '分享' }))
+    expect(await screen.findByRole('heading', { name: '分享与口令' })).toBeInTheDocument()
+    // 口令输入框已生成；历史记录写入一条
+    expect(document.querySelector('.share-code .input')).not.toBeNull()
+    expect(useShareStore.getState().records).toHaveLength(1)
+  })
+
+  it('无模型时「分享」按钮仍可用，打开对话框供粘贴口令还原', async () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    // 未加载任何模型：分享按钮可用（用于导入他人模型）
+    expect(screen.getByRole('button', { name: '分享' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: '分享' }))
+    expect(await screen.findByRole('heading', { name: '分享与口令' })).toBeInTheDocument()
+    expect(await screen.findByText(/当前无模型/)).toBeInTheDocument()
+    // 无模型不写入口令历史
+    expect(useShareStore.getState().records).toHaveLength(0)
+  })
+
+  it('分享口令可粘贴还原模型', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const code = encodeShareCode(JSON.stringify(createSampleModel()))
+    useModelStore.setState({ scene: createSampleModel() })
+
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '分享' }))
+    await screen.findByRole('heading', { name: '分享与口令' })
+
+    const input = screen.getByPlaceholderText(/粘贴分享口令/)
+    fireEvent.change(input, { target: { value: code } })
+    // 粘贴区与历史列表各有「还原」按钮，取第一个（粘贴区）
+    fireEvent.click(screen.getAllByRole('button', { name: '还原' })[0])
+
+    await waitFor(() => {
+      expect(useModelStore.getState().scene?.root.name).toBe('示例小屋')
+    })
+    confirmSpy.mockRestore()
   })
 })

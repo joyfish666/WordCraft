@@ -82,11 +82,13 @@ Implemented in two phases to balance precision and intuitiveness:
 - **Advantage**: CAD-like habits, satisfying hard requirements for precise dimension design
 - **Extras**: position nudging with an adjustable step (0.1 / 0.5 / 1 m), a "reset position" that returns to the load-time snapshot, and **undo / redo** (toolbar buttons or Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z)
 
-#### Phase 2: Gizmo Assistance (V2.0 iteration - intuitive interaction)
-- **Trigger**: After selecting a module, a 3D coordinate gizmo appears at its center
-- **Interface**: Manipulation handles based on TransformControls
-- **Function**: Drag arrows to move objects, drag boxes to resize
-- **Data linkage**: While dragging, Zustand global state updates in real time, and the property panel reflects the values
+#### Phase 2: Gizmo Assistance (V2.0 iteration - intuitive interaction) ✅ implemented (v1.3)
+- **Trigger**: After selecting a room / furniture module, a 3D transform gizmo appears at its center
+- **Interface**: Manipulation handles based on TransformControls (drei)
+- **Function**: Drag arrows to move objects (translate), drag boxes to resize (scale)
+- **Mode toggle**: "Gizmo" segmented control at the top of the property panel switches Move / Scale
+- **Data linkage**: Store updates in real time during drag (preview, no history); one undo step is recorded on drag end, then clamped into walls; the property panel stays in sync
+- **Boundary**: Rooms and furniture only (the house is excluded); hidden in the 2D plan mode; no rotate mode (the renderer models rotation as a length/width swap)
 
 ### Model Management
 
@@ -102,17 +104,17 @@ Implemented in two phases to balance precision and intuitiveness:
 - Export raw JSON for secondary development
 - Export standardized model description text
 
-### Sharing & Collaboration
+### Sharing & Collaboration ✅ implemented (v1.3)
 
 #### Screenshot Sharing
-- **One-click screenshot**: Generate a high-resolution PNG from the current 3D view
-- **Smart watermark**: The share code or QR is auto-attached to the bottom-right
-- **Scene cleanup**: Auxiliary elements (grid, gizmo, selection box) are auto-hidden during capture
+- **One-click screenshot**: The "Share" toolbar button (**always enabled**) generates a high-resolution PNG (up to 2× DPR) from the current 3D view
+- **Smart watermark**: The share code is auto-attached to the bottom-right (semi-transparent text)
+- **Scene cleanup**: Auxiliary elements (grid, axes, gizmo, selection box, plan annotations) are auto-hidden during capture
 
 #### Code Mechanism
-- Compress JSON into a short code with lz-string
-- Pasting a code fully restores the model
-- Copy and history support
+- Compress JSON into a short code with lz-string (`lib/compression.ts`)
+- Pasting a code fully restores the model (validated, then `setScene`); **the dialog is reachable even with no local model** (the button does not depend on a scene) so you can paste a code to **import** someone else's model
+- Copy, paste-restore, and **history** support (last 20 codes, persisted to localStorage)
 
 ### Settings
 
@@ -188,9 +190,10 @@ Implemented in two phases to balance precision and intuitiveness:
 - [x] Release v1.0.0 (GitHub Pages: https://joyfish666.github.io/WordCraft/)
 
 ### Phase 3: Experience Optimization V2.0
-- [ ] Gizmo-assisted editing (TransformControls)
-- [ ] Data linkage (drag ↔ property panel)
-- [ ] Screenshot sharing
+- [x] Gizmo-assisted editing (TransformControls) ✅ implemented (v1.3, translate/scale handles)
+- [x] Data linkage (drag ↔ property panel) ✅ implemented (live store writes during drag)
+- [x] Screenshot sharing ✅ implemented (v1.3, purified capture + code watermark)
+- [x] Share-code mechanism (lz-string compress / paste-restore / history) ✅ implemented (v1.3)
 - [ ] Performance & UX optimization
 - [ ] Documentation & examples
 - [ ] Release v2.0.0
@@ -231,6 +234,9 @@ Beyond the checked roadmap items above:
 - **Undo generation (conversation)**: when a multi-turn modification isn't to your liking, the chat header "撤销生成" reverts the scene to before that generation and removes the corresponding messages (session-only snapshot stack, cap 20); failed generations are not recorded
 - **Part selection fix**: the house wireframe box and the room selection outline no longer take part in raycasting — you can select furniture inside a selected room directly, and the focus state is no longer cleared by accident
 - **Bilingual UI (v1.2.0)**: the "EN / 中文" button on the Home toolbar (top-right) and the Settings page header switches the interface language with one click and persists it; covers the toolbar / chat / settings / help / property panel / project library / status bar / debug panel / error messages / 2D-plan dimension labels; the page title and `html lang` follow. **Generated data is not translated** — room/furniture names are produced by the LLM per its prompt (classifiers are Chinese-vocabulary), and the sample model / saved projects keep their content as-is
+- **True embedded nested rooms (v1.3.0)**: nested sub-rooms (e.g. an en-suite bathroom) are no longer an independent box with double walls on lines shared with the parent — faces collinear with and covered by any already-rendered wall are left open (enclosed by the outer wall), the remaining faces are interior partition walls, and the door opens toward the parent's center; `normalizeContainment` also pushes parent-room furniture (incl. manual edits) out of the nested footprint, so the parent's usable space truly excludes it
+- **Gizmo editing (v1.3.0)**: selecting a room / furniture shows a 3D transform gizmo (drei TransformControls); the property panel toggles Move / Scale; drag previews in real time (no history, no constraint), and on drag end one undo step is recorded and the result is clamped inside walls; the property panel stays in sync; hidden in the 2D plan mode
+- **Screenshot share + share code (v1.3.0)**: the toolbar "Share" button captures a high-resolution PNG from the current 3D view (scene cleanup hides grid / axes / gizmo / selection / plan annotations) and stamps the share code as a bottom-right watermark; the code is lz-string compressed (`lib/compression.ts`), copyable, paste-restorable (validated then `setScene`), and the last 20 codes are persisted to localStorage as history
 
 ## License
 

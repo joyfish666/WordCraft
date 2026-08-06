@@ -110,6 +110,8 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
   const resetSelectedPosition = useModelStore((s) => s.resetSelectedPosition)
   const stepSize = useModelStore((s) => s.stepSize)
   const setStepSize = useModelStore((s) => s.setStepSize)
+  const gizmoMode = useModelStore((s) => s.gizmoMode)
+  const setGizmoMode = useModelStore((s) => s.setGizmoMode)
   const initialPositions = useModelStore((s) => s.initialPositions)
   const t = useT()
 
@@ -133,6 +135,29 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
           ×
         </Button>
       </header>
+
+      {/* Gizmo 手柄模式：移动 / 缩放（房间与家具均可 Gizmo 编辑，整屋不支持） */}
+      {node.type !== 'house' && (
+        <div className="prop-panel__section">
+          <span className="prop-panel__section-title">{t('property.gizmoMode')}</span>
+          <div className="segmented">
+            <button
+              type="button"
+              className={`segmented__btn ${gizmoMode === 'translate' ? 'segmented__btn--active' : ''}`}
+              onClick={() => setGizmoMode('translate')}
+            >
+              {t('property.gizmoTranslate')}
+            </button>
+            <button
+              type="button"
+              className={`segmented__btn ${gizmoMode === 'scale' ? 'segmented__btn--active' : ''}`}
+              onClick={() => setGizmoMode('scale')}
+            >
+              {t('property.gizmoScale')}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="prop-field">
         <span className="prop-field__label">{t('property.name')}</span>

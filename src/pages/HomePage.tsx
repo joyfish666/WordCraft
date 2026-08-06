@@ -4,17 +4,21 @@ import { HelpDialog } from '../components/ui/HelpDialog'
 import { Button } from '../components/ui/Button'
 import { LanguageToggle } from '../components/ui/LanguageToggle'
 import { ProjectLibraryDialog } from '../components/ui/ProjectLibraryDialog'
+import { ShareDialog } from '../components/ui/ShareDialog'
 import { PropertyPanel } from '../components/viewport/PropertyPanel'
 import { SceneViewer, type SceneViewerHandle } from '../components/viewport/SceneViewer'
 import { getProject, updateProject } from '../db/database'
 import { useT } from '../i18n'
 import { ChatGenerationError, generateModelFromChat } from '../lib/chat'
+import { encodeShareCode } from '../lib/compression'
 import { clearDebug, useDebugEntries, type DebugEntry } from '../lib/debugLog'
 import { countNodes, getPathToNode, isContainer } from '../lib/modelTree'
 import { createSampleModel } from '../lib/sampleModel'
+import { withWatermark } from '../lib/watermark'
 import { toChatHistory, useChatStore, type ChatMessageItem } from '../store/useChatStore'
 import { useModelStore } from '../store/useModelStore'
 import { useProjectStore } from '../store/useProjectStore'
+import { useShareStore } from '../store/useShareStore'
 import { getActiveApiConfig, useSettingsStore } from '../store/useSettingsStore'
 import type { ModelNode, SceneModel } from '../types/model'
 
@@ -83,6 +87,9 @@ export function HomePage() {
   const [helpOpen, setHelpOpen] = useState(false)
   const [debugOpen, setDebugOpen] = useState(true)
   const [projectDialogOpen, setProjectDialogOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareCode, setShareCode] = useState<string | null>(null)
+  const [shareShot, setShareShot] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'3d' | 'plan'>('3d')
   const planMode = viewMode === 'plan'
   const logRef = useRef<HTMLDivElement>(null)
@@ -299,6 +306,33 @@ export function HomePage() {
     useProjectStore.getState().setProject(id, name)
   }
 
+  /** 分享 / 导入：有模型时生成口令 + 截图水印并记录历史；无模型时仅打开对话框供粘贴口令还原 */
+  const handleShare = async () => {
+    const s = useModelStore.getState().scene
+    if (s) {
+      const code = encodeShareCode(JSON.stringify(s))
+      const shot = (await viewportRef.current?.captureScreenshot?.()) ?? null
+      const watermarked = shot ? await withWatermark(shot, code) : null
+      setShareCode(code)
+      setShareShot(watermarked)
+      useShareStore.getState().addRecord({ name: s.root.name, code })
+    } else {
+      // 无模型：仍可打开对话框，粘贴他人口令导入模型
+      setShareCode(null)
+      setShareShot(null)
+    }
+    setShareOpen(true)
+  }
+
+  /** 从分享口令还原模型：未保存守卫 → setScene，成为游离场景（不属于任何项目） */
+  const restoreFromShare = (model: SceneModel) => {
+    if (!confirmDiscardUnsaved(true)) return
+    setScene(model)
+    useProjectStore.getState().clearProject()
+    useChatStore.getState().clearGenerationHistory()
+    lastSavedJsonRef.current = null
+  }
+
   /** 撤销最近一次生成：恢复生成前的场景，并移除对话中对应的 user+assistant 对 */
   const undoGeneration = () => {
     const prev = useChatStore.getState().undoLastGeneration()
@@ -353,6 +387,9 @@ export function HomePage() {
           </Button>
           <Button variant="ghost" onClick={() => setProjectDialogOpen(true)}>
             {t('home.library')}
+          </Button>
+          <Button variant="ghost" onClick={() => void handleShare()} title={t('share.title')}>
+            {t('home.share')}
           </Button>
           <Button variant="ghost" onClick={() => setHelpOpen(true)}>
             {t('home.help')}
@@ -597,6 +634,13 @@ export function HomePage() {
         onClose={() => setProjectDialogOpen(false)}
         onOpenProject={(id, name) => void handleOpenProject(id, name)}
         onProjectCreated={handleProjectCreated}
+      />
+      <ShareDialog
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        code={shareCode}
+        screenshot={shareShot}
+        onRestore={restoreFromShare}
       />
     </div>
   )

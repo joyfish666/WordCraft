@@ -2,7 +2,7 @@
 
 > 面向下一个接手 agent / 开发者。本文档补充 README 与技术文档未涉及之处：项目现状、关键实现坑、运行调试方式、下一步建议。
 
-**交接日期**：2026-08-06 · 当前分支 `main`（v1.2.0 已发布并推送 GitHub）
+**交接日期**：2026-08-06 · 当前分支 `main`（v1.2.0 已发布并推送 GitHub；v1.3.0 三大功能已完成，未发布/未推送）
 
 ## 1. 交接总览
 
@@ -22,6 +22,9 @@
 - ✅ **本地项目库（v1.1.0）**：Dexie 接入 UI，工具栏「保存/项目库」，新建/打开/重命名/删除，未保存守卫
 - ✅ **2D 俯视平面图（v1.1.0）**：同 Canvas 正交俯视相机，房间标签 + 外廓尺寸线，与 3D 选中/聚焦联动
 - ✅ **中英双语切换（v1.2.0）**：首页工具栏 + 设置页标题行的「EN / 中文」按钮一键切换 + 持久化；UI 界面层全覆盖，生成数据不翻译（见坑 27/28）
+- ✅ **真·内嵌嵌套房间（v1.3.0）**：嵌套房间与父墙共线处不再重复渲染（`computeAllWallPlans`/`nestedWallPlan` 全量墙线并集查询，见坑 29）；父房间家具（含手动编辑）推出嵌套占地
+- ✅ **Gizmo 辅助编辑（v1.3.0）**：TransformControls 移动/缩放手柄 + 属性面板模式切换 + 拖拽实时联动（preview/commitDrag，见坑 30）
+- ✅ **截图分享 + 口令（v1.3.0）**：场景净化截图（preserveDrawingBuffer + screenshotMode）+ 口令水印 + 复制/粘贴还原/历史（见坑 31）
 
 **先读**：`README-zh.md`（功能）、`docs/architecture.md`（架构）→ 再读本文档（坑与细节）。
 
@@ -87,31 +90,33 @@ npm run build
 26. **撤销生成用生成前快照栈（会话内）**：`useChatStore.generationStack`，生成成功前 `pushGenerationHistory(prevScene)`，`undoLastGeneration()` 弹快照 + 删最后 user+assistant 对并返回场景（HomePage `setScene` 恢复）。`clearGenerationHistory` 在 加载示例/清空场景/打开项目/清空对话 时调用。生成失败不记录；仅当最后一条是携带模型的助手消息才允许撤销。
 27. **i18n 范围边界（重要）**：`src/i18n/translations.ts` 只翻译 **UI 界面层**。**生成数据不翻译**——LLM 系统提示词保持中文，`roomGeometry`/`furniturePlacement` 的房间/家具分类器是中文词表（`ROOM_TYPE_RE`、`FREE_STANDING_RE` 等），若英文房间名生成会破坏走廊/开放/私密房/家具贴墙分类。改分类器/提示词做多语言前，别期望英文房间名能正确分类。示例模型名、已保存项目内容保持原样。切换按钮在 `components/ui/LanguageToggle.tsx`（首页工具栏右侧 + 设置页标题行）；语言存 `useSettingsStore.language`（persist version 3）。
 28. **i18n 实现要点**：组件用 `useT()`（响应式）、lib 抛错用 `t()`（非响应式读 store，无循环依赖）；`t()` 的 `{}` 插值用 `split/join`（目标是 ES2020，无 `replaceAll`）。`translations.ts` 的 zh 为 key 真源、en 用 `Record<TKey,string>`，`translations.test.ts` 断言两语言 key 集合一致。2D 尺寸线标签走 `planGeometry.dimensionLines(bounds, { y, lang })`（保持纯函数）。
-25. **R3F 射线命中按距离排序、逐个派发直到 stopPropagation**：房屋线框盒（整屋最高的盒）与房间选中轮廓盒（横跨房间体积、高于家具）若不排除，会先被命中并冒泡到房间 group（`stopPropagation`），导致"选中房间后点不到内部部件"。修复：两个盒都加 `raycast={() => null}`；空白处取消选中改由 Canvas `onPointerMissed` 兜底（原房屋线框盒的 onClick 已移除）。
-26. **撤销生成用生成前快照栈（会话内）**：`useChatStore.generationStack`，生成成功前 `pushGenerationHistory(prevScene)`，`undoLastGeneration()` 弹快照 + 删最后 user+assistant 对并返回场景（HomePage `setScene` 恢复）。`clearGenerationHistory` 在 加载示例/清空场景/打开项目/清空对话 时调用。生成失败不记录；仅当最后一条是携带模型的助手消息才允许撤销。
+29. **嵌套墙覆盖判定要容忍浮点贴边**：平铺/平移会把坐标弄出 ~1e-13 噪声（如 `3.0000000000000004`），墙线差会算成 `0.15000000000000036` 而**恰好略大于 `WALL_THICKNESS`(0.15)**，被误判"不共线"导致嵌套墙漏覆盖（双重墙）。`nestedWallPlan` 的行比较用 `WALL_THICKNESS + 1e-6`；段切分后用 `cleanSegments` 去掉 `to-from < 1e-6` 的浮点微段并合并相邻同类型段（否则 `shared` 判定与 `fullyOpen` 失败）。
+30. **Gizmo 拖拽必须"预览不记历史 + 结束一次性 commit"**：直接复用 `updateSelected`/`translateSelected` 会每帧 `pushPast` 刷爆撤销栈、且 `normalizeContainment` 每帧回弹导致手柄抖动。方案：`previewSelected(patch)` 拖拽中只更新 scene 不记历史不约束；`onMouseDown` 记 `baseScene`，`onMouseUp` 调 `commitDrag(baseScene)`（压入历史恰好一步 + normalize）。代理 group 作 TransformControls 的 `object`（`object={ref}`，drei 的 `useLayoutEffect` 读 `object.current`），避免与 R3F 对 mesh `position` prop 的管理冲突；家具代理 y 要 +`FLOOR_THICKNESS`（mesh 中心抬了地板厚），回写时还原。drei 内部 `dragging-changed` 自动禁用 OrbitControls，无需手动。缩放手柄：以拖拽开始时的基准尺寸 × 代理 scale，写 `dimensions`（渲染器不读 scale 字段），下限 0.1。
+31. **截图三件套**：① Canvas 必须 `gl={{ preserveDrawingBuffer: true }}` 否则 `toDataURL()` 读不到缓冲（空白）；② 场景净化用 `useModelStore.screenshotMode`，置 true 后**等两帧 rAF** 让 React 应用隐藏（网格/坐标轴/房屋线框/选中轮廓/Edges/Gizmo/平面图标注）再 `gl.domElement.toDataURL('image/png')`，最后复位；③ jsdom 无 WebGL、mock 的 SceneViewer 无 `captureScreenshot`，HomePage 调用须用 `viewportRef.current?.captureScreenshot?.()`（`?.` 守卫方法本身）。口令历史 `useShareStore` 只持久化 records（上限 20），还原校验 `version===1 && root.type==='house'`。
 
 ## 5. 已知限制 / 未实现
 
-- **嵌套房间是"父内独立外壳"**，不是真正在父房间墙内再划分（卫生间与卧室共享地板，靠内部墙+门分隔）。若要"真·内嵌"，需引擎支持父房间内再划分子空间。
+- ~~**嵌套房间是"父内独立外壳"（双重墙）**~~ ✅ v1.3 真·内嵌：与父墙共线处不再重复渲染、父家具推出嵌套占地。**仍保留的限制**：父房间地板是整块的（嵌套房间地板叠在其上，靠 `floorLift` 防闪烁），不是真正挖出 L 形地板；两个嵌套房间共用内隔墙时只处理一半（后处理者看到先处理者的墙）。
 - ~~**2D 俯视视图**未实现~~ ✅ 已实现（v1.1，同 Canvas 正交俯视，坑见第 4 节 21/24）。
-- **Gizmo 辅助编辑**未实现（Phase 3，TransformControls）。属性面板（Phase 2 阶段一）已实现。
-- **手动编辑不触发重排**：改房间尺寸/位置不会重跑布局引擎，共享墙方案可能与该房间邻居错位（见第 4 节坑 15）。
+- ~~**Gizmo 辅助编辑**未实现~~ ✅ 已实现（v1.3，TransformControls 移动/缩放，坑见第 4 节 30）。
+- **手动编辑不触发重排**：改房间尺寸/位置不会重跑布局引擎，共享墙方案可能与该房间邻居错位（见第 4 节坑 15）。Gizmo 拖动房间/缩放同理。
 - **家具-家具避让是"贪心顺序"**：生成时常理按 children 顺序逐个放置并避让已放置家具，非全局最优，极端情况下仍可能贴边。属性面板手动编辑不会再触发常理（改后可能叠到其他家具/门口，属手动编辑的自由）。
-- **属性面板编辑不避让门口/嵌套房间**：`normalizeContainment` 只约束进父房间外边界；手动把家具移进卫生间或门口不会弹开（生成时的 `applyFurnitureConventions` 才会避让）。
+- **属性面板/Gizmo 编辑不避让门口**：`normalizeContainment` 只约束进父房间外边界与推出嵌套占地；手动把家具移进门口不会弹开（生成时的 `applyFurnitureConventions` 才会避让）。
 - ~~**本地项目库**未接入 UI~~ ✅ 已实现（v1.1，手动保存模式；README 原说的"自动保存"按用户要求改为手动保存 + 未保存守卫）。
-- **截图分享、口令**未实现（Phase 3）。
+- ~~**截图分享、口令**未实现~~ ✅ 已实现（v1.3，坑见第 4 节 31；口令历史仅存 code，不存缩略图）。
 - **LLM 输出质量依赖提示词**（当前 DeepSeek v4-flash）。多轮修改、家具常理摆放等依赖 LLM 遵循度，必要时可加代码级兜底。
-- 测试环境 jsdom 无 WebGL：`HomePage.test.tsx` mock 了 `SceneViewer`，测试 R3F 渲染相关改动注意。
+- 测试环境 jsdom 无 WebGL：`HomePage.test.tsx` mock 了 `SceneViewer`，测试 R3F 渲染相关改动注意；`captureScreenshot` 在 mock 下不存在（HomePage 用 `?.()` 防御）。
 
 ## 6. 给下一个 agent 的建议
 
 1. **先跑 `npm run dev` + `npm test`**，加载示例模型熟悉渲染；再开调试模式跑一次生成，看日志理解数据流。
-2. **下一步优先级**（本地项目库与 2D 平面图已落地）：
-   - **截图分享 + 口令**（README Phase 3 核心特性，`lz-string` 已装；截图用 R3F Canvas 快照）
-   - **Gizmo 辅助编辑**（TransformControls，`@react-three/drei` 已装；属性面板已覆盖核心编辑需求，Gizmo 属加分交互）
+2. **下一步优先级**（真·内嵌 / Gizmo / 截图分享+口令 已落地 v1.3）：
    - **移动端基础适配**（Phase 2 未勾选项）
-   - 2D 平面图后续可加：家具足迹显示、门洞开启符号、房间尺寸标注（当前仅标签 + 外廓总尺寸）
-3. **改墙体/门相关代码前**，先看第 4 节的坑，尤其东西墙旋转和门段渲染。
+   - **2D 平面图增强**：家具足迹显示、门洞开启符号、房间尺寸标注（当前仅标签 + 外廓总尺寸）
+   - **优化性能与体验**（Phase 3 剩余项：`preserveDrawingBuffer` 有轻微性能开销，可评估按需截图）
+   - **数据导出**（README 功能规范列了"导出原始 JSON / 标准化描述文本"，尚未实现）
+   - 若做口令二维码水印：README 提到"口令或二维码"，当前仅口令文本水印
+3. **改墙体/门相关代码前**，先看第 4 节的坑，尤其东西墙旋转、门段渲染与嵌套墙覆盖判定（坑 29）。
 4. **加功能时保持"语义/几何分离"**：让 LLM 出语义，代码算几何；不要回到"LLM 直接给绝对坐标"。
 5. **用户原则**：一切以用户明确要求为主，未明确才按常理；除入户门外不要擅自固定其他内容。
 
@@ -133,3 +138,6 @@ npm run build
 | 项目库 UI/保存/守卫 | `components/ui/ProjectLibraryDialog.tsx` + `pages/HomePage.tsx`（`handleSave`/`handleOpenProject`/`confirmDiscardUnsaved`/脏标记 effect）、`db/database.ts`、`store/useProjectStore.ts` |
 | 2D 平面图（取景/标注） | `lib/planGeometry.ts`（纯函数）、`components/viewport/PlanRig.tsx`、`PlanAnnotations.tsx`、`SceneViewer.tsx`（`planMode` 相机切换） |
 | 共享配色（2D/3D 一致） | `lib/palette.ts`（`roomFaceColor`） |
+| 嵌套房间分隔墙（真·内嵌） | `lib/roomGeometry.ts`（`computeAllWallPlans`/`nestedWallPlan`）+ `Viewport3D.tsx`（换入口）、`lib/modelTree.ts`（`containChildren` 推出嵌套占地） |
+| Gizmo 编辑 | `components/viewport/GizmoControls.tsx` + `SceneViewer.tsx`（挂载）、`PropertyPanel.tsx`（模式切换）、`store/useModelStore.ts`（`gizmoMode`/`previewSelected`/`commitDrag`） |
+| 截图分享/口令 | `components/ui/ShareDialog.tsx` + `pages/HomePage.tsx`（`handleShare`/`restoreFromShare`）、`SceneViewer.tsx`（`captureScreenshot`/`ScreenshotBridge`）、`lib/watermark.ts`、`lib/compression.ts`、`store/useShareStore.ts` |

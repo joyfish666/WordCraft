@@ -28,6 +28,7 @@ export const zh = {
   'home.saveTitleDirty': '保存到本地项目库（有未保存的修改）',
   'home.saveTitle': '保存到本地项目库',
   'home.library': '项目库',
+  'home.share': '分享',
   'home.help': '操作说明',
   'home.backToHouse': '返回整屋',
   'home.apiOk': 'API Key 已配置',
@@ -195,10 +196,33 @@ export const zh = {
   'property.typeRoom': '房间',
   'property.typeFurniture': '家具',
   'property.typeWall': '墙体',
+  'property.gizmoMode': 'Gizmo 手柄',
+  'property.gizmoTranslate': '移动',
+  'property.gizmoScale': '缩放',
 
   // ---------- 2D 平面图 ----------
   'plan.length': '总长 {width}m',
   'plan.width': '总宽 {height}m',
+
+  // ---------- 分享与口令 ----------
+  'share.title': '分享与口令',
+  'share.screenshotAlt': '场景截图预览',
+  'share.captureFailed': '截图失败，仍可复制口令分享',
+  'share.noModel': '当前无模型。粘贴分享口令即可还原他人模型。',
+  'share.codeLabel': '分享口令',
+  'share.copy': '复制口令',
+  'share.copied': '已复制',
+  'share.restoreTitle': '粘贴口令还原',
+  'share.placeholder': '粘贴分享口令…',
+  'share.restore': '还原',
+  'share.invalid': '口令无效，无法还原模型',
+  'share.restored': '模型已还原',
+  'share.historyTitle': '历史口令',
+  'share.empty': '暂无历史口令。分享当前模型后口令会记录在此。',
+  'share.unnamed': '未命名模型',
+  'share.delete': '删除',
+  'share.deleteConfirm': '删除这条历史口令吗？',
+  'share.close': '关闭',
 
   // ---------- 错误消息 ----------
   'error.httpRequestFailed': '模型请求失败：{detail}。可在设置页点「检测连通性」定位问题。',
@@ -240,6 +264,7 @@ export const en: Record<TKey, string> = {
   'home.saveTitleDirty': 'Save to project library (unsaved changes)',
   'home.saveTitle': 'Save to project library',
   'home.library': 'Projects',
+  'home.share': 'Share',
   'home.help': 'Help',
   'home.backToHouse': 'Back to house',
   'home.apiOk': 'API Key configured',
@@ -411,10 +436,33 @@ export const en: Record<TKey, string> = {
   'property.typeRoom': 'Room',
   'property.typeFurniture': 'Furniture',
   'property.typeWall': 'Wall',
+  'property.gizmoMode': 'Gizmo',
+  'property.gizmoTranslate': 'Move',
+  'property.gizmoScale': 'Scale',
 
   // ---------- 2D plan ----------
   'plan.length': 'Length {width}m',
   'plan.width': 'Width {height}m',
+
+  // ---------- Share & code ----------
+  'share.title': 'Share & Code',
+  'share.screenshotAlt': 'Scene screenshot preview',
+  'share.captureFailed': 'Screenshot failed — you can still copy the code',
+  'share.noModel': 'No model yet. Paste a share code to restore one.',
+  'share.codeLabel': 'Share code',
+  'share.copy': 'Copy code',
+  'share.copied': 'Copied',
+  'share.restoreTitle': 'Restore from code',
+  'share.placeholder': 'Paste a share code…',
+  'share.restore': 'Restore',
+  'share.invalid': 'Invalid code — could not restore model',
+  'share.restored': 'Model restored',
+  'share.historyTitle': 'Code history',
+  'share.empty': 'No saved codes yet. Codes are recorded after you share a model.',
+  'share.unnamed': 'Unnamed model',
+  'share.delete': 'Delete',
+  'share.deleteConfirm': 'Delete this saved code?',
+  'share.close': 'Close',
 
   // ---------- Errors ----------
   'error.httpRequestFailed':
