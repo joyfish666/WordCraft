@@ -10,6 +10,8 @@ beforeEach(() => {
     selectedId: null,
     focusId: null,
     stepSize: 0.5,
+    gizmoMode: 'translate',
+    screenshotMode: false,
     initialPositions: {},
     past: [],
     future: [],
@@ -130,6 +132,58 @@ describe('useModelStore', () => {
     useModelStore.getState().setScene(createSampleModel())
     useModelStore.getState().selectNode('bed-master')
     useModelStore.getState().updateSelected({})
+    expect(useModelStore.getState().past.length).toBe(0)
+  })
+
+  it('gizmoMode / screenshotMode 可独立设置（会话内不持久化）', () => {
+    useModelStore.getState().setGizmoMode('scale')
+    useModelStore.getState().setScreenshotMode(true)
+    expect(useModelStore.getState().gizmoMode).toBe('scale')
+    expect(useModelStore.getState().screenshotMode).toBe(true)
+  })
+
+  it('previewSelected 实时预览不记历史、不约束', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('bed-master')
+    // 把床移到界外（越墙）
+    useModelStore.getState().previewSelected({ position: { x: -0.5 } })
+    const bed = findNodeById(useModelStore.getState().scene!.root, 'bed-master')!
+    expect(bed.position.x).toBe(-0.5) // 拖拽中不约束
+    expect(useModelStore.getState().past.length).toBe(0) // 不记历史
+  })
+
+  it('previewSelected 未选中 / 空补丁不产生新场景', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    const scene = useModelStore.getState().scene
+    useModelStore.getState().previewSelected({})
+    expect(useModelStore.getState().scene).toBe(scene)
+    useModelStore.getState().selectNode(null)
+    useModelStore.getState().previewSelected({ position: { x: 1 } })
+    expect(useModelStore.getState().scene).toBe(scene)
+  })
+
+  it('commitDrag 记录一次历史并把越墙预览约束回墙内', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    const base = useModelStore.getState().scene
+    useModelStore.getState().selectNode('bed-master')
+    useModelStore.getState().previewSelected({ position: { x: -0.5 } }) // 越墙
+    useModelStore.getState().commitDrag(base)
+    const bed = findNodeById(useModelStore.getState().scene!.root, 'bed-master')!
+    // 床已旋转（半宽 0.75），主卧可活动 X ∈ [-2.6, -1.4]；-0.5 → 拉回 -1.4
+    expect(bed.position.x).toBe(-1.4)
+    expect(useModelStore.getState().past.length).toBe(1)
+    // 撤销回到拖拽前
+    useModelStore.getState().undo()
+    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.x).toBe(
+      findNodeById(base!.root, 'bed-master')!.position.x,
+    )
+  })
+
+  it('commitDrag 无变化时不记历史', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    const base = useModelStore.getState().scene
+    useModelStore.getState().selectNode('bed-master')
+    useModelStore.getState().commitDrag(base)
     expect(useModelStore.getState().past.length).toBe(0)
   })
 })

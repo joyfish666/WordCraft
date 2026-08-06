@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { findNodeById, isContainer, walk } from './modelTree'
 import { resolveLayout } from './layout'
-import { computeWallPlan } from './roomGeometry'
+import { computeAllWallPlans, computeWallPlan } from './roomGeometry'
 import type { ContainerNode, RoomNodeV2, SceneModelV2 } from '../types/model'
 
 function roomV2(
@@ -369,6 +369,51 @@ describe('resolveLayout - 两卫生间布局', () => {
       expect(Math.abs(bath.position.x - bedroom.position.x)).toBeGreaterThan(bath.dimensions.length / 4)
       expect(Math.abs(bath.position.z - bedroom.position.z)).toBeGreaterThan(bath.dimensions.width / 4)
     }
+  })
+
+  it('已解析模型调用 computeAllWallPlans：嵌套卫生间边界墙 open、门面有 door', () => {
+    const v2: SceneModelV2 = {
+      version: 2,
+      root: {
+        id: 'h',
+        type: 'house',
+        name: '带内卫',
+        dimensions: { length: 12, width: 9, height: 2.8 },
+        position: { x: 0, y: 0, z: 0 },
+        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        children: [
+          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 6, width: 4.8, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'bedroom1',
+            type: 'room',
+            name: '主卧',
+            dimensions: { length: 4, width: 3.5, height: 2.8 },
+            side: 'right',
+            children: [{ id: 'bathroom1', type: 'room', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 }, side: 'north', children: [] }],
+          },
+        ],
+      },
+    }
+    const model = resolveLayout(v2)
+    const rooms: ContainerNode[] = model.root.children.filter((c): c is ContainerNode => c.type === 'room')
+    const plan = computeAllWallPlans(rooms, { entrance: 'south', entranceRoomId: 'living_room' })
+    const bath = plan.get('bathroom1')
+    expect(bath).toBeDefined()
+    if (!bath) return
+    // 角落嵌套：贴父墙的两面 open（由外层墙围护），另两面为内部分隔墙
+    const wallFaces = [bath.north, bath.south, bath.east, bath.west].filter((f) =>
+      f.segments.some((s) => s.kind === 'wall'),
+    )
+    const openFaces = [bath.north, bath.south, bath.east, bath.west].filter((f) =>
+      f.segments.some((s) => s.kind === 'open'),
+    )
+    expect(wallFaces.length).toBe(2)
+    expect(openFaces.length).toBe(2)
+    // 恰一面有门（朝父房间中心）
+    const doorFaces = [bath.north, bath.south, bath.east, bath.west].filter((f) =>
+      f.segments.some((s) => s.kind === 'door'),
+    )
+    expect(doorFaces.length).toBe(1)
   })
 
   it('走廊卫生间只与走廊开门，不连厨房', () => {

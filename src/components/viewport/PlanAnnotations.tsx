@@ -15,6 +15,7 @@ export function PlanAnnotations() {
   const scene = useModelStore((s) => s.scene)
   const selectedId = useModelStore((s) => s.selectedId)
   const focusId = useModelStore((s) => s.focusId)
+  const screenshotMode = useModelStore((s) => s.screenshotMode)
   const colorMode = useSettingsStore((s) => s.colorMode)
   const language = useSettingsStore((s) => s.language) as Lang
 
@@ -27,7 +28,7 @@ export function PlanAnnotations() {
     [bounds, labelY, language],
   )
 
-  if (!scene || !bounds) return null
+  if (!scene || !bounds || screenshotMode) return null
 
   return (
     <>

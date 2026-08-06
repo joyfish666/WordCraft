@@ -1,14 +1,26 @@
 import { OrbitControls, OrthographicCamera } from '@react-three/drei'
-import { Canvas } from '@react-three/fiber'
-import { forwardRef, useImperativeHandle, useRef } from 'react'
+import { Canvas, useThree } from '@react-three/fiber'
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import type { MutableRefObject } from 'react'
 import { PerspectiveCamera, Vector3 } from 'three'
+import type * as THREE from 'three'
 import type { OrthographicCamera as OrthographicCameraImpl } from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useModelStore } from '../../store/useModelStore'
 import { CompassRose, CompassSensor } from './Compass'
+import { GizmoControls } from './GizmoControls'
 import { PlanAnnotations } from './PlanAnnotations'
 import { PlanRig } from './PlanRig'
 import { Viewport3D } from './Viewport3D'
+
+/** Canvas 内桥接：把 R3F renderer 存入父级 ref，供 captureScreenshot 读取 */
+function ScreenshotBridge({ glRef }: { glRef: MutableRefObject<THREE.WebGLRenderer | null> }) {
+  const gl = useThree((s) => s.gl)
+  useEffect(() => {
+    glRef.current = gl
+  }, [gl, glRef])
+  return null
+}
 
 export interface SceneViewerHandle {
   /** 复位视角：恢复初始相机位置 */
@@ -18,6 +30,11 @@ export interface SceneViewerHandle {
    * （即按方向键/按钮时，场景随箭头方向移动）
    */
   pan: (dx: number, dy: number) => void
+  /**
+   * 截图当前视角：隐藏辅助元素（网格/选中框/手柄/标注）后生成 PNG dataURL；
+   * 无 WebGL 环境（如测试）或失败时返回 null。
+   */
+  captureScreenshot: () => Promise<string | null>
 }
 
 interface SceneViewerProps {
@@ -36,9 +53,33 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
 ) {
   const controlsRef = useRef<OrbitControlsImpl>(null)
   const compassRef = useRef<HTMLDivElement>(null)
+  const glRef = useRef<THREE.WebGLRenderer | null>(null)
 
   useImperativeHandle(ref, () => ({
     resetView: () => controlsRef.current?.reset(),
+
+    captureScreenshot: () =>
+      new Promise<string | null>((resolve) => {
+        const gl = glRef.current
+        if (!gl) {
+          resolve(null)
+          return
+        }
+        // 场景净化：隐藏网格/选中框/手柄/标注，等两帧让 React 应用隐藏后再读取绘制缓冲
+        useModelStore.getState().setScreenshotMode(true)
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            let url: string | null = null
+            try {
+              url = gl.domElement.toDataURL('image/png')
+            } catch {
+              url = null
+            }
+            useModelStore.getState().setScreenshotMode(false)
+            resolve(url)
+          })
+        })
+      }),
 
     pan: (dx, dy) => {
       const controls = controlsRef.current
@@ -84,6 +125,8 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
         // 初始视角：房屋正南侧斜向下，完整看到南立面（含入户门）
         camera={{ position: [0, 9, -10], fov: 50 }}
         dpr={[1, 2]}
+        // preserveDrawingBuffer：截图 toDataURL 需要读取绘制缓冲（antialias 默认已开）
+        gl={{ preserveDrawingBuffer: true, antialias: true }}
         onPointerMissed={() => {
           useModelStore.getState().selectNode(null)
           useModelStore.getState().setFocus(null)
@@ -94,7 +137,9 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
         )}
         <ambientLight intensity={0.7} />
         <directionalLight position={[6, 10, 6]} intensity={0.9} />
+        <ScreenshotBridge glRef={glRef} />
         <Viewport3D />
+        <GizmoControls planMode={planMode} />
         {planMode && <PlanAnnotations />}
         {planMode && <PlanRig controlsRef={controlsRef} />}
         <CompassSensor compassRef={compassRef} />

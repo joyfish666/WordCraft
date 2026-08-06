@@ -81,4 +81,64 @@ describe('modelTree', () => {
     expect(bed.position.x).toBe(-2.6)
     expect(bed.position.z).toBe(0)
   })
+
+  it('父房间内嵌套子房间：家具被推出其占地（真·内嵌）', () => {
+    // 主卧 4×3 内嵌主卧卫生间（NE 角），床头柜初始落在卫生间占地（足迹+墙厚）内
+    const nightstand = {
+      id: 'stand',
+      type: 'furniture' as const,
+      name: '床头柜',
+      dimensions: { length: 0.5, width: 0.5, height: 0.5 },
+      position: { x: 0.5, y: 0.25, z: 0.6 },
+    }
+    const bath = {
+      id: 'bath',
+      type: 'room' as const,
+      name: '主卧卫生间',
+      dimensions: { length: 2, width: 1.5, height: 2.8 },
+      position: { x: 0.85, y: 1.4, z: 0.6 },
+      children: [],
+    }
+    const master = {
+      id: 'master',
+      type: 'room' as const,
+      name: '主卧',
+      dimensions: { length: 4, width: 3, height: 2.8 },
+      position: { x: 0, y: 1.4, z: 0 },
+      children: [nightstand, bath],
+    }
+    const sceneNested = {
+      version: 1 as const,
+      root: {
+        id: 'house',
+        type: 'house' as const,
+        name: '屋',
+        dimensions: { length: 4, width: 3, height: 2.8 },
+        position: { x: 0, y: 0, z: 0 },
+        children: [master],
+      },
+    }
+    const normalized = normalizeContainment(sceneNested)
+    const stand = findNodeById(normalized.root, 'stand')!
+    const hx = stand.dimensions.length / 2
+    const hz = stand.dimensions.width / 2
+    // 卫生间占地（足迹 + 墙厚）：x∈[-0.3,2.0]，z∈[-0.3,1.5]
+    const keepMinX = 0.85 - (2 / 2 + 0.15)
+    const keepMaxX = 0.85 + (2 / 2 + 0.15)
+    const keepMinZ = 0.6 - (1.5 / 2 + 0.15)
+    const keepMaxZ = 0.6 + (1.5 / 2 + 0.15)
+    // 贴边允许浮点噪声（与坑 18 一致）：推出后应不再与占地重叠
+    const EPS = 1e-6
+    const outside =
+      stand.position.x + hx <= keepMinX + EPS ||
+      stand.position.x - hx >= keepMaxX - EPS ||
+      stand.position.z + hz <= keepMinZ + EPS ||
+      stand.position.z - hz >= keepMaxZ - EPS
+    expect(outside).toBe(true)
+    // 且仍在主卧墙内
+    expect(stand.position.x).toBeGreaterThanOrEqual(-1.85 + hx)
+    expect(stand.position.x).toBeLessThanOrEqual(1.85 - hx)
+    // 嵌套房间本身位置不被挪动
+    expect(findNodeById(normalized.root, 'bath')!.position).toEqual({ x: 0.85, y: 1.4, z: 0.6 })
+  })
 })

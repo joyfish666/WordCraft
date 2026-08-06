@@ -11,8 +11,8 @@ import {
   DOOR_WIDTH,
   WALL_THICKNESS,
   defaultWallPlan,
+  nestedDoorDirection,
   wallPlanWithDoor,
-  type DoorDirection,
   type WallPlan,
   type WallSegmentKind,
 } from '../../lib/roomGeometry'
@@ -21,7 +21,7 @@ import { useSettingsStore } from '../../store/useSettingsStore'
 import type { ContainerNode, ModelNode, Position } from '../../types/model'
 
 /** 地板厚度：做成可见的实体板，墙体从地板顶面升起（墙的底部是地板） */
-const FLOOR_THICKNESS = 0.12
+export const FLOOR_THICKNESS = 0.12
 
 interface ShellMaterial {
   color: string
@@ -101,10 +101,12 @@ interface RoomShellProps {
   plan: WallPlan
   /** 是否为嵌套在父房间内部的子房间（如卧室内卫生间）：地板略微抬高避免与父地板重叠 */
   nested?: boolean
+  /** 截图净化：隐藏选中轮廓等辅助元素 */
+  screenshotMode?: boolean
 }
 
 /** 房间外壳：实体地板 + 分段实心墙（共享/开放/门洞按段处理），外墙始终保留 */
-function RoomShell({ room, material, isSelected, plan, nested = false }: RoomShellProps) {
+function RoomShell({ room, material, isSelected, plan, nested = false, screenshotMode = false }: RoomShellProps) {
   const { length: L, width: W, height: H } = room.dimensions
   const cx = room.position.x
   const cz = room.position.z
@@ -155,7 +157,7 @@ function RoomShell({ room, material, isSelected, plan, nested = false }: RoomShe
       {wall('west', [cx - L / 2, wallBaseY, cz], [0, -Math.PI / 2, 0])}
 
       {/* 选中轮廓（不参与射线检测：否则会挡在房间内部件上方，使部件点不到） */}
-      {isSelected && (
+      {isSelected && !screenshotMode && (
         <mesh raycast={() => null} position={[cx, baseY + (FLOOR_THICKNESS + H) / 2, cz]}>
           <boxGeometry args={[L, FLOOR_THICKNESS + H, W]} />
           <meshBasicMaterial color="#ffd93d" wireframe transparent opacity={0.7} />
@@ -177,13 +179,6 @@ interface ModelNodeViewProps {
   parentCenter?: Position
 }
 
-/** 嵌套房间的门朝向：指向父房间中心（从父房间进嵌套房间） */
-function nestedDoorDirection(node: ContainerNode, parentCenter: Position): DoorDirection {
-  const dx = parentCenter.x - node.position.x
-  const dz = parentCenter.z - node.position.z
-  return Math.abs(dx) >= Math.abs(dz) ? (dx > 0 ? 'east' : 'west') : (dz > 0 ? 'north' : 'south')
-}
-
 /**
  * 递归渲染层级模型。
  * - 整屋视图：房间为实心墙体+地板（分段），门与墙同高，开放空间连通，外墙完整
@@ -201,6 +196,7 @@ export function ModelNodeView({
   const setFocus = useModelStore((s) => s.setFocus)
   const selectedId = useModelStore((s) => s.selectedId)
   const focusId = useModelStore((s) => s.focusId)
+  const screenshotMode = useModelStore((s) => s.screenshotMode)
   const colorMode = useSettingsStore((s) => s.colorMode)
   const wireframeEnabled = useSettingsStore((s) => s.wireframe.enabled)
 
@@ -226,15 +222,17 @@ export function ModelNodeView({
           {/* 房屋线框盒仅作视觉轮廓，不参与射线检测：
               否则它横跨整屋且最高，每次点击部件/房间都会先命中它（先 deselect、清空聚焦）。
               空白处点击由 Canvas onPointerMissed 兜底取消选中。 */}
-          <mesh
-            raycast={() => null}
-            position={[0, node.dimensions.height / 2, 0]}
-          >
-            <boxGeometry
-              args={[node.dimensions.length, node.dimensions.height, node.dimensions.width]}
-            />
-            <meshBasicMaterial color="#8a93a5" wireframe transparent opacity={0.12} />
-          </mesh>
+          {!screenshotMode && (
+            <mesh
+              raycast={() => null}
+              position={[0, node.dimensions.height / 2, 0]}
+            >
+              <boxGeometry
+                args={[node.dimensions.length, node.dimensions.height, node.dimensions.width]}
+              />
+              <meshBasicMaterial color="#8a93a5" wireframe transparent opacity={0.12} />
+            </mesh>
+          )}
           {node.children.map((child, i) => (
             <ModelNodeView
               key={child.id}
@@ -281,6 +279,7 @@ export function ModelNodeView({
           isSelected={isSelected}
           plan={plan}
           nested={isNestedRoom}
+          screenshotMode={screenshotMode}
         />
         {node.children.map((child, i) => (
           <ModelNodeView
@@ -314,7 +313,7 @@ export function ModelNodeView({
         opacity={ghosted ? 0.2 : 1}
         wireframe={wireframeEnabled}
       />
-      {(isSelected || !ghosted) && <Edges color={isSelected ? '#ffd93d' : '#8a93a5'} />}
+      {!screenshotMode && (isSelected || !ghosted) && <Edges color={isSelected ? '#ffd93d' : '#8a93a5'} />}
     </mesh>
   )
 }

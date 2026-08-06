@@ -33,6 +33,10 @@ interface ModelState {
   focusId: string | null
   /** 移动步长（米） */
   stepSize: number
+  /** Gizmo 手柄模式：移动 / 缩放（会话内，不持久化） */
+  gizmoMode: 'translate' | 'scale'
+  /** 截图瞬间隐藏辅助元素（网格/选中框/手柄/标注），会话内不持久化 */
+  screenshotMode: boolean
   /** 场景加载时的各节点初始位置，用于「复位」 */
   initialPositions: Record<string, Position>
   /** 撤销历史栈（较旧的场景快照，不含当前 scene），不持久化 */
@@ -45,6 +49,8 @@ interface ModelState {
   selectNode: (id: string | null) => void
   setFocus: (id: string | null) => void
   setStepSize: (step: number) => void
+  setGizmoMode: (mode: 'translate' | 'scale') => void
+  setScreenshotMode: (v: boolean) => void
 
   /** 按增量移动选中模块（每次调用为一个可撤销步骤） */
   translateSelected: (dx: number, dy: number, dz: number) => void
@@ -52,6 +58,10 @@ interface ModelState {
   resetSelectedPosition: () => void
   /** 按补丁更新选中节点（名称/尺寸/位置），提交后约束进墙内并记入历史 */
   updateSelected: (patch: NodeFieldsPatch) => void
+  /** Gizmo 拖拽实时预览：更新选中节点位置/尺寸，不记历史、不约束（避免每帧刷撤销栈与约束回弹） */
+  previewSelected: (patch: NodeFieldsPatch) => void
+  /** Gizmo 拖拽结束：把拖拽前的 baseScene 压入撤销栈（若确有变化），并对当前场景约束进墙内 */
+  commitDrag: (baseScene: SceneModel | null) => void
   /** 撤销最近一次编辑 */
   undo: () => void
   /** 重做最近一次撤销 */
@@ -65,6 +75,8 @@ export const useModelStore = create<ModelState>()(
       selectedId: null,
       focusId: null,
       stepSize: 0.5,
+      gizmoMode: 'translate',
+      screenshotMode: false,
       initialPositions: {},
       past: [],
       future: [],
@@ -85,6 +97,8 @@ export const useModelStore = create<ModelState>()(
       selectNode: (id) => set({ selectedId: id }),
       setFocus: (id) => set({ focusId: id }),
       setStepSize: (step) => set({ stepSize: step }),
+      setGizmoMode: (mode) => set({ gizmoMode: mode }),
+      setScreenshotMode: (v) => set({ screenshotMode: v }),
 
       translateSelected: (dx, dy, dz) =>
         set((state) => {
@@ -116,6 +130,24 @@ export const useModelStore = create<ModelState>()(
           // 提交后重新约束进墙内，并把变化后的场景作为新状态
           const scene = normalizeContainment({ ...state.scene, root: nextRoot })
           return { scene, ...pushPast(state) }
+        }),
+
+      previewSelected: (patch) =>
+        set((state) => {
+          if (!state.scene || !state.selectedId) return state
+          const nextRoot = updateNodeFields(state.scene.root, state.selectedId, patch) as ContainerNode
+          if (nextRoot === state.scene.root) return state // 无实际变化，不产生新引用
+          // 拖拽中不约束、不记历史（结束时由 commitDrag 统一约束 + 记一次历史）
+          return { scene: { ...state.scene, root: nextRoot } }
+        }),
+
+      commitDrag: (baseScene) =>
+        set((state) => {
+          if (!state.scene || !baseScene || state.scene === baseScene) return state // 无场景 / 拖拽无变化
+          const before: SceneModel = baseScene // 收窄非空（参数窄化不进入闭包）
+          // 拖拽前的场景作为历史快照；当前场景约束进墙内作为新状态
+          const scene = normalizeContainment(state.scene)
+          return { scene, ...pushPast({ scene: before, past: state.past }) }
         }),
 
       undo: () =>

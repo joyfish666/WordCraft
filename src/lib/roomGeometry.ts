@@ -209,6 +209,13 @@ export function defaultWallPlan(room: ContainerNode): WallPlan {
   return wallPlanWithDoor(room, doorDirection(room))
 }
 
+/** 嵌套房间的门朝向：指向父房间中心（从父房间进嵌套房间） */
+export function nestedDoorDirection(node: ContainerNode, parentCenter: Position): DoorDirection {
+  const dx = parentCenter.x - node.position.x
+  const dz = parentCenter.z - node.position.z
+  return Math.abs(dx) >= Math.abs(dz) ? (dx > 0 ? 'east' : 'west') : (dz > 0 ? 'north' : 'south')
+}
+
 export interface WallPlanOptions {
   /** 入户大门所在方向（房屋外墙） */
   entrance?: DoorDirection
@@ -336,6 +343,144 @@ export function computeWallPlan(
   }
 
   addEntranceDoor(plan, rooms, options)
+  return plan
+}
+
+/**
+ * 计算嵌套房间的墙体方案：与已渲染墙共线的边不再重复渲染（由外层墙围护），
+ * 其余边为内部分隔墙，门开在朝父房间中心的一面。
+ *
+ * 覆盖判定用「全量墙线并集查询」：遍历所有已有方案，收集落在同一世界墙线上
+ * （|line 差| ≤ WALL_THICKNESS）的所有非 'open' 墙/门段（映射到世界区间），
+ * 只要嵌套墙的世界区间被任一房间渲染的墙覆盖即视为已围护。这比只查父房间自身
+ * 方案可靠：父墙共享给邻居时父方案该区间是 'open'，但邻居在同线处渲染了墙，
+ * 并集查询能正确命中，避免背靠背双重墙。
+ */
+/** 清理墙段：去除长度 < EPS 的浮点噪声段，并合并相邻同类型段 */
+function cleanSegments(segs: WallSegment[]): WallSegment[] {
+  const EPS = 1e-6
+  const out: WallSegment[] = []
+  for (const s of segs) {
+    if (s.to - s.from < EPS) continue
+    const last = out[out.length - 1]
+    if (last && last.kind === s.kind && Math.abs(last.to - s.from) < EPS) {
+      last.to = Math.max(last.to, s.to)
+      last.entrance = last.entrance || s.entrance
+      continue
+    }
+    out.push({ ...s })
+  }
+  return out
+}
+
+export function nestedWallPlan(
+  node: ContainerNode,
+  parent: ContainerNode,
+  plan: Map<string, WallPlan>,
+  roomById: Map<string, ContainerNode>,
+): WallPlan {
+  // 基座：四面整段实心墙（暂不开门）
+  const makeFace = (dir: DoorDirection): WallFace => {
+    const half = wallInfo(node, dir).length / 2
+    return { shared: false, segments: [{ from: -half, to: half, kind: 'wall' }] }
+  }
+  const result: WallPlan = {
+    north: makeFace('north'),
+    south: makeFace('south'),
+    east: makeFace('east'),
+    west: makeFace('west'),
+  }
+
+  // 每面：把被同线墙覆盖的世界区间切为 'open'（跳过渲染，由外层墙围护）
+  for (const dir of WALL_DIRECTIONS) {
+    const info = wallInfo(node, dir)
+    const covered: { from: number; to: number }[] = []
+    for (const [, r] of roomById) {
+      const rPlan = plan.get(r.id)
+      if (!rPlan) continue
+      for (const dd of WALL_DIRECTIONS) {
+        const rInfo = wallInfo(r, dd)
+        if (rInfo.axis !== info.axis) continue
+        // 用 WALL_THICKNESS + ε 容忍浮点贴边（平铺/平移会引入 ~1e-13 噪声）
+        if (Math.abs(rInfo.line - info.line) > WALL_THICKNESS + 1e-6) continue
+        const rHalf = rInfo.length / 2
+        for (const seg of rPlan[dd].segments) {
+          if (seg.kind === 'open') continue
+          const overFrom = Math.max(rInfo.start + rHalf + seg.from, info.start)
+          const overTo = Math.min(rInfo.start + rHalf + seg.to, info.start + info.length)
+          if (overTo - overFrom >= 1e-6) covered.push({ from: overFrom, to: overTo })
+        }
+      }
+    }
+    if (covered.length === 0) continue
+    covered.sort((a, b) => a.from - b.from)
+    const merged: { from: number; to: number }[] = []
+    for (const c of covered) {
+      const last = merged[merged.length - 1]
+      if (last && c.from <= last.to) last.to = Math.max(last.to, c.to)
+      else merged.push({ ...c })
+    }
+    let segs = result[dir].segments
+    const half = info.length / 2
+    for (const c of merged) {
+      segs = splitSegments(segs, c.from - info.start - half, c.to - info.start - half, 'open')
+    }
+    segs = cleanSegments(segs)
+    // 整面被覆盖 → 单段 open 且 shared:true（地板不再外扩，贴外墙内侧）
+    const fullyOpen = segs.length === 1 && segs[0].kind === 'open'
+    result[dir] = { shared: fullyOpen, segments: segs }
+  }
+
+  // 开门：优先朝父中心的面；该面无实体墙（被全覆盖）时改到最近含 wall 的面；
+  // 四面都无 wall（嵌套房间≈父房间的退化情形）则不开门，不 crash。
+  const preferred = nestedDoorDirection(node, parent.position)
+  const hasWall = (f: WallFace) => f.segments.some((s) => s.kind === 'wall')
+  const order: DoorDirection[] = ['north', 'east', 'south', 'west']
+  const pIdx = order.indexOf(preferred)
+  const dist = (d: DoorDirection) => {
+    const diff = Math.abs(order.indexOf(d) - pIdx)
+    return Math.min(diff, 4 - diff)
+  }
+  let doorDir: DoorDirection | null = hasWall(result[preferred]) ? preferred : null
+  if (!doorDir) {
+    const candidates = WALL_DIRECTIONS.filter((d) => hasWall(result[d])).sort((a, b) => dist(a) - dist(b))
+    doorDir = candidates[0] ?? null
+  }
+  if (doorDir) {
+    const info = wallInfo(node, doorDir)
+    addDoorOnFace(result[doorDir], -info.length / 2, info.length / 2)
+  }
+
+  return result
+}
+
+/**
+ * 计算整屋所有房间（含嵌套）的墙体方案：顶层走 computeWallPlan（共享墙去重/开放空间/入户门），
+ * 再自上而下为每个嵌套房间补算 nestedWallPlan，写入同一 Map。
+ * 渲染层现有 wallPlan.get(id) 主路径即可命中嵌套房间。
+ */
+export function computeAllWallPlans(
+  rooms: ContainerNode[],
+  options: WallPlanOptions = {},
+): Map<string, WallPlan> {
+  const plan = computeWallPlan(rooms, options)
+  const roomById = new Map<string, ContainerNode>()
+  const collect = (r: ContainerNode): void => {
+    roomById.set(r.id, r)
+    for (const c of r.children) {
+      if (c.type === 'room') collect(c as ContainerNode)
+    }
+  }
+  for (const r of rooms) collect(r)
+  const applyNested = (r: ContainerNode): void => {
+    for (const c of r.children) {
+      if (c.type !== 'room') continue
+      const nested = c as ContainerNode
+      plan.set(nested.id, nestedWallPlan(nested, r, plan, roomById))
+      applyNested(nested)
+    }
+  }
+  for (const r of rooms) applyNested(r)
   return plan
 }
 
