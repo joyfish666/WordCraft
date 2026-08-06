@@ -233,13 +233,32 @@ function resolveCorridor(house: HouseNodeV2): ContainerNode {
     return finalizeHouse(house, single ? [makeRoom(single, 0, 0)] : [])
   }
 
-  // 房间沿走廊两侧顺序堆叠，墙与走廊无缝贴合
+  // 房间沿走廊两侧顺序堆叠，墙与走廊无缝贴合。
+  // 未指定 side 的房间自动分到两侧（入口固定南侧），使两侧总长尽量均衡，
+  // 避免所有房间挤在同一侧导致布局单一
+  const sideOf: Array<'left' | 'right' | undefined> = ordered.map((r) =>
+    r.id === entranceId
+      ? 'left'
+      : r.side === 'left' || r.side === 'right'
+        ? (r.side as 'left' | 'right')
+        : undefined,
+  )
+  const totals = { left: 0, right: 0 }
+  sideOf.forEach((s, i) => {
+    if (s) totals[s] += ordered[i].dimensions.length
+  })
+  sideOf.forEach((s, i) => {
+    if (s) return
+    const side = totals.left <= totals.right ? 'left' : 'right'
+    sideOf[i] = side
+    totals[side] += ordered[i].dimensions.length
+  })
+
   const cursor = { left: 0, right: 0 }
-  const placed: ContainerNode[] = ordered.map((r) => {
+  const placed: ContainerNode[] = ordered.map((r, i) => {
     const along = r.dimensions.length
     const depth = r.dimensions.width
-    const isEntrance = r.id === entranceId
-    const side = isEntrance || r.side === 'left' ? 'left' : 'right'
+    const side = sideOf[i]!
     const sign = side === 'left' ? -1 : 1
     const x0 = cursor[side]
     const cx = x0 + along / 2

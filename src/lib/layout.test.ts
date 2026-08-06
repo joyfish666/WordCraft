@@ -86,6 +86,26 @@ describe('resolveLayout - corridor 走廊型', () => {
     expect(studio.position.z).toBeCloseTo(0)
   })
 
+  it('未指定 side 的房间自动分配到走廊两侧（避免全挤一侧）', () => {
+    const model = resolveLayout(
+      scene({
+        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living' } },
+        children: [
+          roomV2('living', '客厅', 6, 4.5, 'left'),
+          roomV2('kitchen', '厨房', 3, 3), // 未指定 side
+          roomV2('dining', '餐厅', 3, 3), // 未指定 side
+          roomV2('master', '主卧', 4, 3.5), // 未指定 side
+        ],
+      }),
+    )
+    const rooms = model.root.children.filter((c): c is ContainerNode => c.type === 'room')
+    const unassigned = rooms.filter((c) => c.id !== 'living')
+    // 入口客厅在南侧；未指定 side 的房间被分到两侧（不全挤一侧）
+    expect(rooms.find((c) => c.id === 'living')!.position.z).toBeLessThan(0)
+    expect(unassigned.some((c) => c.position.z > 0)).toBe(true)
+    expect(unassigned.some((c) => c.position.z < 0)).toBe(true)
+  })
+
   it('入口房间名字含「走廊」（如"入口走廊"）也保留为真实房间，大门开在其南墙', () => {
     const model = resolveLayout(
       scene({
