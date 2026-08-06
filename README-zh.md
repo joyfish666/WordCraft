@@ -8,7 +8,7 @@
 
 **言筑（WordCraft）** 是一个开源的纯前端Web应用，专注于通过自然语言对话快速生成3D空间结构模型。项目采用极简主义设计理念，强调结构参数与空间规划的准确性，而非复杂的视觉渲染。
 
-> 🚀 **在线体验 v1.0.0**：https://joyfish666.github.io/WordCraft/（GitHub Pages，零后端、数据全在本地）
+> 🚀 **在线体验**：https://joyfish666.github.io/WordCraft/（GitHub Pages，零后端、数据全在本地，随每次推送自动更新到最新代码）
 
 ### 核心特性
 

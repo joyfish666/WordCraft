@@ -8,7 +8,7 @@
 
 **WordCraft (言筑)** is an open-source, pure front-end web application focused on rapidly generating 3D spatial structure models through natural-language conversation. The project follows a minimalist design philosophy, emphasizing accuracy of structural parameters and spatial planning over complex visual rendering.
 
-> 🚀 **Live v1.0.0**: https://joyfish666.github.io/WordCraft/ (GitHub Pages, no backend, all data stays local)
+> 🚀 **Live**: https://joyfish666.github.io/WordCraft/ (GitHub Pages, no backend, all data stays local; auto-updates to the latest code on every push)
 
 ### Core Features
 
