@@ -78,8 +78,9 @@ describe('modelTree', () => {
     const normalized = normalizeContainment(sceneOut)
     const bed = findNodeById(normalized.root, 'bed-master')!
     // 示例床已旋转为 1.5×2.0（半宽 0.75），可活动范围：x ∈ [-3.35+0.75, -0.65-0.75] = [-2.6, -1.4]
+    // 床现贴南墙（z=-0.35，短边靠墙），仅 x 被拉回
     expect(bed.position.x).toBe(-2.6)
-    expect(bed.position.z).toBe(0)
+    expect(bed.position.z).toBeCloseTo(-0.35, 5)
   })
 
   it('父房间内嵌套子房间：家具被推出其占地（真·内嵌）', () => {

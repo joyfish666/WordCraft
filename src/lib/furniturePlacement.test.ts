@@ -53,13 +53,21 @@ describe('isWallAnchored', () => {
 })
 
 describe('applyFurnitureConventions', () => {
-  it('靠墙家具贴墙并避让门口（床避到门对面的墙）', () => {
+  it('床短边（床头）贴墙，且避让门口', () => {
     const model = applyFurnitureConventions(corridorHouse([bedroom([furniture('bed', '双人床', 2, 1.5, 0, 0.5)])]))
     const bedroomNode = findNodeById(model.root, 'bedroom1') as ContainerNode
     const bed = findNodeById(model.root, 'bed')!
-    // 门在卧室南墙（贴走廊），床避到北墙：北墙内壁 - 床半宽
-    expect(bed.position.z).toBeCloseTo(
-      bedroomNode.position.z + bedroomNode.dimensions.width / 2 - 0.15 - bed.dimensions.width / 2,
+    // 门在卧室南墙（贴走廊）。床贴最近的西墙、床头朝墙（短边 1.5 贴墙），
+    // 长边（2.0）垂直墙伸入室内，并沿墙滑到北侧避开门口
+    expect(bed.dimensions.length).toBe(2)
+    expect(bed.dimensions.width).toBe(1.5)
+    expect(bed.position.x).toBeCloseTo(
+      bedroomNode.position.x - bedroomNode.dimensions.length / 2 + 0.15 + bed.dimensions.length / 2,
+      5,
+    )
+    // 不堵门口：床南缘 ≥ 门口禁区北缘（南内壁 + 门深 1.0）
+    expect(bed.position.z - bed.dimensions.width / 2).toBeCloseTo(
+      bedroomNode.position.z - bedroomNode.dimensions.width / 2 + 0.15 + 1,
       5,
     )
   })
@@ -80,19 +88,17 @@ describe('applyFurnitureConventions', () => {
       room('bathroom1', 2, 1.8, -1.1, 3.05, []),
     ])
     const model = applyFurnitureConventions(corridorHouse([master]))
-    const bedroomNode = findNodeById(model.root, 'bedroom1') as ContainerNode
     const bed = findNodeById(model.root, 'bed')!
     const bath = findNodeById(model.root, 'bathroom1') as ContainerNode
-    // 床避开门（南墙 x=0 门口）与卫生间，贴到东墙（旋转后长边沿墙）
-    expect(bed.position.x).toBeCloseTo(
-      bedroomNode.position.x + bedroomNode.dimensions.length / 2 - 0.15 - bed.dimensions.length / 2,
-      5,
-    )
+    // 床贴最近的南墙、床头朝墙（短边 1.5 贴墙），长边（2.0）伸入室内，
+    // 并滑到门口东侧避开门口与卫生间
+    expect(bed.dimensions.length).toBe(1.5)
+    expect(bed.dimensions.width).toBe(2.0)
+    // 不堵门口：床西缘 ≥ 门口东缘（门宽 0.9 → 半宽 0.45）
+    expect(bed.position.x - bed.dimensions.length / 2).toBeGreaterThanOrEqual(0.45 - 1e-6)
     // 不与卫生间禁区（足迹 + 墙厚）重叠
     const kMaxX = bath.position.x + bath.dimensions.length / 2 + 0.15
     expect(bed.position.x - bed.dimensions.length / 2).toBeGreaterThanOrEqual(kMaxX - 1e-6)
-    // 不堵门口：门口禁区的东缘（门宽 0.9 → 半宽 0.45）
-    expect(bed.position.x - bed.dimensions.length / 2).toBeGreaterThanOrEqual(0.45 - 1e-6)
   })
 
   it('独立家具（茶几）不被贴墙，保持原位', () => {
