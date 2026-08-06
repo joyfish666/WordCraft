@@ -96,7 +96,8 @@ describe('useModelStore', () => {
     useModelStore.getState().updateSelected({ position: { z: 0.2 } })
     expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBe(0.2)
     useModelStore.getState().undo()
-    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBe(0)
+    // 撤销回到床的原始位置（现贴南墙 z=-0.35）
+    expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBeCloseTo(-0.35, 5)
     useModelStore.getState().redo()
     expect(findNodeById(useModelStore.getState().scene!.root, 'bed-master')!.position.z).toBe(0.2)
   })

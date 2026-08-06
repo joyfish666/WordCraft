@@ -1,3 +1,4 @@
+import { furnitureKind } from './furniturePresets'
 import { isContainer } from './modelTree'
 import {
   DOOR_CLEARANCE,
@@ -208,8 +209,11 @@ function placeWallAnchored(
   candidates.sort((a, b) => a.d - b.d)
 
   for (const cand of candidates) {
-    // 大面积贴墙：长边（max(L,W)）沿墙；必要时交换长宽（90° 旋转）
-    const swap = cand.along === 'x' ? W > L : L > W
+    // 大面积贴墙：长边（max(L,W)）沿墙；必要时交换长宽（90° 旋转）。
+    // 床例外：**短边（床头）贴墙**——长边垂直于墙伸入室内（床头朝墙是常理），
+    // 否则床长边沿墙、床头在长边端平行于墙，不是常规摆法。
+    const baseSwap = cand.along === 'x' ? W > L : L > W
+    const swap = furnitureKind(f.name) === 'bed' ? !baseSwap : baseSwap
     const el = swap ? W : L
     const ew = swap ? L : W
     const ehx = el / 2

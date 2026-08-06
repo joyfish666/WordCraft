@@ -2,7 +2,7 @@
 
 > 面向下一个接手 agent / 开发者。本文档补充 README 与技术文档未涉及之处：项目现状、关键实现坑、运行调试方式、下一步建议。
 
-**交接日期**：2026-08-06 · 当前分支 `main`（v1.2.0 / v1.3.0 均已发布并推送 GitHub；v1.4.0 家具部件模型已实现，未发布/未推送）
+**交接日期**：2026-08-07 · 当前分支 `main`（v1.2.0 / v1.3.0 / v1.4.0 均已发布并推送 GitHub）
 
 ## 1. 交接总览
 
@@ -15,9 +15,9 @@
 - ✅ 交互（聚焦视图、选中部件、面包屑、坐标显示、罗盘、WASD 视角）
 - ✅ 属性面板编辑（名称/长宽高/坐标、Enter/blur 提交、位置微调、复位位置）
 - ✅ 撤销/重做（快照历史栈，工具栏按钮 + Ctrl+Z/Ctrl+Y 快捷键）
-- ✅ 家具常理摆放（生成时贴墙 + 大面积贴墙旋转 + 避让嵌套卫生间/门口/家具，`lib/furniturePlacement.ts`）
+- ✅ 家具常理摆放（生成时贴墙 + 大面积贴墙旋转（**床例外：短边/床头贴墙**）+ 避让嵌套卫生间/门口/家具，`lib/furniturePlacement.ts`）
 - ✅ 调试日志精简（去重、去刷屏）+ 调试面板「下载日志」按钮
-- ✅ 调试模式、测试（166 用例）
+- ✅ 调试模式、测试（190 用例）
 - ✅ **v1.0.0 已发布**（2026-08-05）：GitHub Pages 在线版 https://joyfish666.github.io/WordCraft/，`vite base=/WordCraft/` + GitHub Actions 自动构建部署（`.github/workflows/deploy.yml`）
 - ✅ **本地项目库（v1.1.0）**：Dexie 接入 UI，工具栏「保存/项目库」，新建/打开/重命名/删除，未保存守卫
 - ✅ **2D 俯视平面图（v1.1.0）**：同 Canvas 正交俯视相机，房间标签 + 外廓尺寸线，与 3D 选中/聚焦联动
@@ -28,6 +28,7 @@
 - ✅ **家具部件模型 + 朝向（v1.4.0）**：家具按名称识别种类并拼装成多个部件（床/衣柜/书桌/沙发/椅子/马桶/洗手池/冰箱/电视柜/餐桌/圆桌/书架/洗衣机，`lib/furniturePresets.ts`）；朝向由 `facingFromRoom`（长轴/短轴背侧）+ 交换长宽/旋转决定，床的床头板在长轴端；未识别回退整盒；见坑 32
 - ✅ **入口房间保留（v1.4.0）**：`resolveCorridor` 里入口房间即使名字含「走廊」（如 LLM 为"大门开在走廊"创建的「入口走廊」）也保留为真实房间，否则被 `isCorridorName` 过滤后 `entranceRoomId` 悬空、大门回退到南边界房间、改大门位置无反应
 - ✅ **布局多样性（v1.4.0）**：`resolveCorridor` 对未指定 `side` 的房间贪心均衡分配到两侧（入口固定南侧），避免全挤一侧；系统提示词（`chat.ts` 规则 3）引导 LLM 按房间数量/类型在走廊/客厅居中/自由之间选，并鼓励与上次不同的合理排布
+- ✅ **家具完整性提示（v1.4.0）**：提示词（`chat.ts` 规则 5）要求每个房间必须有该房间常见家具（客厅沙发/茶几/电视柜、卧室床/衣柜、厨房橱柜/冰箱、卫生间马桶/洗手池等），避免模型只出布局不出家具
 
 **先读**：`README-zh.md`（功能）、`docs/architecture.md`（架构）→ 再读本文档（坑与细节）。
 
@@ -96,7 +97,7 @@ npm run build
 29. **嵌套墙覆盖判定要容忍浮点贴边**：平铺/平移会把坐标弄出 ~1e-13 噪声（如 `3.0000000000000004`），墙线差会算成 `0.15000000000000036` 而**恰好略大于 `WALL_THICKNESS`(0.15)**，被误判"不共线"导致嵌套墙漏覆盖（双重墙）。`nestedWallPlan` 的行比较用 `WALL_THICKNESS + 1e-6`；段切分后用 `cleanSegments` 去掉 `to-from < 1e-6` 的浮点微段并合并相邻同类型段（否则 `shared` 判定与 `fullyOpen` 失败）。
 30. **Gizmo 拖拽必须"预览不记历史 + 结束一次性 commit"**：直接复用 `updateSelected`/`translateSelected` 会每帧 `pushPast` 刷爆撤销栈、且 `normalizeContainment` 每帧回弹导致手柄抖动。方案：`previewSelected(patch)` 拖拽中只更新 scene 不记历史不约束；`onMouseDown` 记 `baseScene`，`onMouseUp` 调 `commitDrag(baseScene)`（压入历史恰好一步 + normalize）。代理 group 作 TransformControls 的 `object`（`object={ref}`，drei 的 `useLayoutEffect` 读 `object.current`），避免与 R3F 对 mesh `position` prop 的管理冲突；家具代理 y 要 +`FLOOR_THICKNESS`（mesh 中心抬了地板厚），回写时还原。drei 内部 `dragging-changed` 自动禁用 OrbitControls，无需手动。缩放手柄：以拖拽开始时的基准尺寸 × 代理 scale，写 `dimensions`（渲染器不读 scale 字段），下限 0.1。
 31. **截图三件套**：① Canvas 必须 `gl={{ preserveDrawingBuffer: true }}` 否则 `toDataURL()` 读不到缓冲（空白）；② 场景净化用 `useModelStore.screenshotMode`，置 true 后**等两帧 rAF** 让 React 应用隐藏（网格/坐标轴/房屋线框/选中轮廓/Edges/Gizmo/平面图标注）再 `gl.domElement.toDataURL('image/png')`，最后复位；③ jsdom 无 WebGL、mock 的 SceneViewer 无 `captureScreenshot`，HomePage 调用须用 `viewportRef.current?.captureScreenshot?.()`（`?.` 守卫方法本身）。口令历史 `useShareStore` 只持久化 records（上限 20），还原校验 `version===1 && root.type==='house'`。
-32. **家具部件模型 + 朝向（v1.4.0）**：① `furnitureKind` 分类器必须**先排除易误判词**再宽松匹配（`床头柜` 含「床」会误套床造型 → `GENERIC_GUARD_RE` 先归 generic；词表为中文主词表，英文名不参与分类，见坑 27）；② **水平（x/z）必须钳制在 L×W 足迹内、底面贴地**——测试硬性断言覆盖 13 类 × 小/大尺寸 × 四朝向；**竖直顶部允许向上悬挑**（电视柜上的电视屏高于盒顶，上方无墙不影响碰撞），别把 y 上界当硬约束；③ **朝向用 `facingFromRoom(node, room, BACK_AXIS[kind])`**（不是最近墙）：柜/沙发等背侧沿**短轴**（柜门跨长轴开在大面）——朝短轴上最近的墙；**床单独处理**：床头在**长轴端**（短边中间），朝长轴上最近的墙。用「最近墙」会出错：转角衣柜 tie 到相邻墙后柜门开到小面。柜/沙发等按 `BACK_DIR`（背侧局部方向）+「东/西墙交换长宽+旋转 90°、南/北墙 0°/180°」保持足迹不变（`orientParts` 只绕 Y、cylinder 轴为 Y 无需特殊处理）；床用 `buildBedParts` 直接把床头板/枕头放长轴端。`parentRoom` 由 `ModelNodeView` 房间分支下传，改代码别漏；④ 渲染用 `<group onClick>` + 各部件 mesh（点击任一部分选中整件），**选中轮廓是并集包围盒的隐形 box + Edges，须 `raycast={() => null}`**（否则挡在部件上点不到，同坑 25）；⑤ 配色三档：主色 `FURNITURE_COLOR` / 副色 `FURNITURE_PART_DARK` / 深色强调 `FURNITURE_PART_INK`（床头板/柜门/电视屏，标准与色盲模式均可辨）；⑥ **垂直面严禁共面（z-fighting 闪烁）**：门板/床头板/靠背/扶手若与箱体/床架前脸同在 W/2（或 L/2）平面，移动视角会闪。方案：箱体前脸后缩 `doorTh+0.02`、门板凸出贴前脸（衣柜/冰箱/洗衣机）；床头板内凹 0.05、沙发靠背/扶手内凹 0.03。共面只在**垂直面**出现（水平堆叠的底面是背面被剔除，不闪）；⑦ **阶梯外墙的「立柱」转角**：同侧房间深度不一（客厅 4.8 深、餐厅 3.6 深）时，较深房间的侧墙在浅房间下方变外墙，与浅房间外墙成 90° 转角，像一根柱子——其实是**正确的外墙**，不是 bug。曾试过 `resolveCorridor` 把同侧深度对齐到最大值消除立柱，但副作用是**覆盖了 LLM 的房间尺寸，多轮改大小失效**（用户改公卫宽度无反应），已回退。别再引入对齐；若要处理只能改布局思路。
+32. **家具部件模型 + 朝向（v1.4.0）**：① `furnitureKind` 分类器必须**先排除易误判词**再宽松匹配（`床头柜` 含「床」会误套床造型 → `GENERIC_GUARD_RE` 先归 generic；词表为中文主词表，英文名不参与分类，见坑 27）；② **水平（x/z）必须钳制在 L×W 足迹内、底面贴地**——测试硬性断言覆盖 13 类 × 小/大尺寸 × 四朝向；**竖直顶部允许向上悬挑**（电视柜上的电视屏高于盒顶，上方无墙不影响碰撞），别把 y 上界当硬约束；③ **朝向用 `facingFromRoom(node, room, BACK_AXIS[kind])`**（不是最近墙）：柜/沙发等背侧沿**短轴**（柜门跨长轴开在大面）——朝短轴上最近的墙；**床单独处理**：床头在**长轴端**（短边中间），朝长轴上最近的墙。用「最近墙」会出错：转角衣柜 tie 到相邻墙后柜门开到小面。柜/沙发等按 `BACK_DIR`（背侧局部方向）+「东/西墙交换长宽+旋转 90°、南/北墙 0°/180°」保持足迹不变（`orientParts` 只绕 Y、cylinder 轴为 Y 无需特殊处理）；床用 `buildBedParts` 直接把床头板/枕头放长轴端。`parentRoom` 由 `ModelNodeView` 房间分支下传，改代码别漏；④ 渲染用 `<group onClick>` + 各部件 mesh（点击任一部分选中整件），**选中轮廓是并集包围盒的隐形 box + Edges，须 `raycast={() => null}`**（否则挡在部件上点不到，同坑 25）；⑤ 配色三档：主色 `FURNITURE_COLOR` / 副色 `FURNITURE_PART_DARK` / 深色强调 `FURNITURE_PART_INK`（床头板/柜门/电视屏，标准与色盲模式均可辨）；⑥ **垂直面严禁共面（z-fighting 闪烁）**：门板/床头板/靠背/扶手若与箱体/床架前脸同在 W/2（或 L/2）平面，移动视角会闪。方案：箱体前脸后缩 `doorTh+0.02`、门板凸出贴前脸（衣柜/冰箱/洗衣机）；床头板内凹 0.05、沙发靠背/扶手内凹 0.03。共面只在**垂直面**出现（水平堆叠的底面是背面被剔除，不闪）；⑦ **阶梯外墙的「立柱」转角**：同侧房间深度不一（客厅 4.8 深、餐厅 3.6 深）时，较深房间的侧墙在浅房间下方变外墙，与浅房间外墙成 90° 转角，像一根柱子——其实是**正确的外墙**，不是 bug。曾试过 `resolveCorridor` 把同侧深度对齐到最大值消除立柱，但副作用是**覆盖了 LLM 的房间尺寸，多轮改大小失效**（用户改公卫宽度无反应），已回退。别再引入对齐；若要处理只能改布局思路；⑧ **床放置要「短边/床头贴墙」**：`placeWallAnchored` 对所有靠墙家具做大面积贴墙（长边沿墙），床必须例外——交换条件取反（`swap = !baseSwap`），短边贴墙、长边垂直墙伸入室内，否则床长边沿墙、床头在长边端平行于墙（用户明确要短边靠墙）。改测试注意：示例床落点已变（贴南墙 z≈-0.35），`modelTree`/`useModelStore` 的相关断言随之更新。
 
 ## 5. 已知限制 / 未实现
 

@@ -100,10 +100,6 @@ Implemented in two phases to balance precision and intuitiveness:
 - List, switch, delete, and rename operations ✅
 - Manual-save model: toolbar "保存" + "项目库" dialog; unsaved changes are confirmed before switching / loading sample / clearing
 
-#### Data Export
-- Export raw JSON for secondary development
-- Export standardized model description text
-
 ### Sharing & Collaboration ✅ implemented (v1.3)
 
 #### Screenshot Sharing
@@ -145,19 +141,8 @@ Implemented in two phases to balance precision and intuitiveness:
 | Linting | **ESLint + Prettier** | Consistent code style |
 | Testing | **Vitest + Testing Library** | Unit and component tests |
 
-## Development Workflow & Versioning
+## Contributing
 
-### GitHub Collaboration
-
-#### 1. Repository
-- **URL**: https://github.com/joyfish666/WordCraft.git
-- **Branches**:
-  - `main`: stable releases
-  - `develop`: main development branch
-  - `feature/*`: feature branches
-  - `bugfix/*`: bug-fix branches
-
-#### 2. Contribution Flow
 1. **Fork** the repository
 2. **Branch**: `git checkout -b feature/amazing-feature`
 3. **Commit**: `git commit -m 'feat: add amazing feature'`
@@ -222,7 +207,7 @@ Beyond the checked roadmap items above:
 - **Interaction**: click a room to enter focus mode (interior furniture solid, other rooms ghosted); **click to select furniture/parts inside a room** and show their info; breadcrumb navigation; selected modules show dimensions + **center X/Z coordinates**
 - **Manual editing (property panel)**: click any module → the panel slides out on the right; edit name / length / width / height / X·Y·Z, committed on Enter or blur, changes auto-constrained inside walls; position nudging with an adjustable step; "reset position" returns to the load-time snapshot
 - **Undo / redo**: snapshot-based history (session-only, capped at 50 steps); toolbar buttons or Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z; loading a new model clears history
-- **Furniture conventions**: at generation (auto layouts) wall-anchored furniture (beds / wardrobes / cabinets / desks / sofas...) snaps flush to its **nearest wall** with the **larger face against the wall** (long side along the wall, rotating by swapping length/width when needed), then **slides along the wall to avoid nested sub-rooms** (e.g. an en-suite bathroom), **room doorways** (extracted from the same wall plan, incl. the front door) and previously placed furniture; free-standing pieces (coffee table / dining table / chairs...) stay where placed, only clamped inside walls — code-level fallback so "bed against the wall, not blocking the door" no longer depends on the model following the prompt
+- **Furniture conventions**: at generation (auto layouts) wall-anchored furniture (wardrobes / cabinets / desks / sofas...) snaps flush to its **nearest wall** with the **larger face against the wall** (long side along the wall, rotating by swapping length/width when needed); **beds are the exception — the short side (headboard) goes against the wall**, with the long side extending into the room (a headboard against the wall is the sensible layout); then **slides along the wall to avoid nested sub-rooms** (e.g. an en-suite bathroom), **room doorways** (extracted from the same wall plan, incl. the front door) and previously placed furniture; free-standing pieces (coffee table / dining table / chairs...) stay where placed, only clamped inside walls — code-level fallback so "bed against the wall, not blocking the door" no longer depends on the model following the prompt
 - **Debug log**: de-duplicated (the duplicated parsed-JSON dump is skipped when the reply is already pure JSON, and the noisy per-render front-door log is removed), with a **download** button in the debug panel that saves a `.log` file
 - **Nudge directions follow the compass**: at the default south view world +x projects to the screen-left, so the property panel's 东/西 nudge buttons map to world −x / +x to match the compass (北=+z, 南=−z)
 - **Conversation generation**: SSE streaming (compatible with reasoning models' long thinking), multi-turn modification, deep-thinking toggle (fast / deep / follow-model)
@@ -239,6 +224,7 @@ Beyond the checked roadmap items above:
 - **Screenshot share + share code (v1.3.0)**: the toolbar "Share" button captures a high-resolution PNG from the current 3D view (scene cleanup hides grid / axes / gizmo / selection / plan annotations) and stamps the share code as a bottom-right watermark; the code is lz-string compressed (`lib/compression.ts`), copyable, paste-restorable (validated then `setScene`), and the last 20 codes are persisted to localStorage as history
 - **Furniture part models (v1.4.0)**: furniture is no longer a uniform cuboid — kinds are detected by name and assembled from procedural parts (bed / wardrobe / desk / sofa / chair / toilet / sink / fridge / TV cabinet / table / round table / bookcase / washer, `lib/furniturePresets.ts`); main parts use the furniture color, secondary parts a neutral tone, and key parts (headboard / cabinet doors / TV screen) a dark accent; **facing follows the wall the piece sits against** — the headboard sits on the long-axis end (middle of the short edge), cabinet doors / TV screen face into the room (the nearest wall is derived from the furniture's position inside its parent room at render time; for east/west walls the assembly is built with swapped dimensions + a 90° rotation so the footprint stays intact); parts are clamped horizontally to the L×W footprint and sit on the floor, so they follow property-panel / Gizmo edits automatically; unrecognized names fall back to a plain box, and new kinds can be added incrementally
 - **Layout variety (v1.4.0)**: the corridor layout now auto-balances rooms without a `side` hint across both sides of the corridor (the entrance stays on the south), so rooms don't pile up on one side; the system prompt guides the model to pick between corridor / living-centered / free-form by room count and type, and to prefer a different sensible arrangement from the last generation
+- **Furniture completeness (v1.4.0)**: the system prompt requires **every room to include its typical furniture** (living: sofa / coffee table / TV cabinet; bedrooms: bed / wardrobe; dining: table / chairs; kitchen: cabinets / fridge; bathroom: toilet / sink, etc.), so the model can't return a layout with empty rooms
 
 ## License
 
@@ -252,6 +238,6 @@ MIT — see the [LICENSE](LICENSE) file.
 
 ---
 
-**Last updated**: 2026-08-06
-**Doc version**: v1.13
+**Last updated**: 2026-08-07
+**Doc version**: v1.14
 **Maintainer**: JoyFish
