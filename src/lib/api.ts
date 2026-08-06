@@ -33,8 +33,8 @@ export interface ConnectionTestResult {
   message: string
 }
 
-const DEFAULT_BASE_URL = 'https://api.openai.com/v1'
-const DEFAULT_TEST_MODEL = 'gpt-3.5-turbo'
+const DEFAULT_BASE_URL = 'https://api.deepseek.com'
+const DEFAULT_TEST_MODEL = 'deepseek-v4-flash'
 
 /** 构建指向 OpenAI 兼容接口（OpenAI / DeepSeek / LocalAI 等）的 HTTP 客户端 */
 export function createApiClient({ apiKey, baseUrl }: ApiClientOptions) {

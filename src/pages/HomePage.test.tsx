@@ -40,7 +40,7 @@ function resetStores() {
     apiKeys: [],
     activeKeyId: null,
     defaultBaseUrl: '',
-    defaultModel: 'gpt-3.5-turbo',
+    defaultModel: 'deepseek-v4-flash',
     thinking: 'disabled',
     colorMode: 'standard',
     wireframe: { enabled: false, lineWidth: 1 },

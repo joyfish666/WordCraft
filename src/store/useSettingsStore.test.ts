@@ -8,7 +8,7 @@ describe('useSettingsStore', () => {
       apiKeys: [],
       activeKeyId: null,
       defaultBaseUrl: '',
-      defaultModel: 'gpt-3.5-turbo',
+      defaultModel: 'deepseek-v4-flash',
       thinking: 'disabled',
       colorMode: 'standard',
       wireframe: { enabled: false, lineWidth: 1 },
@@ -36,7 +36,7 @@ describe('useSettingsStore', () => {
           apiKeys: [],
           activeKeyId: null,
           defaultBaseUrl: '',
-          defaultModel: 'gpt-3.5-turbo',
+          defaultModel: 'deepseek-v4-flash',
           thinking: 'disabled',
           colorMode: 'standard',
           wireframe: { enabled: false, lineWidth: 1 },
@@ -81,7 +81,7 @@ describe('useSettingsStore', () => {
   it('设置变更持久化到 localStorage', () => {
     useSettingsStore
       .getState()
-      .addApiKey({ name: 'DeepSeek', key: 'sk-ds', baseUrl: 'https://api.deepseek.com/v1' })
+      .addApiKey({ name: 'DeepSeek', key: 'sk-ds', baseUrl: 'https://api.deepseek.com' })
     useSettingsStore.getState().setColorMode('colorblind')
     useSettingsStore.getState().toggleWireframe()
 

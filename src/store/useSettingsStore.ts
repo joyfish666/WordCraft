@@ -31,8 +31,8 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       apiKeys: [],
       activeKeyId: null,
-      defaultBaseUrl: '',
-      defaultModel: 'gpt-3.5-turbo',
+      defaultBaseUrl: 'https://api.deepseek.com',
+      defaultModel: 'deepseek-v4-flash',
       thinking: 'disabled',
       colorMode: 'standard',
       // 默认实体色块渲染（关闭线框），家具/房间呈现为有遮挡关系的实心方块
