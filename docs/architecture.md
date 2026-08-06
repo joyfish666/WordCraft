@@ -151,6 +151,17 @@ interface WallFace {
 - **入户门**：暖橙门扇 + 亮黄门头标识，一眼可辨。
 - **属性面板**（`PropertyPanel`）：选中模块后浮于视口右侧，编辑名称/长宽高/X·Y·Z；数字输入本地草稿态、Enter/blur 提交（避免逐键提交）；位置微调与复位位置直接调用 `translateSelected`/`resetSelectedPosition`。
 
+### 5.1 家具部件模型（lib/furniturePresets.ts，v1.4.0）
+
+家具不再渲染为统一长方体，而是按名称识别种类、用程序化部件拼装（纯函数，无渲染依赖）：
+
+- **分类**：`furnitureKind(name)` 用中文正则词表把家具名映射到种类（床/衣柜/书桌/沙发/椅子/马桶/洗手池/冰箱/电视柜/餐桌/圆桌/书架/洗衣机），未命中回退 `generic`（整盒）。`GENERIC_GUARD_RE` 先排除易误判词（如「床头柜」含「床」）。
+- **拼装**：`buildFurnitureParts(kind, L, H, W, facing)` 返回部件列表（`center`/`size`/`shape`(box|cylinder)/`shade`）。柜/沙发等按「背侧朝 +z」的规范朝向构建，东/西墙用「交换长宽 + 旋转 90°」、南/北墙用 0°/180°（`orientParts`），足迹保持不变；`BACK_DIR`/`BACK_AXIS` 声明每类背侧的局部方向与沿轴。
+- **床**：单独 `buildBedParts`——床头板/枕头放**长轴端**（短边中间），朝向由长轴上最近的墙决定；放置层（`furniturePlacement.ts`）也例外处理床**短边贴墙**。
+- **朝向**：`facingFromRoom(node, room, backAxis)` 由家具在父房间内的位置算背侧应贴的墙（短轴/长轴规则，避免转角衣柜门开在小面）。
+- **配色**：三档——主色 `FURNITURE_COLOR`（色盲模式切换）、副色 `FURNITURE_PART_DARK`、深色强调 `FURNITURE_PART_INK`（床头板/柜门/电视屏）。
+- **防共面（z-fighting）**：垂直面前脸部件不得与箱体/床架前脸共面——箱体前脸后缩 `doorTh+0.02`、门板凸出；床头板内凹 0.05、沙发靠背/扶手内凹 0.03。
+
 ## 6. 状态管理（store/*）
 
 - **useSettingsStore**（Zustand + persist → localStorage `wordcraft.settings`）：API Keys、Base URL、默认模型、深度思考模式、颜色模式、线框、调试开关、`language`（`'zh'|'en'`，默认 zh，`setLanguage` 切换）。`version: 3` + migrate：旧数据缺 `language` 时回退 `'zh'`。
@@ -232,7 +243,8 @@ src/
 │   ├── chat.ts                # 生成链路与系统提示词
 │   ├── api.ts                 # OpenAI 兼容客户端、SSE 流式、连通性检测
 │   ├── layout.ts              # 布局引擎 resolveLayout
-│   ├── furniturePlacement.ts  # 家具常理摆放（贴墙 + 避让嵌套卫生间）
+│   ├── furniturePresets.ts    # 家具部件模型（分类/拼装/朝向/包围盒，纯函数）
+│   ├── furniturePlacement.ts  # 家具常理摆放（贴墙 + 避让嵌套卫生间；床短边贴墙例外）
 │   ├── roomGeometry.ts        # 分段墙体 computeWallPlan + computeAllWallPlans/nestedWallPlan（真·内嵌）
 │   ├── modelTree.ts           # 树遍历/家具约束 normalizeContainment（含推出嵌套占地）
 │   ├── planGeometry.ts        # 2D 平面图纯函数（包围盒/取景/尺寸线/房间标签）
