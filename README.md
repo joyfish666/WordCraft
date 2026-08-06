@@ -2,7 +2,7 @@
 
 > A pure-frontend "text-to-3D" house designer — describe your home in one sentence, and an AI generates an editable 3D spatial model.
 
-🚀 **Live**: <https://joyfish666.github.io/WordCraft/> (GitHub Pages · no backend · all data stays local, auto-updated on every push)
+🚀 **Live**: <https://joyfish666.github.io/WordCraft/> (GitHub Pages · no backend · all data stays local, auto-updated on every push) — on first visit, click "加载示例" to load a ready-made house
 
 📄 [中文 README](README-zh.md) · [Architecture](docs/architecture.md) · [Handoff](docs/handoff.md)
 
@@ -22,8 +22,6 @@
 3. **Edit**: click a room or piece of furniture in the scene → adjust dimensions/position in the property panel, or drag with the Gizmo
 4. **Plan view**: toggle "3D / 平面图" in the top-left for a top-down view
 5. **Share**: the "Share" toolbar button produces an HD screenshot + a share code; anyone can paste the code to restore the model
-
-> Tip: click "加载示例" to load a sample house on first use.
 
 ## Tech Stack
 
