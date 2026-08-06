@@ -1,7 +1,7 @@
 {
   "name": "wordcraft",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.4.0",
   "type": "module",
   "description": "言筑 WordCraft —— 通过自然语言对话快速生成 3D 空间结构模型的纯前端 Web 应用",
   "scripts": {

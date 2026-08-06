@@ -2,7 +2,7 @@
 
 > 面向下一个接手 agent / 开发者。本文档补充 README 与技术文档未涉及之处：项目现状、关键实现坑、运行调试方式、下一步建议。
 
-**交接日期**：2026-08-06 · 当前分支 `main`（v1.2.0 已发布并推送 GitHub；v1.3.0 三大功能已完成，未发布/未推送）
+**交接日期**：2026-08-06 · 当前分支 `main`（v1.2.0 / v1.3.0 均已发布并推送 GitHub；v1.4.0 家具部件模型已实现，未发布/未推送）
 
 ## 1. 交接总览
 
@@ -17,7 +17,7 @@
 - ✅ 撤销/重做（快照历史栈，工具栏按钮 + Ctrl+Z/Ctrl+Y 快捷键）
 - ✅ 家具常理摆放（生成时贴墙 + 大面积贴墙旋转 + 避让嵌套卫生间/门口/家具，`lib/furniturePlacement.ts`）
 - ✅ 调试日志精简（去重、去刷屏）+ 调试面板「下载日志」按钮
-- ✅ 调试模式、测试（109 用例）
+- ✅ 调试模式、测试（166 用例）
 - ✅ **v1.0.0 已发布**（2026-08-05）：GitHub Pages 在线版 https://joyfish666.github.io/WordCraft/，`vite base=/WordCraft/` + GitHub Actions 自动构建部署（`.github/workflows/deploy.yml`）
 - ✅ **本地项目库（v1.1.0）**：Dexie 接入 UI，工具栏「保存/项目库」，新建/打开/重命名/删除，未保存守卫
 - ✅ **2D 俯视平面图（v1.1.0）**：同 Canvas 正交俯视相机，房间标签 + 外廓尺寸线，与 3D 选中/聚焦联动
@@ -25,6 +25,8 @@
 - ✅ **真·内嵌嵌套房间（v1.3.0）**：嵌套房间与父墙共线处不再重复渲染（`computeAllWallPlans`/`nestedWallPlan` 全量墙线并集查询，见坑 29）；父房间家具（含手动编辑）推出嵌套占地
 - ✅ **Gizmo 辅助编辑（v1.3.0）**：TransformControls 移动/缩放手柄 + 属性面板模式切换 + 拖拽实时联动（preview/commitDrag，见坑 30）
 - ✅ **截图分享 + 口令（v1.3.0）**：场景净化截图（preserveDrawingBuffer + screenshotMode）+ 口令水印 + 复制/粘贴还原/历史（见坑 31）
+- ✅ **家具部件模型 + 朝向（v1.4.0）**：家具按名称识别种类并拼装成多个部件（床/衣柜/书桌/沙发/椅子/马桶/洗手池/冰箱/电视柜/餐桌/圆桌/书架/洗衣机，`lib/furniturePresets.ts`）；朝向由 `facingFromRoom`（长轴/短轴背侧）+ 交换长宽/旋转决定，床的床头板在长轴端；未识别回退整盒；见坑 32
+- ✅ **入口房间保留（v1.4.0）**：`resolveCorridor` 里入口房间即使名字含「走廊」（如 LLM 为"大门开在走廊"创建的「入口走廊」）也保留为真实房间，否则被 `isCorridorName` 过滤后 `entranceRoomId` 悬空、大门回退到南边界房间、改大门位置无反应
 
 **先读**：`README-zh.md`（功能）、`docs/architecture.md`（架构）→ 再读本文档（坑与细节）。
 
@@ -93,6 +95,7 @@ npm run build
 29. **嵌套墙覆盖判定要容忍浮点贴边**：平铺/平移会把坐标弄出 ~1e-13 噪声（如 `3.0000000000000004`），墙线差会算成 `0.15000000000000036` 而**恰好略大于 `WALL_THICKNESS`(0.15)**，被误判"不共线"导致嵌套墙漏覆盖（双重墙）。`nestedWallPlan` 的行比较用 `WALL_THICKNESS + 1e-6`；段切分后用 `cleanSegments` 去掉 `to-from < 1e-6` 的浮点微段并合并相邻同类型段（否则 `shared` 判定与 `fullyOpen` 失败）。
 30. **Gizmo 拖拽必须"预览不记历史 + 结束一次性 commit"**：直接复用 `updateSelected`/`translateSelected` 会每帧 `pushPast` 刷爆撤销栈、且 `normalizeContainment` 每帧回弹导致手柄抖动。方案：`previewSelected(patch)` 拖拽中只更新 scene 不记历史不约束；`onMouseDown` 记 `baseScene`，`onMouseUp` 调 `commitDrag(baseScene)`（压入历史恰好一步 + normalize）。代理 group 作 TransformControls 的 `object`（`object={ref}`，drei 的 `useLayoutEffect` 读 `object.current`），避免与 R3F 对 mesh `position` prop 的管理冲突；家具代理 y 要 +`FLOOR_THICKNESS`（mesh 中心抬了地板厚），回写时还原。drei 内部 `dragging-changed` 自动禁用 OrbitControls，无需手动。缩放手柄：以拖拽开始时的基准尺寸 × 代理 scale，写 `dimensions`（渲染器不读 scale 字段），下限 0.1。
 31. **截图三件套**：① Canvas 必须 `gl={{ preserveDrawingBuffer: true }}` 否则 `toDataURL()` 读不到缓冲（空白）；② 场景净化用 `useModelStore.screenshotMode`，置 true 后**等两帧 rAF** 让 React 应用隐藏（网格/坐标轴/房屋线框/选中轮廓/Edges/Gizmo/平面图标注）再 `gl.domElement.toDataURL('image/png')`，最后复位；③ jsdom 无 WebGL、mock 的 SceneViewer 无 `captureScreenshot`，HomePage 调用须用 `viewportRef.current?.captureScreenshot?.()`（`?.` 守卫方法本身）。口令历史 `useShareStore` 只持久化 records（上限 20），还原校验 `version===1 && root.type==='house'`。
+32. **家具部件模型 + 朝向（v1.4.0）**：① `furnitureKind` 分类器必须**先排除易误判词**再宽松匹配（`床头柜` 含「床」会误套床造型 → `GENERIC_GUARD_RE` 先归 generic；词表为中文主词表，英文名不参与分类，见坑 27）；② **水平（x/z）必须钳制在 L×W 足迹内、底面贴地**——测试硬性断言覆盖 13 类 × 小/大尺寸 × 四朝向；**竖直顶部允许向上悬挑**（电视柜上的电视屏高于盒顶，上方无墙不影响碰撞），别把 y 上界当硬约束；③ **朝向用 `facingFromRoom(node, room, BACK_AXIS[kind])`**（不是最近墙）：柜/沙发等背侧沿**短轴**（柜门跨长轴开在大面）——朝短轴上最近的墙；**床单独处理**：床头在**长轴端**（短边中间），朝长轴上最近的墙。用「最近墙」会出错：转角衣柜 tie 到相邻墙后柜门开到小面。柜/沙发等按 `BACK_DIR`（背侧局部方向）+「东/西墙交换长宽+旋转 90°、南/北墙 0°/180°」保持足迹不变（`orientParts` 只绕 Y、cylinder 轴为 Y 无需特殊处理）；床用 `buildBedParts` 直接把床头板/枕头放长轴端。`parentRoom` 由 `ModelNodeView` 房间分支下传，改代码别漏；④ 渲染用 `<group onClick>` + 各部件 mesh（点击任一部分选中整件），**选中轮廓是并集包围盒的隐形 box + Edges，须 `raycast={() => null}`**（否则挡在部件上点不到，同坑 25）；⑤ 配色三档：主色 `FURNITURE_COLOR` / 副色 `FURNITURE_PART_DARK` / 深色强调 `FURNITURE_PART_INK`（床头板/柜门/电视屏，标准与色盲模式均可辨）；⑥ **垂直面严禁共面（z-fighting 闪烁）**：门板/床头板/靠背/扶手若与箱体/床架前脸同在 W/2（或 L/2）平面，移动视角会闪。方案：箱体前脸后缩 `doorTh+0.02`、门板凸出贴前脸（衣柜/冰箱/洗衣机）；床头板内凹 0.05、沙发靠背/扶手内凹 0.03。共面只在**垂直面**出现（水平堆叠的底面是背面被剔除，不闪）；⑦ **阶梯外墙的「立柱」转角**：同侧房间深度不一（客厅 4.8 深、餐厅 3.6 深）时，较深房间的侧墙在浅房间下方变外墙，与浅房间外墙成 90° 转角，像一根柱子——其实是**正确的外墙**，不是 bug。曾试过 `resolveCorridor` 把同侧深度对齐到最大值消除立柱，但副作用是**覆盖了 LLM 的房间尺寸，多轮改大小失效**（用户改公卫宽度无反应），已回退。别再引入对齐；若要处理只能改布局思路。
 
 ## 5. 已知限制 / 未实现
 
@@ -110,11 +113,11 @@ npm run build
 ## 6. 给下一个 agent 的建议
 
 1. **先跑 `npm run dev` + `npm test`**，加载示例模型熟悉渲染；再开调试模式跑一次生成，看日志理解数据流。
-2. **下一步优先级**（真·内嵌 / Gizmo / 截图分享+口令 已落地 v1.3）：
+2. **下一步优先级**（真·内嵌 / Gizmo / 截图分享+口令 / 家具部件模型 已落地 v1.3/v1.4）：
+   - **家具部件模型扩展**（13 类已做 v1.4.0）：剩余未识别家具（床垫/床头柜/梳妆台/浴缸/水槽等）仍是整盒，可在 `furniturePresets.ts` 增量添加（遵守坑 32：先排除误判词、水平钳制足迹、选中轮廓排除射线）；若引入带朝向的部件（非绕 Y 轴的圆柱/斜面），`orientParts` 需扩展处理
    - **移动端基础适配**（Phase 2 未勾选项）
    - **2D 平面图增强**：家具足迹显示、门洞开启符号、房间尺寸标注（当前仅标签 + 外廓总尺寸）
    - **优化性能与体验**（Phase 3 剩余项：`preserveDrawingBuffer` 有轻微性能开销，可评估按需截图）
-   - **数据导出**（README 功能规范列了"导出原始 JSON / 标准化描述文本"，尚未实现）
    - 若做口令二维码水印：README 提到"口令或二维码"，当前仅口令文本水印
 3. **改墙体/门相关代码前**，先看第 4 节的坑，尤其东西墙旋转、门段渲染与嵌套墙覆盖判定（坑 29）。
 4. **加功能时保持"语义/几何分离"**：让 LLM 出语义，代码算几何；不要回到"LLM 直接给绝对坐标"。
@@ -135,6 +138,7 @@ npm run build
 | 编辑提交/撤销重做 | `store/useModelStore.ts`（`updateSelected`/`undo`/`redo`）、`lib/modelTree.ts`（`updateNodeFields`） |
 | 状态 | `store/*`（项目库状态在 `store/useProjectStore.ts`） |
 | 家具约束 | `lib/modelTree.ts` |
+| 家具部件模型（分类/拼装/包围盒） | `lib/furniturePresets.ts`（纯函数）+ `components/viewport/ModelNodeView.tsx`（`FurnitureMesh` 渲染） |
 | 项目库 UI/保存/守卫 | `components/ui/ProjectLibraryDialog.tsx` + `pages/HomePage.tsx`（`handleSave`/`handleOpenProject`/`confirmDiscardUnsaved`/脏标记 effect）、`db/database.ts`、`store/useProjectStore.ts` |
 | 2D 平面图（取景/标注） | `lib/planGeometry.ts`（纯函数）、`components/viewport/PlanRig.tsx`、`PlanAnnotations.tsx`、`SceneViewer.tsx`（`planMode` 相机切换） |
 | 共享配色（2D/3D 一致） | `lib/palette.ts`（`roomFaceColor`） |

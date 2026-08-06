@@ -85,6 +85,26 @@ describe('resolveLayout - corridor 走廊型', () => {
     const studio = findNodeById(model.root, 'studio')!
     expect(studio.position.z).toBeCloseTo(0)
   })
+
+  it('入口房间名字含「走廊」（如"入口走廊"）也保留为真实房间，大门开在其南墙', () => {
+    const model = resolveLayout(
+      scene({
+        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'corridor_entrance' } },
+        children: [
+          roomV2('corridor_entrance', '入口走廊', 2, 1.2, 'left'),
+          roomV2('living', '客厅', 6, 4.5, 'left'),
+          roomV2('master', '主卧', 4.5, 3.5, 'right'),
+        ],
+      }),
+    )
+    const entrance = findNodeById(model.root, 'corridor_entrance')
+    expect(entrance).toBeDefined() // 未被 isCorridorName 过滤掉
+    const rooms = model.root.children.filter((c): c is ContainerNode => c.type === 'room')
+    const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'corridor_entrance' })
+    // 入户门开在入口房间南墙；客厅南墙无入户门
+    expect(plan.get('corridor_entrance')!.south.segments.some((s) => s.kind === 'door' && s.entrance)).toBe(true)
+    expect(plan.get('living')!.south.segments.some((s) => s.entrance)).toBe(false)
+  })
 })
 
 describe('resolveLayout - living 客厅居中型', () => {

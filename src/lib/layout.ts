@@ -206,7 +206,6 @@ function shiftPosition<T extends { position: Position }>(node: T, dx: number, dz
 // ---------------------------------------------------------------------------
 
 function resolveCorridor(house: HouseNodeV2): ContainerNode {
-  const rooms = house.children.filter((r) => !isCorridorName(r.name))
   const layout = house.layout
   const corridorWidth = layout.mode === 'auto' && layout.template === 'corridor'
     ? (layout.corridor?.width ?? DEFAULT_CORRIDOR_WIDTH)
@@ -215,6 +214,9 @@ function resolveCorridor(house: HouseNodeV2): ContainerNode {
     layout.mode === 'auto' && layout.template === 'corridor'
       ? layout.corridor?.entranceRoomId
       : undefined
+  // 入口房间即使名字含「走廊」（如"入口走廊"）也保留为真实房间，否则会被当走廊过滤掉，
+  // entranceRoomId 指向不存在房间 → 大门回退到南边界房间，改大门位置无反应
+  const rooms = house.children.filter((r) => !isCorridorName(r.name) || r.id === entranceId)
 
   // 入口房间放最前（近走廊 x=0 入口端），并强制置于走廊南侧（left），保证入户门在南外墙
   const ordered = entranceId
