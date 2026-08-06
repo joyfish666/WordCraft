@@ -2,7 +2,11 @@
 
 > 纯前端「文生 3D」房屋设计器——用一句话描述你的房子，AI 生成可编辑的 3D 空间模型。
 
-🚀 **在线体验**：<https://joyfish666.github.io/WordCraft/>（GitHub Pages · 零后端 · 数据全在本地，随推送自动更新）——首次打开可点「加载示例」直接查看现成户型
+🚀 **在线体验**：<https://joyfish666.github.io/WordCraft/>
+
+- GitHub Pages 部署 · 零后端 · 数据全在本地
+- 随每次推送自动更新到最新代码
+- 首次打开可点「加载示例」直接查看现成户型
 
 📄 [English README](README.md) · [技术架构](docs/architecture.md) · [项目交接](docs/handoff.md)
 

@@ -2,7 +2,11 @@
 
 > A pure-frontend "text-to-3D" house designer — describe your home in one sentence, and an AI generates an editable 3D spatial model.
 
-🚀 **Live**: <https://joyfish666.github.io/WordCraft/> (GitHub Pages · no backend · all data stays local, auto-updated on every push) — on first visit, click "加载示例" to load a ready-made house
+🚀 **Live**: <https://joyfish666.github.io/WordCraft/>
+
+- Deployed on GitHub Pages · no backend · all data stays local
+- Auto-updated to the latest code on every push
+- On first visit, click "加载示例" to load a ready-made house
 
 📄 [中文 README](README-zh.md) · [Architecture](docs/architecture.md) · [Handoff](docs/handoff.md)
 
