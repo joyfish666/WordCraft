@@ -90,9 +90,9 @@ export const zh = {
   'settings.apiDesc':
     'Key 仅保存在浏览器本地，用于调用大模型生成模型。支持 OpenAI / DeepSeek / LocalAI 等兼容接口。',
   'settings.defaultBaseUrl': '全局默认 Base URL（可选）',
-  'settings.baseUrlPlaceholder': '如 https://api.deepseek.com/v1，留空使用 https://api.openai.com/v1',
+  'settings.baseUrlPlaceholder': '如 https://api.deepseek.com，留空使用默认 DeepSeek 接口',
   'settings.defaultModel': '默认模型名',
-  'settings.modelPlaceholder': '如 gpt-3.5-turbo / deepseek-chat，由你的服务商决定',
+  'settings.modelPlaceholder': '如 deepseek-v4-flash，由你的服务商决定',
   'settings.thinking': '深度思考',
   'settings.thinkingFast': '快速生成（推荐）',
   'settings.thinkingDeep': '深度思考',
@@ -326,9 +326,9 @@ export const en: Record<TKey, string> = {
   'settings.apiDesc':
     'Keys are stored only in your browser and are used to call the LLM. Supports OpenAI / DeepSeek / LocalAI-compatible endpoints.',
   'settings.defaultBaseUrl': 'Global default Base URL (optional)',
-  'settings.baseUrlPlaceholder': 'e.g. https://api.deepseek.com/v1 — leave empty to use https://api.openai.com/v1',
+  'settings.baseUrlPlaceholder': 'e.g. https://api.deepseek.com — leave empty to use the default DeepSeek endpoint',
   'settings.defaultModel': 'Default model',
-  'settings.modelPlaceholder': 'e.g. gpt-3.5-turbo / deepseek-chat — depends on your provider',
+  'settings.modelPlaceholder': 'e.g. deepseek-v4-flash — depends on your provider',
   'settings.thinking': 'Deep thinking',
   'settings.thinkingFast': 'Fast (recommended)',
   'settings.thinkingDeep': 'Deep thinking',

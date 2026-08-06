@@ -24,7 +24,7 @@ export interface AppSettings {
   activeKeyId: string | null
   /** 全局默认 Base URL，可覆盖单条 Key 的空值 */
   defaultBaseUrl: string
-  /** 全局默认模型名（如 DeepSeek 用 deepseek-chat） */
+  /** 全局默认模型名（如 DeepSeek 用 deepseek-v4-flash） */
   defaultModel: string
   /** 深度思考模式（推理型模型如 DeepSeek v4 默认开启，关闭后响应更快） */
   thinking: ThinkingMode
