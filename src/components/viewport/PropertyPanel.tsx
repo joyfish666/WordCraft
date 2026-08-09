@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { nodeDims, nodePosition } from '../../lib/footprint'
 import { useT, type TKey } from '../../i18n'
 import { useModelStore } from '../../store/useModelStore'
 import type { Dimensions, ModelNode, Position } from '../../types/model'
@@ -90,7 +91,6 @@ const TYPE_LABEL: Record<ModelNode['type'], TKey> = {
   house: 'property.typeHouse',
   room: 'property.typeRoom',
   furniture: 'property.typeFurniture',
-  wall: 'property.typeWall',
 }
 
 export interface PropertyPanelProps {
@@ -118,6 +118,9 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
   const canReset = initialPositions[node.id] !== undefined
   const patchDim = (key: keyof Dimensions, v: number) => updateSelected({ dimensions: { [key]: v } })
   const patchPos = (key: keyof Position, v: number) => updateSelected({ position: { [key]: v } })
+  // 房间尺寸/坐标为足迹派生值（展示用）；编辑提交时由 updateNodeFields 转为足迹缩放/平移
+  const dims = nodeDims(node)
+  const pos = nodePosition(node)
 
   return (
     <aside className="prop-panel">
@@ -167,18 +170,18 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
       <div className="prop-panel__section">
         <span className="prop-panel__section-title">{t('property.dimSection')}</span>
         <div className="prop-panel__grid">
-          <NumberField label={t('property.length')} value={node.dimensions.length} min={0.1} onCommit={(v) => patchDim('length', v)} />
-          <NumberField label={t('property.width')} value={node.dimensions.width} min={0.1} onCommit={(v) => patchDim('width', v)} />
-          <NumberField label={t('property.height')} value={node.dimensions.height} min={0.1} onCommit={(v) => patchDim('height', v)} />
+          <NumberField label={t('property.length')} value={dims.length} min={0.1} onCommit={(v) => patchDim('length', v)} />
+          <NumberField label={t('property.width')} value={dims.width} min={0.1} onCommit={(v) => patchDim('width', v)} />
+          <NumberField label={t('property.height')} value={dims.height} min={0.1} onCommit={(v) => patchDim('height', v)} />
         </div>
       </div>
 
       <div className="prop-panel__section">
         <span className="prop-panel__section-title">{t('property.posSection')}</span>
         <div className="prop-panel__grid">
-          <NumberField label="X" value={node.position.x} onCommit={(v) => patchPos('x', v)} />
-          <NumberField label="Y" value={node.position.y} onCommit={(v) => patchPos('y', v)} />
-          <NumberField label="Z" value={node.position.z} onCommit={(v) => patchPos('z', v)} />
+          <NumberField label="X" value={pos.x} onCommit={(v) => patchPos('x', v)} />
+          <NumberField label="Y" value={pos.y} onCommit={(v) => patchPos('y', v)} />
+          <NumberField label="Z" value={pos.z} onCommit={(v) => patchPos('z', v)} />
         </div>
         <Button
           variant="ghost"

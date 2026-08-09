@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { nodePosition } from '../lib/footprint'
+import { migrateModel } from '../lib/migration'
 import {
   findNodeById,
   normalizeContainment,
@@ -8,11 +10,11 @@ import {
   walk,
   type NodeFieldsPatch,
 } from '../lib/modelTree'
-import type { ContainerNode, ModelNode, Position, SceneModel } from '../types/model'
+import type { ModelNode, Position, SceneModel } from '../types/model'
 
-/** 以不可变方式更新场景中某节点位置；root 恒为容器，故在此收窄类型 */
+/** 以不可变方式更新场景中某节点位置；root 恒为整屋，故在此收窄类型 */
 function withUpdatedPosition(scene: SceneModel, id: string, position: Position): SceneModel {
-  return { ...scene, root: updateNodePosition(scene.root, id, position) as ContainerNode }
+  return { ...scene, root: updateNodePosition(scene.root, id, position) as SceneModel['root'] }
 }
 
 /** 撤销/重做历史栈上限：防止无界内存占用 */
@@ -86,7 +88,7 @@ export const useModelStore = create<ModelState>()(
         const normalized = normalizeContainment(scene)
         const initialPositions: Record<string, Position> = {}
         walk(normalized.root, (n) => {
-          initialPositions[n.id] = n.position
+          initialPositions[n.id] = nodePosition(n)
         })
         // 新模型取代旧场景：清空编辑历史，避免撤销回到被替换的旧模型
         set({ scene: normalized, selectedId: null, focusId: null, initialPositions, past: [], future: [] })
@@ -105,10 +107,11 @@ export const useModelStore = create<ModelState>()(
           if (!state.scene || !state.selectedId) return state
           const target = findNodeById(state.scene.root, state.selectedId)
           if (!target) return state
+          const cur = nodePosition(target)
           const next: Position = {
-            x: target.position.x + dx,
-            y: target.position.y + dy,
-            z: target.position.z + dz,
+            x: cur.x + dx,
+            y: cur.y + dy,
+            z: cur.z + dz,
           }
           return { scene: withUpdatedPosition(state.scene, state.selectedId, next), ...pushPast(state) }
         }),
@@ -124,8 +127,7 @@ export const useModelStore = create<ModelState>()(
       updateSelected: (patch) =>
         set((state) => {
           if (!state.scene || !state.selectedId) return state
-          // root 恒为容器，故此处收窄类型
-          const nextRoot = updateNodeFields(state.scene.root, state.selectedId, patch) as ContainerNode
+          const nextRoot = updateNodeFields(state.scene.root, state.selectedId, patch) as SceneModel['root']
           if (nextRoot === state.scene.root) return state // 无实际变化（空补丁/未命中），不记历史
           // 提交后重新约束进墙内，并把变化后的场景作为新状态
           const scene = normalizeContainment({ ...state.scene, root: nextRoot })
@@ -135,7 +137,7 @@ export const useModelStore = create<ModelState>()(
       previewSelected: (patch) =>
         set((state) => {
           if (!state.scene || !state.selectedId) return state
-          const nextRoot = updateNodeFields(state.scene.root, state.selectedId, patch) as ContainerNode
+          const nextRoot = updateNodeFields(state.scene.root, state.selectedId, patch) as SceneModel['root']
           if (nextRoot === state.scene.root) return state // 无实际变化，不产生新引用
           // 拖拽中不约束、不记历史（结束时由 commitDrag 统一约束 + 记一次历史）
           return { scene: { ...state.scene, root: nextRoot } }
@@ -170,6 +172,12 @@ export const useModelStore = create<ModelState>()(
       name: 'wordcraft.model',
       // 只持久化场景；历史栈为会话内状态，刷新后清空
       partialize: (state) => ({ scene: state.scene }),
+      // v3 数据模型：旧持久化数据（v1 盒子模型）读取时迁移（notes §5.2 迁移必须幂等）
+      version: 2,
+      migrate: (persisted) => {
+        const state = persisted as { scene?: unknown }
+        return { ...state, scene: state.scene ? migrateModel(state.scene) : state.scene }
+      },
     },
   ),
 )
@@ -181,13 +189,18 @@ export function getSelectedNode(
 ): ModelNode | null {
   if (!scene || !selectedId) return null
   let found: ModelNode | null = null
-  const visit = (n: ModelNode): void => {
-    if (n.id === selectedId) found = n
-  }
   const dfs = (n: ModelNode): void => {
-    visit(n)
-    if (n.type === 'room' || n.type === 'house') {
-      for (const child of n.children) dfs(child)
+    if (n.id === selectedId) {
+      found = n
+      return
+    }
+    if (n.type === 'house') {
+      for (const level of n.levels) {
+        for (const room of level.rooms) dfs(room)
+      }
+    } else if (n.type === 'room') {
+      for (const f of n.furniture) dfs(f)
+      for (const r of n.nestedRooms) dfs(r)
     }
   }
   dfs(scene.root)

@@ -2,13 +2,14 @@ import { TransformControls } from '@react-three/drei'
 import { useEffect, useRef } from 'react'
 import type { MutableRefObject } from 'react'
 import * as THREE from 'three'
+import { nodeDims, nodePosition } from '../../lib/footprint'
 import { getSelectedNode, useModelStore } from '../../store/useModelStore'
 import type { Dimensions, ModelNode, SceneModel } from '../../types/model'
 import { FLOOR_THICKNESS } from './ModelNodeView'
 
-/** 是否为可 Gizmo 编辑的实体（家具/墙体）：代理 y 需折算地板厚度；房间直接用其自身中心 */
+/** 是否为可 Gizmo 编辑的实体（家具）：代理 y 需折算地板厚度；房间直接用其自身中心 */
 function isFurnitureLike(n: ModelNode): boolean {
-  return n.type === 'furniture' || n.type === 'wall'
+  return n.type === 'furniture'
 }
 
 interface GizmoControlsProps {
@@ -50,10 +51,11 @@ export function GizmoControls({ planMode = false }: GizmoControlsProps) {
     const g = proxyRef.current
     if (!g || !selected) return
     const isMesh = isFurnitureLike(selected)
+    const pos = nodePosition(selected)
     g.position.set(
-      selected.position.x,
-      selected.position.y + (isMesh ? FLOOR_THICKNESS : 0),
-      selected.position.z,
+      pos.x,
+      pos.y + (isMesh ? FLOOR_THICKNESS : 0),
+      pos.z,
     )
     g.scale.set(1, 1, 1)
   }, [selectedId, gizmoMode, selected])
@@ -65,7 +67,7 @@ export function GizmoControls({ planMode = false }: GizmoControlsProps) {
     const state = useModelStore.getState()
     baseRef.current = {
       baseScene: state.scene,
-      dims: selected ? { ...selected.dimensions } : null,
+      dims: selected ? { ...nodeDims(selected) } : null,
       isMesh: isFurnitureLike(selected),
     }
   }

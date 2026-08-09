@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { ChatMessage } from '../lib/api'
 import { createId } from '../lib/id'
+import { migrateModel } from '../lib/migration'
 import type { SceneModel } from '../types/model'
 
 export type ChatRole = 'user' | 'assistant' | 'error'
@@ -80,6 +81,17 @@ export const useChatStore = create<ChatState>()(
       name: STORAGE_KEY,
       // 仅持久化对话记录；生成状态与历史栈均无需保存
       partialize: (state) => ({ messages: state.messages }),
+      // v3 数据模型：旧持久化消息携带的 v1 模型读取时迁移
+      version: 2,
+      migrate: (persisted) => {
+        const state = persisted as { messages?: { model?: unknown }[] }
+        return {
+          ...state,
+          messages: (state.messages ?? []).map((m) =>
+            m.model ? { ...m, model: migrateModel(m.model) } : m,
+          ),
+        }
+      },
     },
   ),
 )

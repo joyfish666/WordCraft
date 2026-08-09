@@ -1,11 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import { compressObject, decompressObject, decodeShareCode, encodeShareCode } from './compression'
+import {
+  SHARE_CODE_PREFIX,
+  compressObject,
+  decompressObject,
+  decodeShareCode,
+  encodeShareCode,
+} from './compression'
 
 describe('compression（口令压缩）', () => {
   it('JSON 通过口令往返还原', () => {
     const payload = { name: '主卧', size: 3, nested: { list: [1, 2, 3] } }
     const code = encodeShareCode(JSON.stringify(payload))
     expect(decodeShareCode(code)).toBe(JSON.stringify(payload))
+  })
+
+  it('新口令带版本前缀（wc3:），供解码识别版本', () => {
+    const payload = JSON.stringify({ version: 3, root: {} })
+    const code = encodeShareCode(payload)
+    expect(code.startsWith(SHARE_CODE_PREFIX)).toBe(true)
+    expect(decodeShareCode(code)).toBe(payload)
+  })
+
+  it('旧口令（无前缀）仍可解码（兼容历史分享口令）', () => {
+    const payload = JSON.stringify({ version: 1, root: {} })
+    // 旧格式：直接 lz-string 压缩，无前缀
+    const legacyCode = LZStringLegacy(payload)
+    expect(decodeShareCode(legacyCode)).toBe(payload)
   })
 
   it('对象通过 compressObject / decompressObject 往返还原', () => {
@@ -58,3 +78,9 @@ describe('compression（口令压缩）', () => {
     expect(decompressObject('')).toBeNull()
   })
 })
+
+/** 旧格式口令（无版本前缀）：直接 lz-string 压缩 */
+function LZStringLegacy(json: string): string {
+  // 与旧版 encodeShareCode 等价（无前缀），复用 LZString 能力
+  return encodeShareCode(json).slice(SHARE_CODE_PREFIX.length)
+}

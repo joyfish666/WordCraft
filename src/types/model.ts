@@ -15,10 +15,16 @@ export interface Position {
   z: number
 }
 
-/** 叶节点模块（家具 / 墙体等不可再细分对象） */
+/** 平面坐标（x/z，单位：米） */
+export interface Point2D {
+  x: number
+  z: number
+}
+
+/** 叶节点模块（家具） */
 export interface FurnitureNode {
   id: string
-  type: 'furniture' | 'wall'
+  type: 'furniture'
   name: string
   dimensions: Dimensions
   position: Position
@@ -28,29 +34,68 @@ export interface FurnitureNode {
   description?: string
 }
 
-/** 容器节点（房间 / 整屋），可包含子模块 */
-export interface ContainerNode {
+/**
+ * 显式开洞（门/窗）：定位到 footprint 的某条边（edgeIndex），
+ * from/to 为该边沿边方向的局部区间（0..边长），width 为开洞宽度（冗余便于生成端使用）。
+ */
+export interface Opening {
+  /** footprint 边下标（与 RoomNode.footprint 顶点环一一对应） */
+  edgeIndex: number
+  from: number
+  to: number
+  width: number
+}
+
+/** 房间（v3）：足迹几何为权威形状，矩形是 4 点特例；墙/门默认由代码推导，显式开洞走覆盖层 */
+export interface RoomNode {
   id: string
-  type: 'room' | 'house'
+  type: 'room'
   name: string
-  dimensions: Dimensions
-  position: Position
-  children: ModelNode[]
-  /** 整屋的入户房间 id（仅 house 节点有意义），用于在外墙生成入户大门 */
+  /** 正交多边形足迹：世界坐标顶点环（相邻边垂直），矩形 = 4 个顶点 */
+  footprint: Point2D[]
+  /** 层高（米），独立于 footprint */
+  height: number
+  /** 显式门洞（渲染时覆盖推导结果） */
+  doors: Opening[]
+  /** 显式窗洞（渲染时覆盖推导结果） */
+  windows: Opening[]
+  /** 家具（绝对坐标，y 为高度一半，底面贴房间地面） */
+  furniture: FurnitureNode[]
+  /** 嵌套子房间（如卧室内卫生间） */
+  nestedRooms: RoomNode[]
+}
+
+/** 楼层（Phase 5 预留多层；当前恒为单层） */
+export interface LevelNode {
+  id: string
+  /** 楼层净高（米） */
+  height: number
+  rooms: RoomNode[]
+}
+
+/** 整屋（v3）：楼层列表 + 入户房间 id（迁移保留，南外墙生成入户门） */
+export interface HouseNode {
+  id: string
+  type: 'house'
+  name: string
+  /** 风格（Phase 5 预留） */
+  style?: string
+  levels: LevelNode[]
+  /** 入户房间 id，用于在外墙生成入户大门 */
   entranceRoomId?: string
 }
 
 /** 模型中的任意节点（容器或叶节点） */
-export type ModelNode = ContainerNode | FurnitureNode
+export type ModelNode = HouseNode | RoomNode | FurnitureNode
 
-/** 完整场景模型（以整屋为根节点，绝对坐标，渲染/存储使用） */
+/** 完整场景模型（以整屋为根节点，v3：足迹几何 + 显式开洞覆盖层） */
 export interface SceneModel {
-  version: 1
-  root: ContainerNode
+  version: 3
+  root: HouseNode
 }
 
 // ---------------------------------------------------------------------------
-// v2 语义契约（大模型输出，经 resolveLayout 解析为 v1 绝对坐标模型）
+// v2 语义契约（大模型输出，经 resolveLayout 解析为 v3 绝对坐标模型）
 // ---------------------------------------------------------------------------
 
 /** 家具 v2：位置相对所在房间中心，y 为家具高度一半（底面贴房间地面） */

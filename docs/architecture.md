@@ -1,6 +1,6 @@
-# 言筑（WordCraft）技术文档 —— 现行实现（v2 语义契约）
+# 言筑（WordCraft）技术文档 —— 现行实现（v3 足迹模型 + v2 语义契约）
 
-> 版本：v1.4 · 更新：2026-08-09。本文档描述**当前代码**的架构与数据契约（v2 语义契约 + v1 绝对坐标模型）。下一代 v3 架构见 [设计方案](design.md)，演进脉络见 [版本演进](history.md)，踩坑记录见 [开发注意事项](notes.md)。
+> 版本：v2.0 · 更新：2026-08-09。本文档描述**当前代码**的架构与数据契约（v2 语义契约 + v3 足迹几何模型）。P1（v3 数据模型）已实施：数据模型升级为足迹几何 + 显式开洞覆盖层，为纯重构（旧数据可打开、用例全绿、截图无回归）。下一代 v3 完整架构见 [设计方案](design.md)，演进脉络见 [版本演进](history.md)，踩坑记录见 [开发注意事项](notes.md)。
 
 本文档面向开发者和贡献者，描述言筑的核心架构、数据契约与实现细节。项目为**纯前端**应用，无需后端。
 
@@ -9,7 +9,7 @@
 言筑的核心设计原则是**语义与几何分离**：
 
 - **大模型负责语义**：输出"建什么"——房间清单、名义尺寸、布置意图（相对关系），不输出绝对坐标。
-- **代码负责几何**：布局引擎将语义确定性平铺为精确的绝对坐标，保证无缝共用墙、门连通、房屋闭合。
+- **代码负责几何**：布局引擎将语义确定性平铺为精确的足迹几何（正交多边形），保证无缝共用墙、门连通、房屋闭合。
 
 ```
 用户自然语言
@@ -22,12 +22,12 @@ Zod 校验（schemas/model.schema.ts）
    │
    ▼
 布局引擎 resolveLayout（lib/layout.ts）
-   │  平铺为 v1 绝对坐标模型（内部统一格式）
+   │  平铺为 v3 足迹模型（内部统一格式）
    ▼
-已解析模型 SceneModel（types/model.ts）
+已解析模型 SceneModel（types/model.ts + lib/footprint.ts）
    │
    ├─ 渲染层（components/viewport/*）
-   ├─ 墙体方案 computeWallPlan（lib/roomGeometry.ts）
+   ├─ 墙体方案 computeWallPlan（lib/roomGeometry.ts，足迹边分段 + 显式开洞覆盖层）
    └─ 状态层（store/useModelStore.ts）
 ```
 
@@ -37,7 +37,7 @@ Zod 校验（schemas/model.schema.ts）
 
 ### 2.1 v2 语义契约（大模型输出）
 
-大模型输出的 v2 模型包含 `layout`（布局模式）与 `children`（房间）：
+大模型输出的 v2 模型包含 `layout`（布局模式）与 `children`（房间）——**P1 保持 v2 契约不变**（契约动词化属 P2）：
 
 ```jsonc
 {
@@ -78,99 +78,114 @@ Zod 校验（schemas/model.schema.ts）
 - **卫生间命名归属**：`X卫生间` 只与其归属房间 `X` 开门（`主卧卫生间 → 主卧`、`走廊卫生间 → 走廊`）。
 - **布局模式由大模型按需求选择**：常规住宅 → auto（corridor/living）；明确非常规/自由布局 → custom。
 
-### 2.2 已解析模型（内部统一格式，v1）
+### 2.2 已解析模型（内部统一格式，v3）
 
-布局引擎输出 `SceneModel`（v1），一切具有**绝对坐标**，供渲染/存储/墙体方案消费：
+布局引擎输出 `SceneModel`（v3，足迹几何），一切具有**绝对坐标**，供渲染/存储/墙体方案消费：
 
 ```ts
-interface SceneModel {
-  version: 1
-  root: ContainerNode   // house
+interface SceneModel { version: 3, root: HouseNode }
+interface HouseNode {
+  id: string; name: string; style?: string
+  levels: LevelNode[]               // 楼层（P1 恒为单层，Phase 5 预留多层）
+  entranceRoomId?: string           // 入户房间 id（迁移保留）
 }
-interface ContainerNode {
-  id: string
-  type: 'house' | 'room'
-  name: string
-  dimensions: Dimensions
-  position: Position       // 绝对坐标（整屋中心为原点，地面 y=0）
-  children: ModelNode[]    // FurnitureNode | ContainerNode（嵌套房间）
-  entranceRoomId?: string  // 整屋的入户房间 id
+interface LevelNode { id: string; height: number; rooms: RoomNode[] }
+interface RoomNode {
+  id: string; name: string
+  footprint: Point2D[]              // 正交多边形顶点环（世界坐标，矩形 = 4 点特例）
+  height: number                    // 层高，独立于 footprint
+  doors: Opening[]; windows: Opening[]   // 显式开洞（覆盖层，P1 无 UI 产出但模型/渲染/墙体支持）
+  furniture: FurnitureNode[]        // 家具（绝对坐标）
+  nestedRooms: RoomNode[]           // 嵌套子房间（如卧室内卫生间）
 }
+interface Opening { edgeIndex: number; from: number; to: number; width: number }  // 相对所在边局部区间
 ```
 
-持久化（localStorage）与对话历史存储的都是这种已解析模型，渲染层完全不变。
+- **房间不再存 position/dimensions**：中心/尺寸由 footprint 推导（`lib/footprint.ts` 的 `footprintCenter`/`footprintDims`/`roomCenter`/`roomDims` 等纯函数统一提供，属性面板/Gizmo/HomePage 全部经 `nodePosition`/`nodeDims` 访问器消费）。
+- 房间高度独立于 footprint；整屋高度 = 楼层高度（墙顶/标注层）。
+- **显式开洞覆盖层**（设计 §3.2）：`doors/windows` 显式开口在渲染时覆盖推导结果（`applyOpenings`）；P1 生成器/迁移均产出空数组，UI 暂无入口，能力先落地（渲染 + 墙体 + 单测）。
+
+### 2.3 迁移与版本（migrateModel，lib/migration.ts）
+
+- `migrateModel(input)`：v1 盒子模型 → v3 足迹模型（盒子 → 4 点足迹、`entranceRoomId` 保留、`wall` 类型家具并入 `furniture`、单层 `levels`），**幂等且纯函数**；v3 输入原样返回；非法输入返回 `null`（调用方降级提示，不崩溃）。
+- 三条旧数据路径全部走迁移：本地项目库（HomePage 打开项目时）、分享口令（ShareDialog 还原时）、localStorage 持久化（`useModelStore`/`useChatStore` persist `version: 2` + `migrate`）。
+- 分享口令编码加版本前缀 `wc3:`（`compression.ts`），旧口令（无前缀）解码兼容——前缀仅用于标识，解码逻辑对两种格式一视同仁。
 
 ## 3. 布局引擎（lib/layout.ts）
 
-`resolveLayout(sceneV2): SceneModel` 将 v2 语义模型平铺为绝对坐标：
+`resolveLayout(sceneV2): SceneModel` 将 v2 语义模型平铺为 v3 足迹模型（P1 平铺仍产矩形足迹）：
 
 1. **corridor 走廊型**：走廊沿 X 贯穿；房间按 `side`（left=南/right=北）在两侧顺序平铺、无缝贴合；入口房间强制置于南侧并排最前；单房间省略走廊。
 2. **living 客厅居中型**：中心房间（`centerRoomId`）居中于原点，其余房间按 `side` 环绕排布。
 3. **custom 自由型**：房间直接用 LLM 提供的绝对坐标。
-4. **嵌套房间**：`makeRoom` 递归——嵌套房间按 `side` 靠父房间对应**角落**（贴两面墙，`placeNested`）、无提示时靠东北角；门朝父房间内部（`nestedDoorDirection` 计算朝向父房间中心的门方向）；`normalizeContainment` 再兜底约束进父房间。**真·内嵌**：`computeAllWallPlans` 为嵌套房间算独立分隔墙方案——与已渲染墙共线且被覆盖的边渲染为 `open`（由外层墙围护，不再重复渲染），其余边为内部分隔墙 + 朝父中心的门；`containChildren` 同时把父房间家具（含手动编辑）推出嵌套占地。
-5. **整屋包围盒**：所有房间+走廊求包围盒 → 平移到原点居中 → `house.dimensions`=包围盒尺寸。
+4. **嵌套房间**：`makeRoom` 递归——嵌套房间按 `side` 靠父房间对应**角落**（贴两面墙，`placeNested`）、无提示时靠东北角；门朝父房间内部；`normalizeContainment` 再兜底约束进父房间。**真·内嵌**：`computeAllWallPlans` 为嵌套房间算独立分隔墙方案——与已渲染墙共线且被覆盖的边渲染为 `open`，其余边为内部分隔墙 + 朝父中心的门；`containChildren` 同时把父房间家具（含手动编辑）推出嵌套占地。
+5. **整屋包围盒**：所有房间+走廊的足迹求包围盒 → 平移到原点居中（`translateRoom` **递归平移嵌套房间足迹与家具**，否则嵌套房间会脱离父房间）。整屋不存 dimensions（由 `houseBounds` 推导）。
 6. 家具相对父房间中心偏移为绝对坐标；`normalizeContainment` 将家具约束进墙内。
 
 **布局惯例**：客厅近入口（南侧）、卧室沿走廊两侧、单间房无走廊、除入户门外房屋闭合。
 
-**家具常理摆放**（`furniturePlacement.ts`，仅 auto 模式 + 示例模型）：靠墙家具（衣柜/橱柜/书桌/沙发等，`isWallAnchored`）贴**最近墙**（保持平行于墙的坐标），**大面积贴墙**——长边（max(长,宽)）沿墙，必要时**交换长宽**实现 90° 旋转（`rotationY` 同步 +90°，渲染器暂不读 rotationY，视觉靠交换后的尺寸生效）；**床例外：短边（床头）贴墙**（`furnitureKind(name)==='bed'` 时交换条件取反，长边垂直墙伸入室内，床头朝墙是常理）；再**沿墙滑动**避开三类禁止进入区：嵌套子房间（足迹 + 墙厚）、**房间门口通道**（`computeDoorZones` 从墙体方案提取门洞，含入户门，`DOOR_CLEARANCE=1m` 深 × 门宽）、已放置的其他家具（按 children 顺序贪心）。独立家具（茶几/餐桌/椅子等，`FREE_STANDING_RE`）保持原位，仅约束进墙内并避让上述禁区。custom 自由布局保留大模型的显式坐标。
+**家具常理摆放**（`furniturePlacement.ts`，仅 auto 模式 + 示例模型）：靠墙家具（衣柜/橱柜/书桌/沙发等，`isWallAnchored`）贴**最近墙**（保持平行于墙的坐标），**大面积贴墙**——长边（max(长,宽)）沿墙，必要时**交换长宽**实现 90° 旋转（`rotationY` 同步 +90°，渲染器暂不读 rotationY，视觉靠交换后的尺寸生效）；**床例外：短边（床头）贴墙**；再**沿墙滑动**避开三类禁止进入区：嵌套子房间（足迹包围盒 + 墙厚）、**房间门口通道**（`computeDoorZones` 从墙体方案提取门洞，含入户门，`DOOR_CLEARANCE=1m` 深 × 门宽）、已放置的其他家具。独立家具（茶几/餐桌/椅子等，`FREE_STANDING_RE`）保持原位，仅约束进墙内并避让上述禁区。custom 自由布局保留大模型的显式坐标。
 
 ## 4. 墙体模型（lib/roomGeometry.ts）
 
-墙体按**相邻关系切分为段（segment）**渲染，每段为 实体 / 门 / 开放 之一：
+墙体按**足迹边切分为段（segment）**渲染，每段为 实体 / 门 / 开放 / 窗 之一：
 
 ```ts
-type WallSegmentKind = 'wall' | 'door' | 'open'
-interface WallFace {
+type WallSegmentKind = 'wall' | 'door' | 'open' | 'window'
+interface WallSegment { from: number; to: number; kind: WallSegmentKind; entrance?: boolean }
+interface WallEdge {
+  axis: 'x' | 'z'          // 轴对齐边；段局部坐标以**边起点为 0**（方向恒 + 轴）
+  line: number             // 垂直方向的固定世界坐标
+  start: number            // 沿边方向起点的世界坐标
+  length: number
+  dir: DoorDirection       // 外向法线方向（north/south/east/west）
   shared: boolean          // 是否有相邻房间（影响地板外扩）
-  segments: WallSegment[]  // 沿墙方向分段
+  segments: WallSegment[]
 }
+interface WallPlan { edges: WallEdge[] }   // 与 footprint 顶点环一一对应
 ```
 
-`computeWallPlan(rooms, { entrance, entranceRoomId })` 的规则：
-- **共享墙去重**：相邻房间共用的墙只由一方渲染（非走廊优先，否则 id 较小者）。
-- **开放空间**：客厅/餐厅/厨房等（`isOpenRoom`）与走廊之间不设墙。
-- **私密房间**：卧室/书房（`isPrivateRoom`）只连走廊与其套间卫生间，不直连非走廊开放空间（厨房/客厅/餐厅），彼此不互开门。
-- **卫生间归属**：卫生间只与其归属房间开门，其余连接为实心墙（`bathroomOwner` 解析命名）；归属房间在房屋中不存在的**公共/公用卫生间**允许与走廊开门。
-- **部分被占用的墙**：被相邻房间覆盖的部分按共享/开放处理，**未覆盖部分仍渲染为外墙**，保证不与外部相通。
+- `footprintEdges(room)`：足迹顶点环 → 轴对齐边（每条边基座为整段 `wall`）；`edgeOf(plan, dir)` 按外向法线取边（矩形每方向恰一条）。
+- **相邻判定泛化**（设计 §3.2）：旧"四面对齐盒子共线重叠" → 新"足迹边共线重叠"——对侧边同线（|line 差| ≤ ADJACENCY_GAP）且区间重叠即为邻居，规则不变：共享墙去重、开放空间不设墙、私密房间不互开门、卫生间命名归属、外墙保留、入口南墙入户门。
+- **显式开洞覆盖层**：`applyOpenings(plan, rooms)` 把 `RoomNode.doors/windows` 的局部区间切到对应边的实心墙段上（`door`/`window` 段，不影响 `open` 段），先于兜底门判定执行（已开洞房间不再兜底开门）。
 - **入户门**：开在入口房间南外墙居中，段标记 `entrance: true`，渲染醒目门扇。
-- **墙段坐标**：东/西墙渲染用 `-90°` 旋转，使局部坐标方向与 `wallInfo` 一致（避免镜像导致外墙段错位）。
+- **嵌套房间分隔墙**（真·内嵌）：`computeAllWallPlans` = `computeWallPlan`（顶层零改动）+ 自顶向下为每个嵌套房间调 `nestedWallPlan` 写入同一 Map。`nestedWallPlan(node, parent, plan, roomById)` 对每面墙做**全量墙线并集查询**——收集同一世界墙线（`|line 差| ≤ WALL_THICKNESS + 1e-6`，容忍浮点贴边）上所有非 `open` 段的覆盖区间，被覆盖处切为 `open`（由外层墙围护，避免与父墙/邻居墙双重墙）；其余边为内部分隔墙，门开在朝父中心一面（退化时最近含 `wall` 段的面，四面全覆盖则不开门）。段切分后用 `cleanSegments` 合并相邻同类型段并去除浮点噪声微段。
 - **门口禁区**（`computeDoorZones`/`DOOR_CLEARANCE`）：从墙体方案提取各顶层房间门洞（含入户门），供家具常理摆放避让；与渲染用 `computeWallPlan` 同源，保证门洞位置一致。
-- **嵌套房间分隔墙**（真·内嵌，v1.3）：`computeAllWallPlans` = `computeWallPlan`（顶层零改动）+ 自顶向下为每个嵌套房间调 `nestedWallPlan` 写入同一 Map。`nestedWallPlan(node, parent, plan, roomById)` 对每面墙做**全量墙线并集查询**——收集同一世界墙线（`|line 差| ≤ WALL_THICKNESS + 1e-6`，容忍浮点贴边）上所有非 `open` 段的覆盖区间，被覆盖处切为 `open`（由外层墙围护，避免与父墙/邻居墙双重墙）；其余边为内部分隔墙，门开在朝父中心一面（退化时最近含 `wall` 段的面，四面全覆盖则不开门）。段切分后用 `cleanSegments` 合并相邻同类型段并去除浮点噪声微段。
 
 ## 5. 渲染管线（components/viewport/*）
 
 - **SceneViewer**：R3F Canvas（`gl={{ preserveDrawingBuffer: true }}` 供截图读取缓冲）；初始 45° 南视角正对入户门；内置实时**东西南北罗盘**（`Compass` 每帧读取相机方位角旋转 N/S/E/W 玫瑰）。
-- **Viewport3D**：计算整屋所有房间（含嵌套）的墙体方案（`computeAllWallPlans`）；`screenshotMode` 时隐藏网格/坐标轴。
+- **Viewport3D**：从 `scene.root.levels[0].rooms` 提取顶层房间，计算所有房间（含嵌套）的墙体方案（`computeAllWallPlans`）；`screenshotMode` 时隐藏网格/坐标轴。
 - **ModelNodeView**：递归渲染层级模型——
-  - **房间外壳**（`RoomShell`）：实体地板（外扩覆盖墙脚）+ 分段实心墙（门洞与墙同高）+ 选中轮廓；嵌套子房间地板略微抬高避免与父地板重叠闪烁。
+  - **房间外壳**（`RoomShell`）：**足迹地板** = footprint 沿非共享边外扩一个墙厚（`floorPolygon` 逐边求偏移线交点，矩形下与旧"四边外扩"语义一致），`THREE.Shape` + `ExtrudeGeometry` 拉伸 `FLOOR_THICKNESS`（旋转 -90° X 铺平到 XZ 平面，shape 坐标 y = -世界 z）；**墙段沿足迹边摆放**——轴 'x' 边平放、轴 'z' 边 `[0, -π/2, 0]` 旋转（局部方向统一为 + 轴，旧"东西墙 -90° hack"泛化为按边轴推导）；门洞/窗洞与墙同高；嵌套子房间地板略微抬高避免与父地板重叠闪烁。
   - **嵌套房间**：`wallPlan?.get(node.id)` 命中 `computeAllWallPlans` 算出的分隔墙方案（与父墙共线处 `open`）；无方案时兜底 `wallPlanWithDoor(room, nestedDoorDirection(node, parentCenter))`。
-  - **点击选中部件**：家具/嵌套房间的 `onClick` 调用 `stopPropagation()`，点击床等部件可选中并展示信息，不会被父房间覆盖。**房屋线框盒与房间选中轮廓盒都加了 `raycast={() => null}`**——R3F 按射线距离排序逐级派发事件，若轮廓盒参与射线，它会先被命中并冒泡到房间 group 的 `stopPropagation`，导致选中房间后无法点中内部部件。
-  - **家具**：实体 vs 虚化两态（聚焦时非聚焦房间家具虚化）。
+  - **window 段渲染**：窗台（实体，高 0.9）+ 半透明蓝色玻璃 + 窗楣（实体）+ 窗框线框示意——沿用"门段永远渲染为开洞"原则，绝不渲染成实心墙。
+  - **点击选中部件**：家具/嵌套房间的 `onClick` 调用 `stopPropagation()`；房屋线框盒（足迹并集包围盒）与房间选中轮廓盒（足迹包围盒）都加 `raycast={() => null}`。
+  - **家具**：实体 vs 虚化两态；朝向 `facingFromRoom` 消费 `roomCenter/roomDims` 派生的房间几何。
   - **聚焦模式**：点击房间 → 该房间外壳透明化以查看内部实体家具，其他房间虚化。
 - **入户门**：暖橙门扇 + 亮黄门头标识，一眼可辨。
-- **属性面板**（`PropertyPanel`）：选中模块后浮于视口右侧，编辑名称/长宽高/X·Y·Z；数字输入本地草稿态、Enter/blur 提交（避免逐键提交）；位置微调与复位位置直接调用 `translateSelected`/`resetSelectedPosition`。
+- **属性面板**（`PropertyPanel`）：选中模块后浮于视口右侧，编辑名称/长宽高/X·Y·Z；房间的尺寸/坐标为足迹派生值（`nodeDims`/`nodePosition`），提交时由 `updateNodeFields` 转为足迹缩放/平移（`height` → 层高，位置 Y 对房间无效）；数字输入本地草稿态、Enter/blur 提交；位置微调与复位位置直接调用 `translateSelected`/`resetSelectedPosition`。
 
 ### 5.1 家具部件模型（lib/furniturePresets.ts，v1.4.0）
 
-家具不再渲染为统一长方体，而是按名称识别种类、用程序化部件拼装（纯函数，无渲染依赖）：
+家具不渲染为统一长方体，而是按名称识别种类、用程序化部件拼装（纯函数，无渲染依赖；**P1 无变化**）：
 
 - **分类**：`furnitureKind(name)` 用中文正则词表把家具名映射到种类（床/衣柜/书桌/沙发/椅子/马桶/洗手池/冰箱/电视柜/餐桌/圆桌/书架/洗衣机），未命中回退 `generic`（整盒）。`GENERIC_GUARD_RE` 先排除易误判词（如「床头柜」含「床」）。
 - **拼装**：`buildFurnitureParts(kind, L, H, W, facing)` 返回部件列表（`center`/`size`/`shape`(box|cylinder)/`shade`）。柜/沙发等按「背侧朝 +z」的规范朝向构建，东/西墙用「交换长宽 + 旋转 90°」、南/北墙用 0°/180°（`orientParts`），足迹保持不变；`BACK_DIR`/`BACK_AXIS` 声明每类背侧的局部方向与沿轴。
 - **床**：单独 `buildBedParts`——床头板/枕头放**长轴端**（短边中间），朝向由长轴上最近的墙决定；放置层（`furniturePlacement.ts`）也例外处理床**短边贴墙**。
-- **朝向**：`facingFromRoom(node, room, backAxis)` 由家具在父房间内的位置算背侧应贴的墙（短轴/长轴规则，避免转角衣柜门开在小面）。
+- **朝向**：`facingFromRoom(node, room, backAxis)` 由家具在父房间内的位置算背侧应贴的墙（短轴/长轴规则，避免转角衣柜门开在小面）；v3 下父房间几何经 `roomCenter/roomDims` 派生。
 - **配色**：三档——主色 `FURNITURE_COLOR`（色盲模式切换）、副色 `FURNITURE_PART_DARK`、深色强调 `FURNITURE_PART_INK`（床头板/柜门/电视屏）。
 - **防共面（z-fighting）**：垂直面前脸部件不得与箱体/床架前脸共面——箱体前脸后缩 `doorTh+0.02`、门板凸出；床头板内凹 0.05、沙发靠背/扶手内凹 0.03。
 
 ## 6. 状态管理（store/*）
 
-- **useSettingsStore**（Zustand + persist → localStorage `wordcraft.settings`）：API Keys、Base URL、默认模型、深度思考模式、颜色模式、线框、调试开关、`language`（`'zh'|'en'`，默认 zh，`setLanguage` 切换）。`version: 3` + migrate：旧数据缺 `language` 时回退 `'zh'`。
-- **useModelStore**（persist → `wordcraft.model`）：当前场景（已解析模型）、选中节点、聚焦房间、初始位置快照、**撤销/重做历史栈（`past`/`future`，仅会话内不持久化）**；`setScene` 应用 `normalizeContainment` 并清空历史。
-  - 编辑提交统一走 `updateSelected(patch)`（名称/尺寸/位置部分补丁）：不可变更新 `updateNodeFields` → `normalizeContainment` 约束进墙内 → 旧场景压入 `past` 并清空 `future`。
-  - `translateSelected`（位置微调/方向键）与 `resetSelectedPosition`（复位）每次调用也各记一步历史；新编辑会使 redo 失效；历史上限 50 步。
-  - **Gizmo 拖拽（v1.3）**：`gizmoMode`（`'translate'|'scale'`，会话内）+ `previewSelected(patch)`（拖拽中实时更新，不记历史、不约束）+ `commitDrag(baseScene)`（拖拽结束把拖拽前场景压入 `past` 恰好一步，并对当前场景 `normalizeContainment`）。`screenshotMode` 截图瞬间隐藏辅助元素（会话内）。
-- **useChatStore**（persist → `wordcraft.chat`）：对话消息、生成态、**生成历史栈**（`generationStack`，会话内不持久化）：每次生成成功前 `pushGenerationHistory(prevScene)`（上限 20）；`undoLastGeneration()` 弹出快照并移除最后 user+assistant 对、返回待恢复场景（仅当最后一条是携带模型的助手消息）；`clearGenerationHistory` 在加载示例/清空场景/打开项目/清空对话时调用。
-- **useProjectStore**（persist → `wordcraft.project`）：当前场景所属项目（`currentId`/`currentName`，持久化）+ 会话内脏标记 `dirty`；`setProject`/`clearProject`/`markSaved`/`markDirty`/`setCurrentName`。**脏标记驱动**在 HomePage：`lastSavedJsonRef` 记录"上次保存的场景 JSON"，场景变化时与之一致则 `markSaved`、不一致则 `markDirty`；仅当前项目绑定（`currentId !== null`）时跟踪。
+- **useSettingsStore**（Zustand + persist → localStorage `wordcraft.settings`）：API Keys、Base URL、默认模型、深度思考模式、颜色模式、线框、调试开关、`language`。`version: 3` + migrate。
+- **useModelStore**（persist → `wordcraft.model`）：当前场景（v3 足迹模型）、选中节点、聚焦房间、初始位置快照（`nodePosition`，房间取足迹中心）、**撤销/重做历史栈（`past`/`future`，仅会话内不持久化）**；`setScene` 应用 `normalizeContainment` 并清空历史。**persist `version: 2` + migrate**：旧持久化（v1 模型）读取时经 `migrateModel` 迁移。
+  - 编辑提交统一走 `updateSelected(patch)`：不可变更新 `updateNodeFields`（房间补丁 → 足迹缩放/平移/层高，空补丁返回原引用）→ `normalizeContainment` 约束进墙内 → 旧场景压入 `past` 并清空 `future`。
+  - `translateSelected` 与 `resetSelectedPosition` 每次调用各记一步历史；历史上限 50 步。
+  - **Gizmo 拖拽**：`gizmoMode`（会话内）+ `previewSelected(patch)`（拖拽中实时更新，不记历史、不约束）+ `commitDrag(baseScene)`（结束一次性压入历史并对当前场景 `normalizeContainment`）；代理同步用 `nodePosition`/`nodeDims`。`screenshotMode` 截图瞬间隐藏辅助元素。
+- **useChatStore**（persist → `wordcraft.chat`）：对话消息、生成态、**生成历史栈**（会话内不持久化）：每次生成成功前 `pushGenerationHistory(prevScene)`（上限 20）；`undoLastGeneration()` 弹出快照并移除最后 user+assistant 对；`clearGenerationHistory` 在加载示例/清空场景/打开项目/清空对话时调用。**persist `version: 2` + migrate**：消息携带的旧 v1 模型读取时迁移。
+- **useProjectStore**（persist → `wordcraft.project`）：当前场景所属项目（`currentId`/`currentName`，持久化）+ 会话内脏标记 `dirty`；脏标记驱动在 HomePage（`lastSavedJsonRef` 对照场景 JSON）。
 
 ## 6.5 本地项目库与 2D 俯视平面图（v1.1.0）
 
@@ -178,18 +193,18 @@ interface WallFace {
 
 - **数据**：Dexie（IndexedDB）`wordcraft.projects`，`ProjectRecord {id?, name, data(模型JSON), createdAt, updatedAt}`；`database.ts` 提供 `listProjects`（按 updatedAt 倒序）/ `saveProject` / `getProject` / `updateProject` / `deleteProject`。
 - **UI**：HomePage 工具栏「保存」「项目库」+ `ProjectLibraryDialog`（新建/打开/重命名/删除）。保存无当前项目时打开对话框聚焦名称输入；有当前项目时 `updateProject` 覆盖。
-- **打开项目**：`JSON.parse` + 轻量校验（`version===1 && root.type==='house'`）→ `setScene(parsed)`（内部 normalize + 初始位置快照 + 清历史）→ `setProject`。切换/加载示例/清空前用 `confirmDiscardUnsaved` 守卫未保存修改。
+- **打开项目**：`JSON.parse` → **`migrateModel` 迁移**（旧 v1 项目自动升 v3；解析失败/迁移失败提示无效）→ `setScene(parsed)`（内部 normalize + 初始位置快照 + 清历史）→ `setProject`。切换/加载示例/清空前用 `confirmDiscardUnsaved` 守卫未保存修改。
 - **生成/示例/清空** 后 `clearProject()`：新场景成为游离场景，不属于任何项目。
 
 ### 2D 俯视平面图（同 Canvas 正交相机）
 
-- **纯函数**（`lib/planGeometry.ts`）：`houseBounds`（整屋包围盒）、`walkRooms`（递归房间+兄弟索引，颜色与 3D 一致）、`roomLabelText`、`dimensionLines`（外廓尺寸线）、`computePlanCamera`（正交取景 zoom = min(w/fitX, h/fitZ)）。均可单测。
-- **相机切换**：`SceneViewer` 的 `planMode` 为 true 时挂载 **drei `OrthographicCamera makeDefault`**（`near=1 far=300 zoom=20 up=[0,0,1]`），`OrbitControls key={planMode?'ortho':'persp'}` 强制重挂载绑定新相机。⚠️ **必须用 drei 相机组件而非 R3F 原生元素**——R3F 核心不处理 `makeDefault`，drei 封装才切换 `state.camera` 并在卸载时恢复原相机。
-- **取景**（`PlanRig`）：`camera.up.set(0,0,1)` + `lookAt(整屋中心)` 使正北朝上；`camera.zoom = computePlanCamera().zoom`、`controls.update()`、`controls.saveState()`（复位视角回到取景）。依赖 scene/size 变化自动重新取景。
-- **标注**（`PlanAnnotations`）：drei `Html`（正交相机兼容）绘制房间「名称 长×宽」标签（颜色用共享 `roomFaceColor(name, siblingIndex, colorMode)`，走廊默认色）+ 整屋「总长/总宽」尺寸线（细长 mesh + Html 文案，墙顶之上、包围盒外）。`zIndexRange={[9,0]}` 保证在属性面板（z-10）之下。
-- **平移**：`pan()` 增加正交分支（scale = `1/zoom`；drei ortho frustum = 像素尺寸）；透视分支保持原 fov 公式。
+- **纯函数**（`lib/planGeometry.ts`）：`houseBounds`（**由所有房间足迹并集包围盒外扩墙厚推导**，兼容旧 `house.dimensions` 语义）、`walkRooms`（levels[0] 递归，嵌套下标 = 父家具数 + 嵌套下标，与 3D 配色一致）、`roomLabelText`（足迹包围盒尺寸）、`dimensionLines`、`computePlanCamera`。均可单测。
+- **相机切换**：drei `OrthographicCamera makeDefault` + `OrbitControls key` 强制重挂载（⚠️ 必须用 drei 相机组件）。
+- **取景**（`PlanRig`）：`camera.up.set(0,0,1)` + `lookAt(整屋中心)` 正北朝上；`zoom = computePlanCamera().zoom`。
+- **标注**（`PlanAnnotations`）：drei `Html` 绘制房间「名称 长×宽」标签（`roomCenter` 定位）+ 整屋尺寸线；标签高度 = 楼层高度以上。
+- **平移**：`pan()` 正交分支 scale = `1/zoom`。
 
-## 6.6 中英双语（i18n，v1.2.0）
+## 6.6 中英双语（i18n，v1.2.0，P1 无变化）
 
 - **轻量自研，零依赖**：
   - `src/i18n/translations.ts` — 纯模块，`zh` 词典为 key 真源（`as const`）、`en: Record<TKey, string>` 保证 key 一致；`translate(lang, key, params)` 纯函数，`{name}`/`{count}` 插值（`split/join`），缺 key 回退 zh → key。
@@ -203,32 +218,23 @@ interface WallFace {
 
 ### Gizmo（TransformControls）
 
-- **组件**：`components/viewport/GizmoControls.tsx`（Canvas 内、`Viewport3D` 之后）。用**代理 group** 作为 drei `TransformControls` 的受控对象（`object={ref}`），避免与 R3F 对 mesh `position` prop 的管理冲突；家具/墙体代理中心抬 `FLOOR_THICKNESS`（与 ModelNodeView 的 mesh 一致），房间用自身中心。drei 内部监听 `dragging-changed` 自动禁用 OrbitControls。
-- **模式**：`mode={gizmoMode}`（`translate`/`scale`）；属性面板顶部「Gizmo 手柄」分段控件切换。不做 rotate（渲染器按"旋转=交换长宽"建模，见坑 19）。
-- **数据流**：`onMouseDown` 记 `baseScene`+基准尺寸 → `onObjectChange` 读代理 position/scale 调 `previewSelected`（不记历史不约束，属性面板实时联动）→ `onMouseUp` 调 `commitDrag(baseScene)`（记一步历史 + normalize 约束进墙）。
-- **缩放映射**：`新尺寸 = 拖拽开始时基准尺寸 × 代理 scale`，各轴独立，下限 0.1；尺寸写入 `dimensions`（不读/写 `scale` 字段）。未拖拽时 `useEffect` 把代理同步到选中节点（选择切换/外部编辑/撤销后跟随）。
-- **隐藏**：planMode（2D 平面图）与 screenshotMode 时不渲染。
+- **组件**：`components/viewport/GizmoControls.tsx`。代理 group 作 drei `TransformControls` 受控对象；家具代理中心抬 `FLOOR_THICKNESS`；**房间代理同步 `nodePosition(room)`（足迹中心 + 层高一半）**，拖拽位移经 `updateNodePosition` 转足迹平移。
+- **模式**：`mode={gizmoMode}`（`translate`/`scale`）；缩放 = 拖拽开始基准尺寸（`nodeDims`）× 代理 scale 写回（房间 → `resizeFootprint` + 层高）。
+- **数据流**：`onMouseDown` 记 `baseScene` → `onObjectChange` 调 `previewSelected` → `onMouseUp` 调 `commitDrag`。planMode/screenshotMode 不渲染。
 
-### 截图（场景净化）
+### 截图（场景净化）与口令（lz-string）
 
-- **Canvas**：`gl={{ preserveDrawingBuffer: true, antialias: true }}`（`toDataURL` 需读取绘制缓冲）；`dpr={[1,2]}` 保证高分辨率。
-- **桥接**：`ScreenshotBridge`（Canvas 内 `useThree(s=>s.gl)`）把 renderer 写入父级 `glRef`；`SceneViewerHandle.captureScreenshot()` 置 `screenshotMode=true` → 等两帧 rAF（React 应用隐藏）→ `gl.domElement.toDataURL('image/png')` → 复位 → resolve。无 gl（测试环境）返回 null。
-- **净化**：`screenshotMode` 时隐藏 网格/坐标轴（Viewport3D）、房屋线框/选中轮廓/家具 Edges（ModelNodeView）、Gizmo（GizmoControls）、平面图标注（PlanAnnotations）。
-- **水印**：`lib/watermark.ts` `withWatermark(pngUrl, code)` 离屏 2D canvas 在右下角绘制半透明口令文本；无 canvas 2D 环境降级返回原图。
-
-### 口令（lz-string）
-
-- **编解码**：复用 `lib/compression.ts`（`encodeShareCode` / `decompressObject`，已有测试）。
-- **历史**：`store/useShareStore.ts`（persist `wordcraft.share`，`partialize` 只存 records，上限 20）；`ShareRecord {id, name?, code, createdAt}`，还原时 `decompressObject<SceneModel>(code)` + 校验 `version===1 && root.type==='house'`。
-- **UI**：`components/ui/ShareDialog.tsx`（截图预览 + 口令复制 + 粘贴还原 + 历史列表删除）；HomePage 工具栏「分享」按钮**始终可用**：有模型时 `handleShare` = `encodeShareCode → captureScreenshot → withWatermark → 打开对话框 + addRecord`；**无模型时仅打开对话框**（code/screenshot 为 null，提示「粘贴口令还原」）供导入他人模型；`restoreFromShare` 走 `confirmDiscardUnsaved` 守卫 → `setScene` → 解绑项目/生成历史。
+- **截图**：`gl={{ preserveDrawingBuffer: true, antialias: true }}` + `dpr={[1,2]}`；`ScreenshotBridge` 把 renderer 写入父级 `glRef`；`captureScreenshot()` 置 `screenshotMode=true` → 等两帧 → `toDataURL` → 复位。净化隐藏 网格/坐标轴/线框/选中框/Gizmo/标注。
+- **水印**：`lib/watermark.ts` 右下角半透明口令文本。
+- **口令**：`lib/compression.ts` 编码加**版本前缀 `wc3:`**（新口令），解码兼容无前缀旧口令；`useShareStore` 持久化 records（上限 20）。还原路径（ShareDialog）：解压 → **`migrateModel` 迁移**（旧 v1 口令自动升 v3；非法口令降级提示，不崩溃）→ `onRestore`。
 
 ## 7. 生成链路（lib/chat.ts）
 
-1. 构建 messages：系统提示词（v2 语义契约 + 多轮修改规则）+ 多轮历史 + 用户输入。
-2. **SSE 流式请求**（`streamChatCompletion`，lib/api.ts）：兼容推理型模型长思考，180s 兜底超时。
-3. 从回复提取 JSON（纯 JSON / 代码块 / 夹杂散文），`sceneModelV2Schema` 校验。
-4. `resolveLayout` 平铺为绝对坐标模型；**auto 布局额外跑一遍家具常理摆放**（`applyFurnitureConventions`，贴墙 + 避让嵌套卫生间），再 normalizeContainment 兜底。
-5. 多轮：历史发送的是上一轮的 v2 JSON，系统提示词要求"基于上一个模型输出修改后的完整 JSON，不得原样重复"。
+1. 构建 messages：系统提示词（**v2 语义契约不变**，P1 不改提示词）+ 多轮历史 + 用户输入。
+2. **SSE 流式请求**（`streamChatCompletion`，lib/api.ts）：180s 兜底超时。
+3. 从回复提取 JSON，`sceneModelV2Schema` 校验。
+4. `resolveLayout` 平铺为 v3 足迹模型；auto 布局额外跑一遍家具常理摆放，再 normalizeContainment 兜底。
+5. 多轮：历史发送上一轮 v2 JSON，系统提示词要求"基于上一个模型输出修改后的完整 JSON、不得原样重复"。
 
 ## 8. 文件结构
 
@@ -240,15 +246,17 @@ src/
 │   ├── ui/                    # Button/Input/HelpDialog/ProjectLibraryDialog/ShareDialog
 │   └── viewport/              # SceneViewer/Viewport3D/ModelNodeView/PropertyPanel/Compass/PlanRig/PlanAnnotations/GizmoControls
 ├── lib/
-│   ├── chat.ts                # 生成链路与系统提示词
+│   ├── chat.ts                # 生成链路与系统提示词（v2 契约）
 │   ├── api.ts                 # OpenAI 兼容客户端、SSE 流式、连通性检测
-│   ├── layout.ts              # 布局引擎 resolveLayout
+│   ├── layout.ts              # 布局引擎 resolveLayout（→ v3 足迹模型）
+│   ├── footprint.ts           # v3 足迹几何纯函数（包围盒/平移/缩放/节点访问器）【新增】
+│   ├── migration.ts           # migrateModel v1→v3 幂等迁移【新增】
 │   ├── furniturePresets.ts    # 家具部件模型（分类/拼装/朝向/包围盒，纯函数）
 │   ├── furniturePlacement.ts  # 家具常理摆放（贴墙 + 避让嵌套卫生间；床短边贴墙例外）
-│   ├── roomGeometry.ts        # 分段墙体 computeWallPlan + computeAllWallPlans/nestedWallPlan（真·内嵌）
-│   ├── modelTree.ts           # 树遍历/家具约束 normalizeContainment（含推出嵌套占地）
-│   ├── planGeometry.ts        # 2D 平面图纯函数（包围盒/取景/尺寸线/房间标签）
-│   ├── compression.ts         # lz-string 分享口令编解码
+│   ├── roomGeometry.ts        # 足迹边分段墙体 computeWallPlan + applyOpenings + nestedWallPlan（真·内嵌）+ window 段
+│   ├── modelTree.ts           # 树遍历/足迹更新/家具约束 normalizeContainment（含推出嵌套占地）
+│   ├── planGeometry.ts        # 2D 平面图纯函数（足迹包围盒/取景/尺寸线/房间标签）
+│   ├── compression.ts         # lz-string 分享口令编解码（wc3: 版本前缀）
 │   ├── watermark.ts           # 截图口令水印（离屏 canvas）
 │   ├── sampleModel.ts         # 示例模型
 │   ├── debugLog.ts            # 调试日志器
@@ -256,27 +264,30 @@ src/
 ├── schemas/model.schema.ts    # v2 Zod Schema
 ├── store/                     # Zustand stores（含 useProjectStore/useShareStore）
 ├── styles/global.css
-├── types/model.ts             # v2 契约 + v1 已解析模型类型
+├── types/model.ts             # v2 契约 + v3 已解析模型类型
 └── db/database.ts             # Dexie 本地项目库（已接入 UI）
 ```
 
-## 9. 测试（Vitest）
+## 9. 测试（Vitest，214 用例）
 
 - `lib/layout.test.ts`：走廊/客厅/custom 平铺、嵌套房间靠边/靠角、整屋包围盒居中、computeAllWallPlans 嵌套分隔墙。
-- `lib/roomGeometry.test.ts`：分段墙体、共享墙去重、开放空间、私密房间、卫生间归属、入户门、nestedWallPlan 覆盖判定（并集查询/开放连通/嵌套之嵌套/部分覆盖/退化）。
+- `lib/roomGeometry.test.ts`：足迹边分段墙体、共享墙去重、开放空间、私密房间、卫生间归属、入户门、window 段/显式开洞覆盖层、nestedWallPlan 覆盖判定（并集查询/开放连通/嵌套之嵌套/部分覆盖/退化）。
+- `lib/footprint.test.ts`【新增】：矩形足迹/包围盒/中心/平移/缩放、房间与整屋访问器、楼层工具。
+- `lib/migration.test.ts`【新增】：v1→v3 迁移（足迹/嵌套/entranceRoomId/wall 并入）、幂等、v3 原样返回、非法输入降级。
+- `lib/furniturePlacement.test.ts`：家具常理摆放（贴墙/旋转/避门口/避内卫）。
 - `lib/chat.test.ts`：流式请求、v2 校验、错误分类。
-- `lib/modelTree.test.ts`：树遍历、家具约束、家具推出嵌套占地。
-- `lib/debugLog.test.ts`：调试日志开关。
-- `lib/compression.test.ts`：分享口令编解码（往返/无效）。
+- `lib/modelTree.test.ts`：树遍历、足迹更新、家具约束、家具推出嵌套占地。
+- `lib/planGeometry.test.ts`：足迹推导的整屋包围盒（示例 12.3×10 不回归）、取景/标签/尺寸线。
+- `lib/compression.test.ts`：口令编解码（往返/前缀/旧口令兼容/无效）。
 - `store/useModelStore.test.ts`：编辑/撤销重做 + previewSelected/commitDrag（Gizmo）。
-- `store/useShareStore.test.ts`：口令历史上限/持久化。
-- `components/ui/ShareDialog.test.tsx`：口令复制/还原/历史。
+- `store/useChatStore.test.ts` / `store/useShareStore.test.ts` / `store/useSettingsStore.test.ts` / `store/useProjectStore.test.ts`：各 store 行为。
+- `components/ui/ShareDialog.test.tsx`：口令复制/还原/历史 + **旧 v1 口令迁移还原为 v3**。
 - `pages/HomePage.test.tsx`：对话交互 + 分享/还原（mock 3D 视口）。
 
 ## 10. 调试模式
 
-设置页开启后，`logDebug` 记录：请求参数 → 模型原始回复 → v2 解析 → 布局平铺结果 → 入户门生成，首页面板可一键复制，便于向开发者复现问题。
+设置页开启后，`logDebug` 记录：请求参数 → 模型原始回复 → v2 解析 → 布局平铺结果（房间中心/尺寸/家具数）→ 入户门生成，首页面板可一键复制，便于向开发者复现问题。
 
 ---
 
-**维护者**：JoyFish · 文档版本 v1.13
+**维护者**：JoyFish · 文档版本 v2.0
