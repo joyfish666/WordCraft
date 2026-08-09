@@ -5,10 +5,9 @@
 🚀 **在线体验**：<https://joyfish666.github.io/WordCraft/>
 
 - GitHub Pages 部署 · 零后端 · 数据全在本地
-- 随每次推送自动更新到最新代码
-- 首次打开可点「加载示例」直接查看现成户型
+- 首次打开可点「加载示例」查看现成户型
 
-📄 [English README](README.md) · [技术架构](docs/architecture.md) · [项目交接](docs/handoff.md)
+📄 [English README](README.md) · [设计方案](docs/design.md) · [技术架构](docs/architecture.md) · [版本演进](docs/history.md) · [开发注意事项](docs/notes.md)
 
 ## 核心特性
 
@@ -31,10 +30,10 @@
 
 | 层级 | 技术选型 | 说明 |
 |------|----------|------|
-| 前端框架 | **React 18** | 组件化开发，生态成熟，适合开源项目 |
+| 前端框架 | **React 18** | 组件化开发，生态成熟 |
 | 3D 渲染 | **React Three Fiber** | 声明式 Three.js 封装，React 组件构建 3D 场景 |
-| 3D 交互 | **@react-three/drei** | OrbitControls（视角）、TransformControls（Gizmo 编辑）等实用组件 |
-| 状态管理 | **Zustand** | 轻量级状态管理，适合编辑器类应用的全局状态 |
+| 3D 交互 | **@react-three/drei** | OrbitControls（视角）、TransformControls（Gizmo 编辑）等 |
+| 状态管理 | **Zustand** | 轻量级全局状态，适合编辑器类应用 |
 | 数据验证 | **Zod** | 定义 LLM 输出的 JSON Schema，确保数据结构正确性 |
 | 本地存储 | **IndexedDB (Dexie.js)** | 存储大型模型数据和用户配置 |
 | 口令压缩 | **lz-string** | 高效的 JSON 数据压缩算法 |
@@ -42,19 +41,31 @@
 | 构建工具 | **Vite** | 快速的开发构建工具 |
 | 测试框架 | **Vitest + Testing Library** | 单元测试与组件测试（190 用例） |
 
-## 当前实现进度
+## 项目文档
 
-- **v1.4.0** 家具部件模型（13 类家具按名称拼装、朝向跟随墙）· 走廊布局两侧自动均衡 · 入口房间保留 · 家具完整性提示
-- **v1.3.0** 真·内嵌嵌套房间 · Gizmo 辅助编辑 · 截图分享 + 口令
-- **v1.2.0** 中英双语切换
-- **v1.1.0** 本地项目库 · 2D 俯视平面图
-- **v1.0.0** 对话生成 · 属性面板编辑 · 撤销/重做 · GitHub Pages 部署
+| 文档 | 内容 |
+|------|------|
+| [docs/design.md](docs/design.md) | 当前设计方案：v3 架构（操作契约 + 足迹几何 + 双向同步 + 自由编辑） |
+| [docs/architecture.md](docs/architecture.md) | 现行实现的技术架构与数据契约（v2 语义契约） |
+| [docs/history.md](docs/history.md) | 三代架构演进的关键决策记录 |
+| [docs/notes.md](docs/notes.md) | 开发注意事项与踩坑记录，改代码前必读 |
+
+## 本地开发
+
+```bash
+npm install
+npm run dev      # 开发，http://localhost:5173
+npm run test     # Vitest 单元测试
+npm run lint     # ESLint
+npm run build    # 类型检查 + 构建
+```
 
 ## 路线图
 
+- [ ] **v3 自由设计**：房间足迹几何（L/U 形）、操作契约生成（局部修改 + 双向同步）、平面图自由编辑（画墙/拖顶点/放门窗）
 - [ ] 移动端基础适配
 - [ ] 2D 平面图增强（家具足迹 / 门洞符号 / 尺寸标注）
-- [ ] 性能优化、更多家具种类
+- [ ] 更多家具种类、性能优化
 - [ ] 协作编辑、更多 LLM 接入
 
 ## 贡献指南
@@ -65,7 +76,7 @@
 4. **推送**：`git push origin feature/amazing-feature`
 5. **创建 Pull Request**
 
-代码规范：遵循 ESLint + Prettier；确保 `npm test` 全绿。
+代码规范：遵循 ESLint + Prettier；确保 `npm test` 全绿。改代码前请先阅读 [开发注意事项](docs/notes.md)。
 
 ## 许可证
 
@@ -76,7 +87,3 @@ MIT — 详见 [LICENSE](LICENSE) 文件。
 - 项目主页：https://github.com/joyfish666/WordCraft
 - 问题反馈：https://github.com/joyfish666/WordCraft/issues
 - 讨论区：https://github.com/joyfish666/WordCraft/discussions
-
----
-
-**最后更新**：2026-08-07 · **维护者**：JoyFish

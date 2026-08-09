@@ -2,13 +2,12 @@
 
 > A pure-frontend "text-to-3D" house designer — describe your home in one sentence, and an AI generates an editable 3D spatial model.
 
-🚀 **Live**: <https://joyfish666.github.io/WordCraft/>
+🚀 **Live demo**: <https://joyfish666.github.io/WordCraft/>
 
-- Deployed on GitHub Pages · no backend · all data stays local
-- Auto-updated to the latest code on every push
-- On first visit, click "加载示例" to load a ready-made house
+- Deployed on GitHub Pages · no backend · all data stays in the browser
+- Click "加载示例" on first visit to load a ready-made house
 
-📄 [中文 README](README-zh.md) · [Architecture](docs/architecture.md) · [Handoff](docs/handoff.md)
+📄 [中文 README](README-zh.md) · [Design](docs/design.md) · [Architecture](docs/architecture.md) · [History](docs/history.md) · [Dev Notes](docs/notes.md)
 
 ## Features
 
@@ -42,19 +41,31 @@
 | Build | **Vite** | Fast dev/build tooling |
 | Testing | **Vitest + Testing Library** | Unit and component tests (190 cases) |
 
-## Progress
+## Project Docs
 
-- **v1.4.0**: furniture part models (13 kinds assembled by name, facing follows the wall) · balanced corridor layout · entrance-room preservation · furniture-completeness prompt
-- **v1.3.0**: true embedded nested rooms · Gizmo editing · screenshot share + codes
-- **v1.2.0**: bilingual UI (中文/EN)
-- **v1.1.0**: local project library · 2D plan view
-- **v1.0.0**: conversation generation · property-panel editing · undo/redo · GitHub Pages deploy
+| Doc | Content |
+|-----|---------|
+| [docs/design.md](docs/design.md) | Current design plan: v3 architecture (operation contract + footprint geometry + bidirectional sync + free editing) |
+| [docs/architecture.md](docs/architecture.md) | Technical architecture of the current implementation (v2 semantic contract) |
+| [docs/history.md](docs/history.md) | Key decisions across three generations of the architecture |
+| [docs/notes.md](docs/notes.md) | Dev notes and pitfalls — read before touching the code |
+
+## Local Development
+
+```bash
+npm install
+npm run dev      # dev server, http://localhost:5173
+npm run test     # Vitest unit tests
+npm run lint     # ESLint
+npm run build    # type check + build
+```
 
 ## Roadmap
 
+- [ ] **v3 free design**: room footprints (L/U shapes), operation-contract generation (local edits + bidirectional sync), plan-view editing (draw walls / drag vertices / place doors & windows)
 - [ ] Mobile adaptation
 - [ ] 2D plan enhancements (furniture footprints / door symbols / dimension labels)
-- [ ] Performance, more furniture kinds
+- [ ] More furniture kinds, performance tuning
 - [ ] Collaborative editing, more LLM providers
 
 ## Contributing
@@ -65,7 +76,7 @@
 4. **Push**: `git push origin feature/amazing-feature`
 5. **Open a Pull Request**
 
-Code style: follow ESLint + Prettier; make sure `npm test` passes.
+Code style: follow ESLint + Prettier; make sure `npm test` passes. Read the [dev notes](docs/notes.md) before changing code.
 
 ## License
 
@@ -76,7 +87,3 @@ MIT — see the [LICENSE](LICENSE) file.
 - Project: https://github.com/joyfish666/WordCraft
 - Issues: https://github.com/joyfish666/WordCraft/issues
 - Discussions: https://github.com/joyfish666/WordCraft/discussions
-
----
-
-**Last updated**: 2026-08-07 · **Maintainer**: JoyFish
