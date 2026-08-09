@@ -578,57 +578,59 @@ button {
   color: var(--text);
 }
 
-/* ---------- 实时罗盘 ---------- */
+/* ---------- 世界锚定罗盘（3D/平面图通用，指向真实东西南北） ---------- */
 
-.compass {
+.world-compass__label {
+  display: block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(20, 22, 27, 0.72);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.world-compass__label--n {
+  color: var(--danger);
+}
+
+/* ---------- 右上角罗盘（屏幕覆盖层，标签按世界方向投影逐帧定位） ---------- */
+
+.corner-compass {
   position: absolute;
   top: 14px;
   right: 14px;
-  width: 54px;
-  height: 54px;
+  width: 108px;
+  height: 108px;
   border-radius: 50%;
   background: rgba(20, 22, 27, 0.72);
   border: 1px solid var(--border);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   pointer-events: none;
   z-index: 5;
-  will-change: transform;
 }
 
-.compass__label {
+.corner-compass__label {
   position: absolute;
+  top: 50%;
+  left: 50%;
   font-size: 11px;
   font-weight: 700;
   color: var(--text-dim);
   line-height: 1;
+  transform: translate(-50%, -50%);
 }
 
-.compass__label--n {
-  top: 4px;
-  left: 50%;
-  transform: translateX(-50%);
+.corner-compass__label--n {
   color: var(--danger);
 }
 
-.compass__label--e {
-  top: 50%;
-  right: 5px;
-  transform: translateY(-50%);
-}
-
-.compass__label--s {
-  bottom: 4px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.compass__label--w {
-  top: 50%;
-  left: 5px;
-  transform: translateY(-50%);
-}
-
-.compass__cross {
+.corner-compass__cross {
   position: absolute;
   top: 50%;
   left: 50%;

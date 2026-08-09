@@ -4,6 +4,7 @@ import type { ChatMessage } from '../lib/api'
 import { createId } from '../lib/id'
 import { migrateModel } from '../lib/migration'
 import type { SceneModel } from '../types/model'
+import type { Op } from '../types/ops'
 
 export type ChatRole = 'user' | 'assistant' | 'error'
 
@@ -21,6 +22,12 @@ interface ChatState {
   isGenerating: boolean
   /** 各次生成成功前的场景快照（会话内，不持久化），用于「撤销生成」回到生成前的场景 */
   generationStack: SceneModel[]
+  /**
+   * 手动编辑操作日志（P3 双向同步，design.md §5.1）：
+   * 每次手动编辑（属性面板/Gizmo/位移微调）生成一条与对话同构的 op 追加进来，
+   * 随多轮上下文喂给 LLM。会话内不持久化，上限 50 条。
+   */
+  editOps: Op[]
   /** 追加消息，返回消息 id */
   addMessage: (input: Omit<ChatMessageItem, 'id' | 'createdAt'>) => string
   clearConversation: () => void
@@ -30,6 +37,10 @@ interface ChatState {
   /** 撤销最近一次生成：弹出快照并移除对话最后一条 user+assistant 对，返回需恢复的场景；无历史返回 null */
   undoLastGeneration: () => SceneModel | null
   clearGenerationHistory: () => void
+  /** 追加手动编辑操作日志（上限 50 条，会话内不持久化） */
+  pushEditOps: (ops: Op[]) => void
+  /** 清空手动编辑操作日志 */
+  clearEditOps: () => void
 }
 
 const STORAGE_KEY = 'wordcraft.chat'
@@ -37,12 +48,16 @@ const STORAGE_KEY = 'wordcraft.chat'
 /** 生成历史栈上限：防止无界内存占用 */
 const GENERATION_HISTORY_LIMIT = 20
 
+/** 手动编辑操作日志上限（P3 §5.1）：防止无界增长 */
+const EDIT_OPS_LIMIT = 50
+
 export const useChatStore = create<ChatState>()(
   persist(
     (set) => ({
       messages: [],
       isGenerating: false,
       generationStack: [],
+      editOps: [],
 
       addMessage: (input) => {
         const id = createId()
@@ -51,7 +66,7 @@ export const useChatStore = create<ChatState>()(
         return id
       },
 
-      clearConversation: () => set({ messages: [], generationStack: [] }),
+      clearConversation: () => set({ messages: [], generationStack: [], editOps: [] }),
       setIsGenerating: (value) => set({ isGenerating: value }),
 
       pushGenerationHistory: (scene) =>
@@ -76,6 +91,13 @@ export const useChatStore = create<ChatState>()(
       },
 
       clearGenerationHistory: () => set({ generationStack: [] }),
+
+      pushEditOps: (ops) =>
+        set((state) => ({
+          editOps: [...state.editOps, ...ops].slice(-EDIT_OPS_LIMIT),
+        })),
+
+      clearEditOps: () => set({ editOps: [] }),
     }),
     {
       name: STORAGE_KEY,
@@ -96,12 +118,22 @@ export const useChatStore = create<ChatState>()(
   ),
 )
 
-/** 将对话记录转换为 API 所需的历史消息（跳过错误与空助手消息） */
+/**
+ * 将对话记录转换为 API 所需的历史消息（跳过错误与空助手消息）。
+ * P3 对话上下文改造（design.md §5.2）：助手消息中**纯 JSON 的 ops 原文**（整段状态快照）
+ * 不再回传——当前状态由「场景摘要 + 手动编辑日志」完整表达，省 token（80%+）且手动编辑不丢失；
+ * 用户消息与带文本的助手消息（如解释性回复）保留，多轮意图不断裂。
+ */
 export function toChatHistory(messages: ChatMessageItem[]): ChatMessage[] {
   return messages
     .filter(
-      (m): m is ChatMessageItem & { role: 'user' | 'assistant' } =>
-        (m.role === 'user' || m.role === 'assistant') && m.content.trim().length > 0,
+      (m): m is ChatMessageItem & { role: 'user' | 'assistant' } => {
+        if (m.role !== 'user' && m.role !== 'assistant') return false
+        const content = m.content.trim()
+        if (content.length === 0) return false
+        if (m.role === 'assistant' && content.startsWith('{')) return false // 上一轮 ops 原文 → 摘要替代
+        return true
+      },
     )
     .map((m) => ({ role: m.role, content: m.content }))
 }

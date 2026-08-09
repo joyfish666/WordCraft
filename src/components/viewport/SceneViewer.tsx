@@ -7,7 +7,7 @@ import type * as THREE from 'three'
 import type { OrthographicCamera as OrthographicCameraImpl } from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { useModelStore } from '../../store/useModelStore'
-import { CompassRose, CompassSensor } from './Compass'
+import { CornerCompassRose, CornerCompassSensor, WorldCompass } from './Compass'
 import { GizmoControls } from './GizmoControls'
 import { PlanAnnotations } from './PlanAnnotations'
 import { PlanRig } from './PlanRig'
@@ -138,11 +138,17 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
         <ambientLight intensity={0.7} />
         <directionalLight position={[6, 10, 6]} intensity={0.9} />
         <ScreenshotBridge glRef={glRef} />
-        <Viewport3D />
-        <GizmoControls planMode={planMode} />
-        {planMode && <PlanAnnotations />}
+        {/* 2D 平面图 = 北朝上东朝右的标准地图：内容沿 X 镜像（右手相机下俯视投影东西镜像，
+            坑 26 旧约定"东在左"即源于此；镜像后罗盘/门/墙的方向与地图直觉一致）。 */}
+        <group scale={planMode ? [-1, 1, 1] : [1, 1, 1]}>
+          <Viewport3D />
+          <GizmoControls planMode={planMode} />
+          {planMode && <PlanAnnotations />}
+          {/* 世界锚定罗盘（在镜像组内：任意视图方向均正确） */}
+          <WorldCompass />
+        </group>
         {planMode && <PlanRig controlsRef={controlsRef} />}
-        <CompassSensor compassRef={compassRef} />
+        <CornerCompassSensor compassRef={compassRef} planMode={planMode} />
         <OrbitControls
           key={planMode ? 'ortho' : 'persp'}
           ref={controlsRef}
@@ -151,8 +157,8 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
           enableRotate={!planMode}
         />
       </Canvas>
-      {/* 实时东西南北罗盘（覆盖在视口右上角） */}
-      <CompassRose ref={compassRef} />
+      {/* 右上角罗盘（覆盖层）：与世界锚定罗盘共存，随相机实时指示屏幕方向 */}
+      <CornerCompassRose ref={compassRef} />
     </>
   )
 })

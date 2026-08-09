@@ -49,6 +49,22 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 ### 3.2 布局与生成
 
+42. **模型流式回复偶发被截断，整段 JSON 无法解析**（2026-08-09 实测）：DeepSeek v4-flash 流式回复偶发在网络/输出处被截断——整段 JSON 末尾缺几个闭合符（如 `...}}]}` 被切成 `...}}]}`），`JSON.parse` 直接抛错，用户看到「模型返回的 JSON 无法解析」。修复：`repairTruncatedJson`（chat.ts）在 parse 失败时按「字符串感知的括号栈」补全缺失闭合符——**字符串未闭合 / 括号失衡（错配/多余闭合）/ 结构本已完整时返回 null 不修复**；补全前先剔除末尾空白与逗号（截断点恰在分隔符后）。⚠️ 补全后仍可能因缺逗号等语法错误解析失败（如 `{"a":1,` → `{"a":1,}`），调用方需再 try 并走原错误路径。另加了**双编码容错**：模型偶发把 JSON 对象包进 JSON 字符串字面量（`"{\"...\"}"`），`unwrapJsonString` 解包一层（只在内层以 `{`/`[` 开头时解包，散文首尾恰是引号不误判）。debug 日志会记「模型回复 JSON 被截断，已自动补全闭合括号」。
+
+43. **入户门位置由 `entranceRoomId` 决定，`setOpenings` 移动不了入户门**（2026-08-09 用户反馈）：LLM 想"把入户门移到走廊"时输出了 `setOpenings`（走廊南墙开门洞）——op 解析执行成功，但入户门没变化。原因有二：① 入户门是 `addEntranceDoor`（roomGeometry.ts）按 `entranceRoomId` 在入口房间入口方向外墙生成的派生门，契约里原本没有改入口房间的操作；② 走廊是开放空间且其南墙与南侧房间共享（全 `open` 段），`addDoorOnFace`/`applyOpenings` 只切实心 `wall` 段，共享/开放边上的开洞是**静默空操作**。修复：`setHouse` 增加 `entranceRoomId` 与 `entranceDir`（默认 south；执行器校验房间存在，指向不存在则跳过该条；`macro` 整体重排会**保留**用户设置的 `entranceDir`；提示词注明"移动入户门用 setHouse 不要用 setOpenings"）。⚠️ 边界：入户门必须落在入口房间朝向入口方向的外墙——走廊等内部空间选其最外沿方向（如走廊东端外墙 → `entranceDir: 'east'` + `entranceRoomId: 'corridor'`）；指向完全无外墙的方向仍为静默空操作。改 `applySetHouse`/`addEntranceDoor`/`Viewport3D`/`furniturePlacement` 的 entrance 取值时别破坏这条约定。
+
+44. **卫生间默认只开一扇门（2026-08-09 用户反馈）**：普通"卫生间"同时邻走廊和卧室时，旧规则每面共享墙都开门（双门）。新规则（computeWallPlan 内 `bathroomDoorTargets` 预扫描）：每间卫生间至多一扇**推导门**——① 命名归属房间存在（主卧卫生间→主卧）只对它开门；② 否则（公共/普通卫生间）**走廊优先**（"卫生间移开走廊门"=用户要求两门时用 setOpenings 在实心墙上显式加门）；③ 无走廊时选邻居 id 最小者（确定性）。注意：门判定在共享墙两侧是对称的（卫生间侧不开时邻居侧也不开，否则会出现"卧室侧有门、卫生间侧实心"的半扇门）。改 `computeWallPlan` 的门逻辑时，别把普通卫生间退回"每面墙都开门"。
+
+45. **把已有房间"内嵌"成嵌套子房间必须用 `nestRoom`**（2026-08-09 用户反馈）：用户要求"主卧卫生间内嵌到主卧"，LLM 输出了 `moveRoom`（relativeTo）——它只能把房间贴到目标房间外侧，无法变成嵌套子房间（嵌套只在 macro/addRoom 的 nestedRooms 里生成）。修复：新增 op `{"op":"nestRoom","id":"主卧卫生间","into":"主卧","side":"可选"}`——执行器从原父容器移除该房间（顶层或已嵌套均可），按布局引擎 `placeNested` 的角落规则（side→父房间对应角，默认东北角，去墙厚余量）平移到父房间内部，家具与嵌套子房间整体随动（`translateRoomNode`），再挂进父房间 `nestedRooms`；环检测（父房间不能是待移动房间的后代）与非法输入跳过；结束统一 `normalizeContainment` 兜底（过大时钳制居中、父家具推出占地）。已嵌套的房间可再次 nestRoom 转移父房间。提示词已补充该操作。**设计决策：nestRoom 移走房间后留下的空隙不自动补位**（其他房间保持不动——op 是局部修改语义，自动滑动会改动用户未提及的房间；想补位用 moveRoom 让 LLM 移动相邻房间，见坑 46 的对齐修正）。
+
+46. **贴靠放置必须对齐走廊边线（moveRoom/addRoom 的 relativeTo）**（2026-08-09 用户反馈）："次卧和主卧相邻"后，次卧开走廊门但地板与走廊有 0.25m 缝隙——`adjacentCenter` 在垂直于贴靠方向的轴对齐到**目标房间中心**，房间宽度与目标不一致时（次卧宽 3 < 主卧宽 3.5），其走廊侧边悬在走廊边线上方；缝隙 0.25 < ADJACENCY_GAP(0.4) 仍判相邻 → 有门但地板悬空。修复：`alignAdjacentPlacement`（executor.ts）在 east/west 贴靠时把被移动房间靠走廊一侧的边对齐到**目标房间的同侧边线**（走廊型布局中所有北侧房南边都在走廊北边线上）；`applyAddRoom` 与 `moveAdjacent` 共用（目标就是走廊本身时跳过，语义模糊）。改贴靠逻辑时别丢掉这步对齐。
+
+47. **nestRoom 落点必须避开父房间门口禁区，家具必须推出嵌套占地**（2026-08-09 用户反馈）：
+   ① **落点压门**：卫生间内嵌到主卧后落在东北角，恰好压在主卧（朝走廊全宽开门）门洞正下方——透过门洞看过去没有墙（嵌套房间与外墙共线的边被覆盖为 open），门洞形同虚设。修复：`applyNestRoom` 用 `computeDoorZones`（与渲染同源，含入户门）+ `doorZoneRect`（furniturePlacement 导出）计算父房间门口禁区，候选角按「请求的 side 优先、其余 东北/西北/东南/西南 确定性尝试」选择第一个不与禁区重叠的角；全部冲突回退到请求的角。
+   ② **家具推不出**：`normalizeContainment` 的 `pushOutOfRects` 有三个缺陷——旧实现只沿最小穿透轴推一次再钳制，**钳制会把家具拉回禁区**（家具贴墙时）；**完全在禁区内的家具**（nestRoom 把卫生间嵌进已有家具的房间时，如床头柜落在卫生间里）最小穿透推不出去；**贴边浮点噪声**（-1.05+0.75=-0.29999...8 与边界 -0.29999...93 差 1e-16）被判为重叠。修复：`overlapsRect` 加 1e-6 容差（与 furniturePlacement 一致，坑 35），候选 = X/Z 最小穿透 + 四个方向「完全退出」（移动到禁区边界外侧）的钳制结果，取重叠数最少的候选。改这两处时别退回旧行为。
+
+48. **取消内嵌/移出嵌套房间必须用 moveRoom（坑 48）**（2026-08-09 用户反馈）：用户说"把主卧卫生间移出来"，LLM 输出 `nestRoom`（又把卫生间嵌进去）——旧契约里 `moveRoom` 只对嵌套房间平移足迹（保持嵌套），**没有"移出"操作**，LLM 无路可走。修复：`moveAdjacent`（moveRoom/addAdjacency 共用）在房间为嵌套时先 `liftToTopLevel`（removeNode + 追加到顶层末尾，世界坐标不变）再贴靠——"移出来/取消内嵌"语义。同时新增 `pickFreePlacement`：贴靠落点若与其他顶层房间（含走廊）重叠，按 北/南/东/西 确定性回退到第一个空侧（防止"移到主卧南侧"直接压到走廊上），addRoom 的 relativeTo 同用；全部冲突回退请求方向。提示词已注明"取消内嵌 → moveRoom，不要用 nestRoom"。
+
 8. **复合房间名误判**：`isCorridorName('走廊卫生间')` 曾因含"走廊"返回 true，导致被当作走廊过滤。现在 `isCorridorName`/`isOpenRoom` 用 `ROOM_TYPE_RE`（卫生间|浴室|卧室|书房…）排除复合名。**注意**：ROOM_TYPE_RE 不能包含 客厅/餐厅/厨房（它们是开放空间）。
 9. **嵌套房间不该拍平**：卧室内嵌卫生间必须**保留在父房间内部**（`makeRoom` 递归 + `placeNested` 靠角），不能拍平为顶层邻居。`Viewport3D` 只对顶层房间算共享墙方案，嵌套房间用 `wallPlanWithDoor(node, 朝向父房间中心)`。
 10. **嵌套房间门方向**：曾用整屋中心方向，可能朝父房间外墙；现在 `nestedDoorDirection(node, parentCenter)` 朝父房间中心。
@@ -73,7 +89,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 24. **相机切换必须用 drei 相机组件**：R3F 核心**不处理** `makeDefault`，只有 drei 的 `OrthographicCamera`/`PerspectiveCamera` 封装才切换 `state.camera` 并在卸载时恢复。`SceneViewer` 用 `{planMode && <OrthographicCamera makeDefault .../>}` + `<OrbitControls key={planMode?'ortho':'persp'} .../>`（key 强制重挂载绑定新相机）+ `enableRotate={!planMode}`。
 25. **正交相机 pan 公式**：`SceneViewer.pan` 对正交相机 scale = `1/zoom`（drei ortho frustum 恒等于像素尺寸）；透视分支保持 `2*distance*tan(fov/2)/clientHeight`。别把透视公式套到正交上。正北朝上靠 `camera.up.set(0,0,1)` + `lookAt(整屋中心)`。
-26. **屏幕东/西与代码内部 +x/-x 相反（镜像）**：默认南视角（相机在 -Z 看 +Z）下，世界 +x 投影在**屏幕左侧**，罗盘 E 在屏幕右侧 → **罗盘 E = 世界 -x**、罗盘 W = 世界 +x。属性面板位置微调因此是 东=-x、西=+x、北=+z、南=-z。**墙/走廊代码里的 east=+x 只是内部约定，与罗盘相反**；改微调按钮时别按内部 east 映射改回去。
+26. **方向约定（2026-08-09 已反转，务必读）：世界 +x=东、+z=北，与罗盘/地图/属性面板全部一致**——旧版（坑 26 原文）因右手相机在默认南视角下把 +x 投影到屏幕左侧、屏幕覆盖层罗盘又按"北朝上东朝右"绘制，导致 E/W 镜像（"走廊东侧"显示在"地图西侧"），当时把属性面板微调改成了 东=-x 与之"对齐"。现改为**真实方向**：① 罗盘改为**世界锚定**（`WorldCompass`，drei Html 钉在整屋包围盒外沿的四个世界方位，任意视角/平面图都指向真实东西南北，见 architecture §5）；② 2D 平面图内容沿 X 镜像（`SceneViewer` 内 `<group scale={[-1,1,1]}>`，仅 planMode）→ 标准地图：北朝上、东朝右；③ 属性面板微调按钮 东=+x、西=-x。**改罗盘/平面图/微调按钮时别再按旧镜像约定改回去**；3D 默认南视角下东在屏幕左侧是透视正确的（面向北、东在左），罗盘 E 也在左侧，两者一致。
 
 ### 3.5 存储与持久化
 
@@ -106,7 +122,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 ### 3.9 v3 足迹模型（P1 落地实录）
 
-37. **墙段局部坐标约定：以边起点为 0，方向恒 + 轴**：v1 墙段局部坐标以墙中心为 0（世界映射 `start + half + local`）。v3 足迹边泛化后统一为「段局部 0 = 边起点（min 端）」，世界映射 `start + local`——`footprintEdges` 基座段必须是 `[0, length]` 而非 `[-len/2, len/2]`，否则嵌套覆盖判定（`rEdge.start + seg.from`）错位半个边长，出现「覆盖只剩 0.15 宽滑条」的怪象。**改 segment 初始化/开洞/兜底门时别混用两套约定**。
+37. **墙段局部坐标约定：以边起点为 0，方向恒 + 轴**：v1 墙段局部坐标以墙中心为 0（世界映射 `start + half + local`）。v3 足迹边泛化后统一为「段局部 0 = 边起点（min 端）」，世界映射 `start + local`——`footprintEdges` 基座段必须是 `[0, length]` 而非 `[-len/2, len/2]`，否则嵌套覆盖判定（`rEdge.start + seg.from`）错位半个边长，出现「覆盖只剩 0.15 宽滑条」的怪象。**改 segment 初始化/开洞/兜底门时别混用两套约定**。⚠️ **渲染侧也必须同步**：墙组锚点必须放边起点而非边中点，否则整段墙向边尾端漂移半个边长（P1 曾漏改，见坑 41）。
 38. **整屋居中平移必须递归平移嵌套房间足迹**：`finalizeHouse` 把整屋平移到原点时，若只平移顶层房间 footprint，嵌套房间（及其家具）会留在平移前的绝对坐标——随后 `normalizeContainment` 把它们钳制到父房间边界内侧，表现为"嵌套卫生间跑到卧室中心/东侧"。用 `translateRoom` 递归平移（足迹 + 家具 + 嵌套），保持相对关系。
 39. **footprint 边下标与顶点环顺序强相关**：`Opening.edgeIndex` 引用的是 `footprint` 顶点环的边序号（`rectFootprint` 自西南角逆时针：0=南、1=东、2=北、3=西）。手写开洞测试/将来 UI 生成开洞时，务必按该顺序索引，否则窗开在错误的墙上。
 40. **房间尺寸/位置改为足迹派生后，属性面板与 Gizmo 必须走访问器**：`nodeDims/nodePosition`（`lib/footprint.ts`）统一返回 家具（直接字段）/房间（足迹包围盒 + 层高、足迹中心）/整屋（并集）。任何直接读 `room.dimensions/position` 的代码都会在 v3 类型下编译报错——这反而是好事，靠类型系统把残留引用全部找出来。
@@ -118,34 +134,63 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 - **家具-家具避让是"贪心顺序"**：生成时常理按 children 顺序逐个放置并避让已放置家具，非全局最优。
 - **属性面板/Gizmo 编辑不避让门口**：`normalizeContainment` 只约束进父房间外边界与推出嵌套占地。
 - **LLM 输出质量依赖提示词**（当前 DeepSeek v4-flash）。多轮修改、家具常理摆放等依赖 LLM 遵循度。
-- **窗（P1 已落地能力，无入口）**：v3 模型/墙体/渲染已支持 `window` 段与 `RoomNode.windows` 显式开洞，但 P1 生成器与 UI 均无产出入口（纯重构），示例模型未加窗（截图无回归）；P4 平面图编辑「点墙放门窗」将接入。
+- **窗（P2 起 LLM 可产出，UI 无入口）**：v3 模型/墙体/渲染已支持 `window` 段与 `RoomNode.windows` 显式开洞，P2 的 `setOpenings` 操作让 LLM 可以开窗，但 UI 手工点墙放门窗仍属 P4 平面图编辑。
 - **无楼梯/无楼层**：`LevelNode` 已在模型中预留单层，楼层/楼梯属 Phase 5。
 - **footprint 编辑仍是矩形语义**：P1 布局引擎只产矩形足迹；属性面板改房间尺寸 = 足迹按包围盒缩放（L 形多边形会被拉伸，属已知边界，P4 拖顶点编辑时再处理）。
+- **P2 ops 已知边界**：① `updateRoom.patch.side` 对已平铺房间无几何意义（接受并忽略）；② `setOpenings` 只替换同边同种开洞，无删除开洞的操作；③ `relativeTo` 仅支持贴靠单个房间，多房间约束推理（"客厅北接阳台"）属 Phase 5；④ `addRoom` 无 `relativeTo` 时排东侧，可能不贴已有房间。
+- **P3 已知边界**：① 撤销/重做栈仍是整场景快照，未降到 op 粒度（行为与用户无关，op 粒度化属后续优化）；② 编辑日志不随撤销/重做弹栈——撤销后的场景摘要仍权威，日志里的过期 op 由 LLM 结合摘要自行消解；③ 手动编辑仅覆盖 属性面板/Gizmo/位移微调 四入口（translateSelected/resetSelectedPosition/updateSelected/commitDrag），无删除类手动编辑（P4 平面图编辑才引入增删）。
 
 ## 5. v3 实施注意事项（开始改之前读）
 
-> 状态：**P1（数据模型 v3）已完成**（2026-08-09）。以下条目除标注「✓ 已完成」外均属后续阶段（P2-P5）要求。
+> 状态：**P1（数据模型 v3）、P2（契约动词化）与 P3（双向同步）已完成**（2026-08-09）。以下条目除标注「✓ 已完成」外均属后续阶段（P4-P5）要求。
 
 1. **✓ P1 是纯重构**：数据模型 v3 只是内部格式升级，禁止借机夹带新功能；验收 = 旧数据可打开 + 用例全绿 + 截图无回归。P1 已达成：214 用例全绿、migrateModel 覆盖旧项目 JSON/旧分享口令/旧持久化三条路径、示例模型几何与 v1 完全一致（houseBounds 12.3×10 断言不回归）。
 2. **✓ 迁移函数必须幂等且可测**：`migrateModel(v1 → v3)` 写成纯函数，覆盖旧项目 JSON 与旧分享口令两条路径；分享口令加版本前缀 `wc3:` 后，旧口令解码兼容（`decodeShareCode` 对无前缀口令直接解压），解压/迁移失败走降级提示而非崩溃（`migration.test.ts` 覆盖）。
-3. **op 执行器逐条容错**（P2）：任何一条 op 失败只回滚该条，绝不整屋回滚；执行顺序必须确定（数组顺序），禁止依赖对象键序。
+3. **✓ op 执行器逐条容错**（P2）：任何一条 op 失败只回滚该条，绝不整屋回滚；执行顺序必须确定（数组顺序），禁止依赖对象键序。已落地：`executeOps` 逐条 try/catch，`skipped` 记录失败原因；单条 op 的 zod 校验也在 `parseOps` 里逐条做（一条无效不连累整批）。
 4. **编辑器与对话共用执行器**（P3/P4）：平面图编辑产出与对话 op 同构，否则撤销栈/对话上下文会出现两套语义。
 5. **footprint 顶点约束**（P4）：正交约束（每边水平/垂直）在生成与编辑两处都做，编辑器用网格吸附兜底；自交多边形必须在编辑时拒绝。
 6. **✓ 墙段泛化小心镜像**：足迹边按顺序遍历时，局部坐标方向统一为 + 轴（坑 37：段局部 0 = 边起点），渲染按边轴决定旋转（轴 'x' 平放 / 轴 'z' `-90°`），不再重蹈东西墙镜像的坑 1。
 7. **✓ window 段渲染**：沿用门段"永远渲染为开洞"的原则（坑 2），`WallSegmentKind` 加枚举后同步检查所有分支（`ModelNodeView.WallSegmentBox` + 测试）。
-8. **多轮上下文摘要**（P2/P3）：房间摘要必须含 id（LLM 靠 id 引用节点），且与 ops 日志按时间顺序拼装，避免模型看到乱序的"当前状态"。
+8. **多轮上下文摘要**（P2 已落地/P3 完成）：房间摘要必须含 id（LLM 靠 id 引用节点），且与 ops 日志按时间顺序拼装，避免模型看到乱序的"当前状态"。当前 `buildSceneSummary` 输出 整屋 + 递归房间（含嵌套）+ 家具 的 id/名称/尺寸 + **顶层房间邻接表（邻居-方位）**，作为 user 消息注入；P3 已用精简摘要替代"上一轮 ops 原文"（token 省 80%+），邻接表判定与墙体同源（任一边共线 |线差|≤0.4 且区间重叠即相邻，方位 = 邻居相对本房间的方向），供 LLM 选择 relativeTo/moveRoom 的 dir。
+
+### P3 落地补充（改 editOps/chat/useModelStore 前读）
+
+9. **手动编辑 → op 必须按编辑后的实际状态取数**：`editDiffToOps(before, after, id)` 与真实提交一致（如 `updateSelected` 先 `normalizeContainment` 再 diff），家具 op 的 `patch.position` 必须是**相对所在房间中心**的换算值（x/z 偏移、y 为高度一半），房间位移/改尺寸统一用 `patch.footprint`（世界坐标顶点环）表达——直接塞绝对坐标会误导 LLM（v2 语义是相对值，坑 9 同源）。
+10. **家具尺寸断言别写死**：示例模型家具经家具常理摆放可能已交换长宽（坑 17），断言编辑后尺寸时应取"编辑后节点的实际 dimensions"而非"规格里的名义长宽"。
+11. **`toChatHistory` 剔除规则只认助手纯 JSON**：以 `{` 开头的助手消息（上一轮 ops 原文）不回传，由场景摘要 + 编辑日志替代；用户消息与带文本的助手消息保留（多轮意图不断裂）。改该过滤规则时注意 `undoLastGeneration` 依赖消息对结构，别误删。
+12. **编辑日志生命周期**：`setScene`/`resetScene`/`clearConversation` 清空 `useChatStore.editOps`——旧日志描述的是已被整体替换的场景，留着会让 LLM 把已作废的改动当成现状；生成失败（场景未变）时日志保留。
+13. **记录编辑 op 的时机在 useModelStore 提交处**（translateSelected/resetSelectedPosition/updateSelected/commitDrag 四个入口），`previewSelected`（拖拽中）不记录；commitDrag 整次拖拽只记一条。撤销/重做不弹日志（行为不变），别顺手改动 snapshot 撤销栈（坑 20/21 保持）。
+14. **跨 store 调用只走 getState**：useModelStore → useChatStore 的 `getState().pushEditOps()` 单向依赖（chat store 不 import model store，无环）；在 `set()` 回调内同步调用安全。
+
+### P2 落地补充（改 executor/chat 前读）
+
+9. **v2 家具 position 语义是"相对房间中心"**（x/z 偏移、y 为高度一半），快照 diff 时把当前绝对位置换算成相对后再比较（`f.position - footprintCenter`），否则整屋居中后绝对坐标漂移会误产生 position 补丁；patch.position 直接写 v2 相对值。
+10. **`setHouse` 空操作判断不能靠引用比较**：`{...scene.root}` 恒为新对象；必须显式判 `name === undefined && style === undefined`。
+11. **`macro` 保持整屋 id 不变**：多轮稳定性靠 `scene.root.id` 传递，`entranceRoomId` 由 corridor params 重建；`removeRoom` 删除入口房间时清空 `entranceRoomId` 防大门悬空。
+12. **auto 模板快照直接映射 `macro` 而非逐房间 diff**：模板语义是整屋重排（走廊/环绕关系无法用单房间 diff 表达），与旧版 `resolveLayout` 行为一致；只有 `custom` 快照才走按 id diff。
+13. **`setOpenings` 的 edgeIndex 沿用坑 39 约定**（footprint 顶点环边序号，矩形 0=南 1=东 2=北 3=西）；非矩形同方向多边取最长者（确定性）。
+14. **执行器结束要刷新楼层高度**：op 改了房间 `height` 后 `level.height` 不会自动跟随（`finalizeHouse` 只跑在 macro 内），`executeOps` 统一按最大层高刷新。
+15. **addRoom 落点三选一**（确定性）：有 `relativeTo` → 贴靠目标房间对应侧（间隔 0 无缝共墙，共享墙去重由墙体方案负责）；无 → 已有房间时排整屋东侧（`maxX + 半宽 + 0.3`）；空屋 → 原点。显式 `footprint` 时以顶点环为准（忽略落点）。
+
+### 3.10 墙段渲染映射（坑 37 的渲染侧，P2 修复实录）
+
+41. **渲染 group 必须锚在边起点，不是边中点**：P1 把墙段局部坐标从"墙中心为 0"改为"**边起点为 0**"（坑 37），`footprintEdges` 基座段 = `[0, length]`、嵌套覆盖判定用 `rEdge.start + seg.from`——但 `ModelNodeView` 的墙组 `position` 仍沿用 v1 的 `start + length/2`（边中点），两者差半个边长：整段墙 `[0, len]` 的中心（局部 `len/2`）被画到"边中点 + len/2" = **边的终点**，表现为**所有墙（东西+南北）整体向边尾端漂移半个边长**（用户报告："x=1 到 x=2 应该是墙，结果 x=1.5 到 x=2.5 是墙"）。修复：`wallGroupPosition` 锚在边起点（轴 'x' → `[start, y, line]`；轴 'z' → `[line, y, start]`，旋转后局部 +x → 世界 +z），世界映射统一 = `start + local`。**改段坐标约定时，必须同步检查渲染锚点与所有 `start + seg.from` 的使用点**（`segmentWorldRange` 已抽出并有回归测试：墙段世界区间不得越出房间足迹边界）。
 
 ## 6. 快速文件地图
 
 | 需求 | 改哪里 |
 |------|--------|
-| 布局/平铺 | `lib/layout.ts`（产出 v3 足迹模型） |
+| 生成链路/提示词（ops 契约 + 场景摘要 + 编辑日志 + 快照容错） | `lib/chat.ts`（`buildSystemPrompt`/`buildSceneSummary`/`buildEditOpsLog`/`resolveRawOutput`） |
+| 双向同步（手动编辑 → op 日志）【P3 新增】 | `lib/editOps.ts`（`editDiffToOps`）+ `useModelStore`（提交处记录）+ `useChatStore.editOps`/`toChatHistory` |
+| ops 执行器（逐条容错/macro/addRoom 贴靠/家具/开洞） | `lib/executor.ts`（`executeOps`/`applyOp`/`diffSceneV2`）【新增】 |
+| ops 契约类型 | `types/ops.ts`【新增】 |
+| ops Zod 校验（判别联合白名单） | `schemas/ops.schema.ts`【新增】 |
+| 布局/平铺 | `lib/layout.ts`（`makeRoom` 导出；custom 支持 `footprint` 顶点环） |
 | v3 足迹几何（包围盒/平移/缩放/节点访问器） | `lib/footprint.ts` |
 | v1→v3 迁移（项目 JSON/分享口令/持久化） | `lib/migration.ts`（`migrateModel` 幂等纯函数） |
 | 家具常理摆放（贴墙/旋转/避门口/避内卫） | `lib/furniturePlacement.ts` |
 | 门口禁区提取 | `lib/roomGeometry.ts`（`computeDoorZones`/`DOOR_CLEARANCE`） |
-| 墙体/门/窗/开放空间（足迹边分段 + 显式开洞覆盖层） | `lib/roomGeometry.ts`（`computeWallPlan`/`applyOpenings`/`footprintEdges`/`edgeOf`） |
-| 提示词/生成链路 | `lib/chat.ts`（v2 契约，P2 改 ops） |
+| 墙体/门/窗/开放空间（足迹边分段 + 显式开洞覆盖层 + 渲染锚点/段世界区间） | `lib/roomGeometry.ts`（`computeWallPlan`/`applyOpenings`/`footprintEdges`/`edgeOf`/`wallGroupPosition`/`segmentWorldRange`） |
 | v2 契约 | `types/model.ts`、`schemas/model.schema.ts` |
 | v3 模型类型 | `types/model.ts` |
 | 渲染 | `components/viewport/*`（核心 `ModelNodeView.tsx`：Shape 足迹地板 + 沿边墙段 + window 窗洞） |

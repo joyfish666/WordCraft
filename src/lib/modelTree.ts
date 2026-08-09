@@ -1,4 +1,13 @@
-import type { Dimensions, FurnitureNode, HouseNode, ModelNode, Position, RoomNode, SceneModel } from '../types/model'
+import type {
+  Dimensions,
+  FurnitureNode,
+  HouseNode,
+  ModelNode,
+  Point2D,
+  Position,
+  RoomNode,
+  SceneModel,
+} from '../types/model'
 import { footprintBounds, footprintCenter, resizeFootprint, translateFootprint } from './footprint'
 import { WALL_THICKNESS } from './roomGeometry'
 
@@ -76,7 +85,10 @@ export function updateNodePosition(root: ModelNode, id: string, position: Positi
   if (root.id === id) {
     if (root.type === 'room') {
       const c = footprintCenter(root.footprint)
-      return { ...root, footprint: translateFootprint(root.footprint, position.x - c.x, position.z - c.z) }
+      return {
+        ...root,
+        footprint: translateFootprint(root.footprint, position.x - c.x, position.z - c.z),
+      }
     }
     if (root.type === 'house') return root // 整屋无 position 字段
     return { ...root, position }
@@ -94,6 +106,81 @@ export function updateNodePosition(root: ModelNode, id: string, position: Positi
     })
     if (!changed) return root
     return rebuildContainer(root, mapped)
+  }
+  return root
+}
+
+/** 不可变更新：将指定房间的足迹替换为新顶点环，返回新的树 */
+export function updateNodeFootprint(root: ModelNode, id: string, footprint: Point2D[]): ModelNode {
+  if (root.id === id) {
+    if (root.type !== 'room') return root // 仅房间有足迹
+    return { ...root, footprint }
+  }
+  if (isContainer(root)) {
+    const children: ModelNode[] =
+      root.type === 'house'
+        ? root.levels.flatMap((l) => l.rooms)
+        : [...root.furniture, ...root.nestedRooms]
+    let changed = false
+    const mapped = children.map((c) => {
+      const next = updateNodeFootprint(c, id, footprint)
+      if (next !== c) changed = true
+      return next
+    })
+    if (!changed) return root
+    return rebuildContainer(root, mapped)
+  }
+  return root
+}
+
+/**
+ * 不可变删除：将指定节点从其父容器移除（房间/家具通用）。
+ * id 命中根节点本身时不做任何删除（整屋不可移除），返回原树。
+ * 注意：删除会改变容器子节点数量，不走 rebuildContainer（其长度守卫面向更新场景）。
+ */
+export function removeNode(root: ModelNode, id: string): ModelNode {
+  if (root.id === id) return root
+  if (root.type === 'house') {
+    const level = root.levels[0]
+    const rooms = level.rooms
+    const remaining = rooms.filter((r) => r.id !== id)
+    if (remaining.length < rooms.length) {
+      return { ...root, levels: [{ ...level, rooms: remaining }] }
+    }
+    let changed = false
+    const mapped = rooms.map((r) => {
+      const next = removeNode(r, id)
+      if (next !== r) changed = true
+      return next
+    })
+    if (!changed) return root
+    return { ...root, levels: [{ ...level, rooms: mapped as RoomNode[] }] }
+  }
+  if (root.type === 'room') {
+    const furniture = root.furniture.filter((f) => f.id !== id)
+    const nestedRooms = root.nestedRooms.filter((r) => r.id !== id)
+    const directlyRemoved =
+      furniture.length < root.furniture.length || nestedRooms.length < root.nestedRooms.length
+    if (directlyRemoved) {
+      return { ...root, furniture, nestedRooms }
+    }
+    let changed = false
+    const nextFurniture = root.furniture.map((f) => {
+      const next = removeNode(f, id)
+      if (next !== f) changed = true
+      return next
+    })
+    const nextNested = root.nestedRooms.map((r) => {
+      const next = removeNode(r, id)
+      if (next !== r) changed = true
+      return next
+    })
+    if (!changed) return root
+    return {
+      ...root,
+      furniture: nextFurniture as FurnitureNode[],
+      nestedRooms: nextNested as RoomNode[],
+    }
   }
   return root
 }
@@ -215,12 +302,26 @@ function nestedKeepOut(room: RoomNode): Rect {
   }
 }
 
+/** 重叠判定容差：贴边（含浮点噪声，如 -1.05+0.75=-0.29999...8 与边界 -0.29999...93 差 1e-16）不算重叠（坑 35/47） */
+const OVERLAP_EPS = 1e-6
+
 /** 家具（半宽 hx/hz）是否与禁区重叠 */
 function overlapsRect(x: number, z: number, hx: number, hz: number, k: Rect): boolean {
-  return x + hx > k.minX && x - hx < k.maxX && z + hz > k.minZ && z - hz < k.maxZ
+  return (
+    x + hx > k.minX + OVERLAP_EPS &&
+    x - hx < k.maxX - OVERLAP_EPS &&
+    z + hz > k.minZ + OVERLAP_EPS &&
+    z - hz < k.maxZ - OVERLAP_EPS
+  )
 }
 
-/** 最小穿透推挤：把家具沿穿透最小的轴推出禁区（≤3 次迭代），再夹回墙内；y 保持不变 */
+/**
+ * 推出禁区（≤4 次迭代）：对每个重叠的禁区，候选 = 沿 X/Z 最小穿透推出 + 四个方向
+ * 「完全退出」（移动到禁区边界外侧）的钳制结果，选择重叠数最少的候选（优先完全避开）。
+ * 旧实现只沿最小穿透轴推一次再钳制——① 钳制会把家具拉回禁区（家具贴墙时尤其明显）；
+ * ② 完全在禁区内的家具（nestRoom 把卫生间嵌进已有家具的房间时）最小穿透推不出去；
+ * ③ 贴边浮点噪声被判为重叠。三处都导致家具与嵌套房间可见重叠（坑 47）。
+ */
 function pushOutOfRects(
   x: number,
   z: number,
@@ -229,22 +330,43 @@ function pushOutOfRects(
   keepOuts: Rect[],
   bounds: Rect,
 ): { x: number; z: number } {
-  for (let iter = 0; iter < 3; iter++) {
-    let moved = false
+  const clampPos = (px: number, pz: number): { x: number; z: number } => ({
+    x: clampTo(px, bounds.minX + hx, bounds.maxX - hx),
+    z: clampTo(pz, bounds.minZ + hz, bounds.maxZ - hz),
+  })
+  const overlapCount = (px: number, pz: number): number =>
+    keepOuts.reduce((n, k) => n + (overlapsRect(px, pz, hx, hz, k) ? 1 : 0), 0)
+  for (let iter = 0; iter < 4; iter++) {
+    const current = overlapCount(x, z)
+    if (current === 0) break
+    let best: { x: number; z: number } | null = null
+    let bestCount = Infinity
     for (const k of keepOuts) {
       if (!overlapsRect(x, z, hx, hz, k)) continue
       const cx = (k.minX + k.maxX) / 2
       const cz = (k.minZ + k.maxZ) / 2
       const penX = hx + (k.maxX - k.minX) / 2 - Math.abs(x - cx)
       const penZ = hz + (k.maxZ - k.minZ) / 2 - Math.abs(z - cz)
-      if (penX <= penZ) x += x >= cx ? penX : -penX
-      else z += z >= cz ? penZ : -penZ
-      moved = true
+      const candidates = [
+        clampPos(x + (x >= cx ? penX : -penX), z),
+        clampPos(x, z + (z >= cz ? penZ : -penZ)),
+        clampPos(k.minX - hx, z),
+        clampPos(k.maxX + hx, z),
+        clampPos(x, k.minZ - hz),
+        clampPos(x, k.maxZ + hz),
+      ]
+      for (const cand of candidates) {
+        const n = overlapCount(cand.x, cand.z)
+        if (n < bestCount || (n === bestCount && best === null)) {
+          best = cand
+          bestCount = n
+        }
+      }
     }
-    if (!moved) break
+    if (!best || bestCount >= current) break // 无改进（几何上放不下），接受当前结果
+    x = best.x
+    z = best.z
   }
-  x = clampTo(x, bounds.minX + hx, bounds.maxX - hx)
-  z = clampTo(z, bounds.minZ + hz, bounds.maxZ - hz)
   return { x, z }
 }
 

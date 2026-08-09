@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { rectFootprint } from './footprint'
+import { footprintBounds, rectFootprint } from './footprint'
 import type { RoomNode } from '../types/model'
 import {
   DOOR_WIDTH,
@@ -10,6 +10,8 @@ import {
   footprintEdges,
   isCorridorName,
   isOpenRoom,
+  segmentWorldRange,
+  wallGroupPosition,
   wallPlanWithDoor,
   type WallEdge,
 } from './roomGeometry'
@@ -181,10 +183,16 @@ describe('入户门', () => {
     const bedroom = room('bedroom2', '次卧1', 3.25, 2.5, 3.5, 3)
     const plan = computeWallPlan([corridor, kitchen, bedroom])
     // 卧室南墙（朝走廊）开门
-    expect(edgeOf(plan.get('bedroom2')!, 'south')!.segments.some((s) => s.kind === 'door')).toBe(true)
+    expect(edgeOf(plan.get('bedroom2')!, 'south')!.segments.some((s) => s.kind === 'door')).toBe(
+      true,
+    )
     // 卧室西墙（朝厨房）不开门（实心墙）
-    expect(edgeOf(plan.get('bedroom2')!, 'west')!.segments.some((s) => s.kind === 'door')).toBe(false)
-    expect(edgeOf(plan.get('bedroom2')!, 'west')!.segments.some((s) => s.kind === 'wall')).toBe(true)
+    expect(edgeOf(plan.get('bedroom2')!, 'west')!.segments.some((s) => s.kind === 'door')).toBe(
+      false,
+    )
+    expect(edgeOf(plan.get('bedroom2')!, 'west')!.segments.some((s) => s.kind === 'wall')).toBe(
+      true,
+    )
   })
 
   it('公共卫生间（归属房间不存在）与走廊开门，不与卧室开门', () => {
@@ -193,10 +201,45 @@ describe('入户门', () => {
     const pub = room('publicbath', '公共卫生间', 1, -1.0, 2, 2)
     const plan = computeWallPlan([corridor, bedroom, pub])
     // 公共卫生间北墙朝走廊：开门
-    expect(edgeOf(plan.get('publicbath')!, 'north')!.segments.some((s) => s.kind === 'door')).toBe(true)
+    expect(edgeOf(plan.get('publicbath')!, 'north')!.segments.some((s) => s.kind === 'door')).toBe(
+      true,
+    )
     // 与卧室2之间：不开门（实心墙）
-    expect(edgeOf(plan.get('publicbath')!, 'east')!.segments.some((s) => s.kind === 'door')).toBe(false)
-    expect(edgeOf(plan.get('bedroom2')!, 'west')!.segments.some((s) => s.kind === 'door')).toBe(false)
+    expect(edgeOf(plan.get('publicbath')!, 'east')!.segments.some((s) => s.kind === 'door')).toBe(
+      false,
+    )
+    expect(edgeOf(plan.get('bedroom2')!, 'west')!.segments.some((s) => s.kind === 'door')).toBe(
+      false,
+    )
+  })
+
+  it('普通卫生间同时邻走廊与卧室时只开走廊门（单门优先级）', () => {
+    const corridor = room('corridor', '走廊', 0, 0.5, 6, 1)
+    const bedroom = room('bedroom1', '卧室1', 0.5, -1.0, 2, 2)
+    const bath = room('bathroom1', '卫生间', -2.2, -1.0, 2, 2)
+    const plan = computeWallPlan([corridor, bedroom, bath])
+    const bathPlan = plan.get('bathroom1')!
+    // 只开一扇门（走廊侧）
+    const doorEdges = bathPlan.edges.filter((e) => e.segments.some((s) => s.kind === 'door'))
+    expect(doorEdges).toHaveLength(1)
+    expect(hasDoor(edgeOf(bathPlan, 'north'))).toBe(true) // 走廊在北
+    // 与卧室之间为实心墙（卫生间侧与卧室侧都无门）
+    expect(hasDoor(edgeOf(bathPlan, 'east'))).toBe(false)
+    expect(hasDoor(edgeOf(plan.get('bedroom1')!, 'west'))).toBe(false)
+  })
+
+  it('卫生间只邻卧室（无走廊）时开一扇确定性门', () => {
+    const bedroomA = room('bedroom_a', '卧室A', -1.25, 1.0, 2.5, 2.5)
+    const bedroomB = room('bedroom_b', '卧室B', 1.25, 1.0, 2.5, 2.5)
+    const bath = room('bathroom1', '卫生间', 0, -1.25, 2, 2)
+    const plan = computeWallPlan([bedroomA, bedroomB, bath])
+    const bathPlan = plan.get('bathroom1')!
+    // 卫生间北墙邻两个卧室（无走廊）：只与 id 较小者开门，另一侧为实心墙
+    const doorEdges = bathPlan.edges.filter((e) => e.segments.some((s) => s.kind === 'door'))
+    expect(doorEdges).toHaveLength(1)
+    const north = edgeOf(bathPlan, 'north')!
+    expect(north.segments.filter((s) => s.kind === 'door')).toHaveLength(1)
+    expect(north.segments.some((s) => s.kind === 'wall')).toBe(true)
   })
 
   it('入户门开在指定房间的南外墙（居中）并标记为入户', () => {
@@ -394,5 +437,55 @@ describe('显式开洞覆盖层（doors / windows）', () => {
     const plan = computeWallPlan([r])
     expect(edgeOf(plan.get('a')!, 'north')!.segments.some((s) => s.kind === 'window')).toBe(false)
     expect(edgeOf(plan.get('a')!, 'west')!.segments.every((s) => s.kind === 'wall')).toBe(true)
+  })
+})
+
+describe('墙段坐标与渲染映射（坑 37/坑 41 回归）', () => {
+  it('wallGroupPosition：轴 x 锚在 (start, y, line)，轴 z 锚在 (line, y, start)（边起点，非中点）', () => {
+    expect(wallGroupPosition({ axis: 'x', start: 1, line: 2 }, 0.12)).toEqual([1, 0.12, 2])
+    expect(wallGroupPosition({ axis: 'z', start: -4.85, line: -6 }, 0.12)).toEqual([
+      -6, 0.12, -4.85,
+    ])
+  })
+
+  it('segmentWorldRange：段局部以边起点为 0，世界 = start + [from, to]', () => {
+    const roomA = room('a', '主卧', 0, 0, 4, 3)
+    const edge = footprintEdges(roomA)[0] // 南墙（沿 x，start 为 x 最小值）
+    expect(edge.axis).toBe('x')
+    expect(edge.start).toBeCloseTo(-2, 5)
+    const whole = segmentWorldRange(edge, edge.segments[0])
+    expect(whole.from).toBeCloseTo(-2, 5)
+    expect(whole.to).toBeCloseTo(2, 5)
+  })
+
+  it('集成：所有房间的墙段世界区间必须落在其边的覆盖范围内，且与足迹边界一致', () => {
+    const rooms = [
+      { ...room('corridor', '走廊', 0, 0.25, 12, 1.2), furniture: [], nestedRooms: [] },
+      { ...room('living', '客厅', -3, -2.6, 6, 4.5), furniture: [], nestedRooms: [] },
+      { ...room('master', '主卧', -0.25, 2.85, 4.5, 4), furniture: [], nestedRooms: [] },
+    ]
+    const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'living' })
+    for (const r of rooms) {
+      const b = footprintBounds(r.footprint)
+      const p = plan.get(r.id)!
+      for (const e of p.edges) {
+        // 渲染锚点 = 边起点（坑 41：锚中点会偏移半个边长）
+        const pos = wallGroupPosition(e, 0.12)
+        for (const s of e.segments) {
+          if (s.kind === 'open') continue
+          const world = segmentWorldRange(e, s)
+          // 渲染覆盖（沿边轴）= 锚点 + 段区间
+          const renderFrom = e.axis === 'x' ? pos[0] + s.from : pos[2] + s.from
+          const renderTo = e.axis === 'x' ? pos[0] + s.to : pos[2] + s.to
+          expect(renderFrom).toBeCloseTo(world.from, 9)
+          expect(renderTo).toBeCloseTo(world.to, 9)
+          // 段必须落在边的覆盖范围（足迹边界）内，不允许漂移出房间
+          const coverFrom = e.axis === 'x' ? b.minX : b.minZ
+          const coverTo = e.axis === 'x' ? b.maxX : b.maxZ
+          expect(world.from).toBeGreaterThanOrEqual(coverFrom - 1e-6)
+          expect(world.to).toBeLessThanOrEqual(coverTo + 1e-6)
+        }
+      }
+    }
   })
 })

@@ -67,8 +67,9 @@ function keepOutRect(room: RoomNode): InnerBounds {
   }
 }
 
-/** 房间门口的禁入区：从门所在墙内壁向室内 DOOR_CLEARANCE 深、门宽（含少量余量）宽 */
-function doorZoneRect(room: RoomNode, zone: DoorZoneInfo): InnerBounds {
+/** 房间门口的禁入区：从门所在墙内壁向室内 DOOR_CLEARANCE 深、门宽（含少量余量）宽。
+ *  导出供 executor 的 nestRoom 落点避让门口复用（坑 47）。 */
+export function doorZoneRect(room: RoomNode, zone: DoorZoneInfo): InnerBounds {
   const b = footprintBounds(room.footprint)
   const halfW = DOOR_WIDTH / 2
   switch (zone.dir) {
@@ -288,9 +289,9 @@ export function applyFurnitureConventions(scene: SceneModel): SceneModel {
   const level = scene.root.levels[0]
   if (!level) return scene
   const rooms = level.rooms
-  // 与渲染同源的门口位置：避免家具堵住房间门（含入户门）
+  // 与渲染同源的门口位置：避免家具堵住房间门（含入户门；方向随 entranceDir，默认南）
   const doorZones = computeDoorZones(rooms, {
-    entrance: 'south',
+    entrance: scene.root.entranceDir ?? 'south',
     entranceRoomId: scene.root.entranceRoomId,
   })
   return {

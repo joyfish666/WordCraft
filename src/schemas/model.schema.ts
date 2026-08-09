@@ -34,6 +34,10 @@ export const roomNodeV2Schema: z.ZodType<RoomNodeV2> = z.object({
   name: z.string().min(1),
   dimensions: dimensionsSchema,
   position: positionSchema.optional(),
+  footprint: z
+    .array(z.object({ x: z.number(), z: z.number() }))
+    .min(4)
+    .optional(),
   side: z.string().optional(),
   children: z.array(z.lazy(() => modelNodeV2Schema)),
 })

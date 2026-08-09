@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { editDiffToOps } from '../lib/editOps'
 import { nodePosition } from '../lib/footprint'
 import { migrateModel } from '../lib/migration'
 import {
@@ -11,6 +12,7 @@ import {
   type NodeFieldsPatch,
 } from '../lib/modelTree'
 import type { ModelNode, Position, SceneModel } from '../types/model'
+import { useChatStore } from './useChatStore'
 
 /** 以不可变方式更新场景中某节点位置；root 恒为整屋，故在此收窄类型 */
 function withUpdatedPosition(scene: SceneModel, id: string, position: Position): SceneModel {
@@ -24,6 +26,15 @@ const HISTORY_LIMIT = 50
 function pushPast(state: Pick<ModelState, 'scene' | 'past'>): Pick<ModelState, 'past' | 'future'> {
   const past = state.scene ? [...state.past, state.scene].slice(-HISTORY_LIMIT) : state.past
   return { past, future: [] }
+}
+
+/**
+ * 双向同步（design.md §5.1）：手动编辑提交后，把「编辑前 → 编辑后」diff 成一条
+ * 与对话同构的 op 追加进 useChatStore 的编辑日志（供多轮对话上下文）；无实际变化不记录。
+ */
+function recordEditOps(before: SceneModel, after: SceneModel, id: string): void {
+  const ops = editDiffToOps(before, after, id)
+  if (ops.length > 0) useChatStore.getState().pushEditOps(ops)
 }
 
 interface ModelState {
@@ -92,10 +103,14 @@ export const useModelStore = create<ModelState>()(
         })
         // 新模型取代旧场景：清空编辑历史，避免撤销回到被替换的旧模型
         set({ scene: normalized, selectedId: null, focusId: null, initialPositions, past: [], future: [] })
+        // 场景被整体替换（生成/打开项目/加载示例/口令还原）：旧的编辑日志描述的是已不存在的前一场景
+        useChatStore.getState().clearEditOps()
       },
 
-      resetScene: () =>
-        set({ scene: null, selectedId: null, focusId: null, initialPositions: {}, past: [], future: [] }),
+      resetScene: () => {
+        set({ scene: null, selectedId: null, focusId: null, initialPositions: {}, past: [], future: [] })
+        useChatStore.getState().clearEditOps()
+      },
       selectNode: (id) => set({ selectedId: id }),
       setFocus: (id) => set({ focusId: id }),
       setStepSize: (step) => set({ stepSize: step }),
@@ -113,7 +128,9 @@ export const useModelStore = create<ModelState>()(
             y: cur.y + dy,
             z: cur.z + dz,
           }
-          return { scene: withUpdatedPosition(state.scene, state.selectedId, next), ...pushPast(state) }
+          const scene = withUpdatedPosition(state.scene, state.selectedId, next)
+          recordEditOps(state.scene, scene, state.selectedId)
+          return { scene, ...pushPast(state) }
         }),
 
       resetSelectedPosition: () =>
@@ -121,7 +138,9 @@ export const useModelStore = create<ModelState>()(
           if (!state.scene || !state.selectedId) return state
           const original = state.initialPositions[state.selectedId]
           if (!original) return state
-          return { scene: withUpdatedPosition(state.scene, state.selectedId, original), ...pushPast(state) }
+          const scene = withUpdatedPosition(state.scene, state.selectedId, original)
+          recordEditOps(state.scene, scene, state.selectedId)
+          return { scene, ...pushPast(state) }
         }),
 
       updateSelected: (patch) =>
@@ -131,6 +150,7 @@ export const useModelStore = create<ModelState>()(
           if (nextRoot === state.scene.root) return state // 无实际变化（空补丁/未命中），不记历史
           // 提交后重新约束进墙内，并把变化后的场景作为新状态
           const scene = normalizeContainment({ ...state.scene, root: nextRoot })
+          recordEditOps(state.scene, scene, state.selectedId)
           return { scene, ...pushPast(state) }
         }),
 
@@ -149,6 +169,7 @@ export const useModelStore = create<ModelState>()(
           const before: SceneModel = baseScene // 收窄非空（参数窄化不进入闭包）
           // 拖拽前的场景作为历史快照；当前场景约束进墙内作为新状态
           const scene = normalizeContainment(state.scene)
+          if (state.selectedId) recordEditOps(before, scene, state.selectedId)
           return { scene, ...pushPast({ scene: before, past: state.past }) }
         }),
 

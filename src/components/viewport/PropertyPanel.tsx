@@ -208,16 +208,11 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
             </button>
           ))}
         </div>
-        {/* 方向说明：默认南视角下世界 +x 投影在屏幕左侧、罗盘 E 在屏幕右侧（罗盘 E=世界 -x）。
-            按钮按罗盘方向移动：东=-x、西=+x；北=+z、南=-z。内部墙/走廊的 east=+x 只是代码内部约定。 */}
+        {/* 方向与罗盘一致（世界锚定罗盘）：东=世界 +x、西=世界 -x、北=+z、南=-z。
+            3D 默认南视角下东在屏幕左侧（面向北、东在左，符合透视），2D 平面图为标准地图（北朝上东朝右）。
+            内部墙/走廊代码的 east=+x 与罗盘一致，无需镜像。 */}
         <div className="prop-nudge">
-          <button type="button" className="prop-nudge__btn" title={t('property.nudgeWest')} onClick={() => translateSelected(stepSize, 0, 0)}>
-            {t('property.west')}
-          </button>
-          <button type="button" className="prop-nudge__btn" title={t('property.nudgeNorth')} onClick={() => translateSelected(0, 0, stepSize)}>
-            {t('property.north')}
-          </button>
-          <button type="button" className="prop-nudge__btn" title={t('property.nudgeEast')} onClick={() => translateSelected(-stepSize, 0, 0)}>
+          <button type="button" className="prop-nudge__btn" title={t('property.nudgeEast')} onClick={() => translateSelected(stepSize, 0, 0)}>
             {t('property.east')}
           </button>
           <button type="button" className="prop-nudge__btn" title={t('property.nudgeSouth')} onClick={() => translateSelected(0, 0, -stepSize)}>
@@ -225,6 +220,12 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
           </button>
           <button type="button" className="prop-nudge__btn" title={t('property.nudgeUp')} onClick={() => translateSelected(0, stepSize, 0)}>
             {t('property.up')}
+          </button>
+          <button type="button" className="prop-nudge__btn" title={t('property.nudgeNorth')} onClick={() => translateSelected(0, 0, stepSize)}>
+            {t('property.north')}
+          </button>
+          <button type="button" className="prop-nudge__btn" title={t('property.nudgeWest')} onClick={() => translateSelected(-stepSize, 0, 0)}>
+            {t('property.west')}
           </button>
           <button type="button" className="prop-nudge__btn" title={t('property.nudgeDown')} onClick={() => translateSelected(0, -stepSize, 0)}>
             {t('property.down')}
