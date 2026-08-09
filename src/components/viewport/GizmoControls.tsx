@@ -26,7 +26,9 @@ interface DragBase {
 /**
  * Gizmo 辅助编辑（TransformControls，drei）：
  * - 用**代理 group** 作为受控对象，避免与 R3F 对 mesh `position` prop 的管理冲突；
- * - 家具/墙体代理中心抬一个地板厚度（与 ModelNodeView 的 mesh 一致），房间用其自身中心；
+ * - 渲染在 3D 镜像组（`scale=[-1,1,1]`，坑 26：左手系内容镜像成标准地图方向）**之外**——
+ *   代理坐标取节点的**镜像位置**（x 取反），读写处对称还原，保证手柄方向与拖拽手感
+ *   不随镜像反转；家具/墙体代理中心抬一个地板厚度（与 ModelNodeView 的 mesh 一致）；
  * - 拖拽中 `previewSelected` 实时预览（不记历史、不约束），结束时 `commitDrag` 记一次历史并约束进墙内；
  * - drei 内部监听 `dragging-changed` 自动禁用 OrbitControls，无需手动处理。
  */
@@ -46,6 +48,7 @@ export function GizmoControls({ planMode = false }: GizmoControlsProps) {
 
   // 未拖拽时把代理同步到选中节点的当前坐标（选择切换 / 外部编辑 / 撤销后跟随）；
   // 拖拽中由 TransformControls 直接驱动，跳过同步避免互相覆盖。
+  // 镜像组外渲染：x 取反（与镜像后的节点视觉位置对齐），提交时对称还原。
   useEffect(() => {
     if (isDraggingRef.current) return
     const g = proxyRef.current
@@ -53,7 +56,7 @@ export function GizmoControls({ planMode = false }: GizmoControlsProps) {
     const isMesh = isFurnitureLike(selected)
     const pos = nodePosition(selected)
     g.position.set(
-      pos.x,
+      -pos.x,
       pos.y + (isMesh ? FLOOR_THICKNESS : 0),
       pos.z,
     )
@@ -77,10 +80,10 @@ export function GizmoControls({ planMode = false }: GizmoControlsProps) {
     const base = baseRef.current
     if (!g || !base) return
     if (gizmoMode === 'translate') {
-      // 代理 y 抬了地板厚度，写回节点时还原
+      // 代理 y 抬了地板厚度，写回节点时还原；x 为镜像坐标，取反还原为世界坐标
       previewSelected({
         position: {
-          x: g.position.x,
+          x: -g.position.x,
           y: g.position.y - (base.isMesh ? FLOOR_THICKNESS : 0),
           z: g.position.z,
         },

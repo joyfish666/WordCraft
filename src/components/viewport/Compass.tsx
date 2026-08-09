@@ -21,15 +21,14 @@ const DIR_VECTORS: Record<string, [number, number, number]> = {
 
 /**
  * 右上角罗盘传感器：每帧把 N/E/S/W 各自世界方向投影到屏幕方位角，逐个写入对应标签
- * 的 CSS 变换（标签沿罗盘圆周独立定位，不再用刚性玫瑰——刚性玫瑰的 E/W 在默认南视角
- * 下是镜像的，坑 26）。planMode 时平面图内容沿 X 镜像，角度取反保持一致。
+ * 的 CSS 变换（标签沿罗盘圆周独立定位，不再用刚性玫瑰——刚性玫瑰在斜视角下 E/W 会
+ * 与内容错位，坑 26）。渲染内容整体沿 X 镜像（左手系补偿成标准地图方向），
+ * 世界方向同步镜像（x 取反）后投影，标签与镜像后的内容方位一致。
  */
 export function CornerCompassSensor({
   compassRef,
-  planMode = false,
 }: {
   compassRef: RefObject<HTMLDivElement | null>
-  planMode?: boolean
 }) {
   const camera = useThree((s) => s.camera)
 
@@ -43,10 +42,10 @@ export function CornerCompassSensor({
       const d = DIR_VECTORS[label.dataset.dir ?? '']
       if (!d) continue
       dirVec.set(d[0], d[1], d[2])
+      dirVec.x = -dirVec.x // 内容沿 X 镜像（坑 26）：世界方向同步镜像后投影
       const rx = dirVec.dot(rightVec)
       const ry = dirVec.dot(upVec)
-      let angle = (Math.atan2(rx, ry) * 180) / Math.PI
-      if (planMode) angle = -angle
+      const angle = (Math.atan2(rx, ry) * 180) / Math.PI
       label.style.transform = `translate(-50%, -50%) rotate(${angle}deg) translateY(-44px) rotate(${-angle}deg)`
     }
   })

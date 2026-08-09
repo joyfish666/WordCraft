@@ -953,6 +953,359 @@ describe('executeOps - 开洞（setOpenings）', () => {
     expect(bath.doors).toHaveLength(1)
     expect(bath.doors[0].edgeIndex).toBe(0) // 南墙
   })
+
+  it('P4 edgeIndex 精确指定边；非矩形同方向多边也能命中指定边', () => {
+    // L 形足迹（西侧 3×3 + 东侧 1.5×1.5 缺口），南向两条边：边 0（西段）与边 2（东段）
+    const base = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'r',
+              name: '卧室',
+              footprint: [
+                { x: -1.5, z: -1.5 },
+                { x: 0, z: -1.5 },
+                { x: 0, z: 0 },
+                { x: 1.5, z: 0 },
+                { x: 1.5, z: 1.5 },
+                { x: -1.5, z: 1.5 },
+              ],
+            },
+          ],
+        },
+      },
+    ])
+    const scene = executeOps(base, [
+      { op: 'setOpenings', roomId: 'r', side: 'south', kind: 'door', edgeIndex: 2 },
+    ]).scene
+    const room = findNodeById(scene.root, 'r') as RoomNode
+    expect(room.doors).toHaveLength(1)
+    expect(room.doors[0].edgeIndex).toBe(2) // 精确命中东段南墙而非最长的西段南墙
+  })
+
+  it('P4 remove: true 删除同边同种开洞（可只删重叠区间）', () => {
+    const base = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'r',
+              name: '卧室',
+              dimensions: { length: 5, width: 3, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+            },
+          ],
+        },
+      },
+      { op: 'setOpenings', roomId: 'r', side: 'south', kind: 'window', from: 3.0, to: 4.5 },
+      { op: 'setOpenings', roomId: 'r', side: 'east', kind: 'door' },
+    ])
+    // 区间不重叠 → 不动
+    const s0 = executeOps(base, [
+      { op: 'setOpenings', roomId: 'r', side: 'south', kind: 'window', from: 0.0, to: 0.5, remove: true },
+    ]).scene
+    expect((findNodeById(s0.root, 'r') as RoomNode).windows).toHaveLength(1)
+    // 区间重叠 → 只删命中者
+    const s1 = executeOps(base, [
+      { op: 'setOpenings', roomId: 'r', side: 'south', kind: 'window', from: 3.0, to: 4.5, remove: true },
+    ]).scene
+    const r1 = findNodeById(s1.root, 'r') as RoomNode
+    expect(r1.windows).toHaveLength(0)
+    expect(r1.doors).toHaveLength(1) // 其他边/其他种类不受影响
+    // 无 from/to → 整边清除
+    const s2 = executeOps(base, [
+      { op: 'setOpenings', roomId: 'r', side: 'south', kind: 'window', remove: true },
+    ]).scene
+    const r2 = findNodeById(s2.root, 'r') as RoomNode
+    expect(r2.windows).toHaveLength(0)
+    expect(r2.doors).toHaveLength(1)
+  })
+})
+
+describe('executeOps - 拆房/合并（P4 splitRoom / mergeRoom）', () => {
+  /** 构造一个 4×3 矩形房间（含家具/嵌套/开洞）的场景 */
+  function baseRoomScene(): SceneModel {
+    return run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'r',
+              name: '客厅',
+              dimensions: { length: 4, width: 3, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+              furniture: [
+                { id: 'sofa', name: '沙发', dimensions: { length: 2, width: 0.9, height: 0.9 }, position: { x: -1, y: 0.45, z: 0 } },
+              ],
+              nestedRooms: [
+                {
+                  id: 'bath',
+                  name: '主卧卫生间',
+                  dimensions: { length: 1.5, width: 1.5, height: 2.8 },
+                  side: 'east',
+                },
+              ],
+            },
+          ],
+        },
+      },
+      { op: 'setOpenings', roomId: 'r', side: 'south', kind: 'window', from: 0.5, to: 2.0 },
+      { op: 'setOpenings', roomId: 'r', side: 'east', kind: 'door' },
+    ])
+  }
+
+  it('splitRoom 竖切：原房间保留西半部分与 id，新房间在东侧，家具/嵌套按中心归属', () => {
+    const scene = executeOps(baseRoomScene(), [
+      { op: 'splitRoom', id: 'r', axis: 'x', position: 0.0 },
+    ]).scene
+    const rooms = topRooms(scene)
+    expect(rooms).toHaveLength(2)
+    const a = rooms.find((x) => x.id === 'r')!
+    const b = rooms.find((x) => x.id !== 'r')!
+    // a = 西侧 2×3，b = 东侧 2×3，无缝贴合
+    const ab = footprintBounds(a.footprint)
+    const bb = footprintBounds(b.footprint)
+    expect(ab.maxX - ab.minX).toBeCloseTo(2, 5)
+    expect(bb.maxX - bb.minX).toBeCloseTo(2, 5)
+    expect(bb.minX).toBeCloseTo(ab.maxX, 5)
+    expect(b.name).toBe('客厅2')
+    // 家具按中心归属：沙发中心 x=-1 在 a 侧
+    expect(a.furniture.map((f) => f.id)).toEqual(['sofa'])
+    expect(b.furniture).toHaveLength(0)
+    // 嵌套房间（卫生间在东侧，中心 x≈1.05）归 b
+    expect(b.nestedRooms.map((n) => n.id)).toEqual(['bath'])
+    expect(a.nestedRooms).toHaveLength(0)
+  })
+
+  it('splitRoom 开洞重映射：南墙窗（跨切线）丢弃、东墙门保留在新房间、共墙自动开一扇门', () => {
+    const scene = executeOps(baseRoomScene(), [
+      { op: 'splitRoom', id: 'r', axis: 'x', position: 0.0 },
+    ]).scene
+    const a = topRooms(scene).find((x) => x.id === 'r')!
+    const b = topRooms(scene).find((x) => x.id !== 'r')!
+    // 原南墙窗 0.5-2.0（world x ∈ [-1.5, 0]）恰好止于切线：留在 a
+    expect(a.windows).toHaveLength(1)
+    expect(b.windows).toHaveLength(0)
+    // 原东墙门保留在 b（东墙 x=2 归 b）
+    expect(b.doors.some((d) => d.edgeIndex === 1)).toBe(true)
+    // 共墙自动开一扇门（渲染侧：客厅 id 'r' vs 客厅2 → 按 id 最小者渲染，门开在 a 的东墙或 b 的西墙）
+    const sharedDoor = [...a.doors, ...b.doors].find(
+      (d) => d.edgeIndex === 1 || d.edgeIndex === 3,
+    )!
+    expect(sharedDoor.width).toBeCloseTo(0.9, 5)
+    // 渲染覆盖层生效：共墙上有门段
+    const plan = computeAllWallPlans(topRooms(scene), { entrance: 'south' })
+    const hasSharedDoor = [plan.get(a.id)!, plan.get(b.id)!].some((p) =>
+      p.edges.some((e) => e.segments.some((s) => s.kind === 'door')),
+    )
+    expect(hasSharedDoor).toBe(true)
+  })
+
+  it('splitRoom 横切与自定义新房间名；非矩形/切线太靠边失败跳过', () => {
+    const scene = executeOps(baseRoomScene(), [
+      { op: 'splitRoom', id: 'r', axis: 'z', position: 0.0, name: '南厅' },
+    ]).scene
+    const rooms = topRooms(scene)
+    expect(rooms).toHaveLength(2)
+    const a = rooms.find((x) => x.id === 'r')!
+    const b = rooms.find((x) => x.id !== 'r')!
+    expect(b.name).toBe('南厅')
+    // a = 南半 3×1.5，b = 北半 3×1.5
+    expect(footprintBounds(a.footprint).maxZ - footprintBounds(a.footprint).minZ).toBeCloseTo(1.5, 5)
+    expect(footprintBounds(b.footprint).maxZ - footprintBounds(b.footprint).minZ).toBeCloseTo(1.5, 5)
+    expect(footprintBounds(a.footprint).maxZ).toBeCloseTo(footprintBounds(b.footprint).minZ, 5)
+    // 切线太靠边（距西墙 0.1 < 1m）→ 跳过
+    const bad = executeOps(baseRoomScene(), [{ op: 'splitRoom', id: 'r', axis: 'x', position: -1.9 }])
+    expect(bad.skipped.length).toBe(1)
+    expect(topRooms(bad.scene)).toHaveLength(1)
+    // 非矩形房间 → 跳过
+    const lShape = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'r',
+              name: '卧室',
+              footprint: [
+                { x: 0, z: 0 },
+                { x: 3, z: 0 },
+                { x: 3, z: 3 },
+                { x: 1.5, z: 3 },
+                { x: 1.5, z: 1.5 },
+                { x: 0, z: 1.5 },
+              ],
+            },
+          ],
+        },
+      },
+    ])
+    const bad2 = executeOps(lShape, [{ op: 'splitRoom', id: 'r', axis: 'x', position: 1.5 }])
+    expect(bad2.skipped.length).toBe(1)
+  })
+
+  it('mergeRoom 水平合并：并集为矩形，家具/嵌套并入，共墙开洞丢弃', () => {
+    const scene = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'a',
+              name: '客厅',
+              dimensions: { length: 3, width: 3, height: 2.8 },
+              position: { x: -1.5, y: 1.4, z: 0 },
+              furniture: [
+                { id: 'sofa', name: '沙发', dimensions: { length: 2, width: 0.9, height: 0.9 }, position: { x: -0.5, y: 0.45, z: 0 } },
+              ],
+            },
+            {
+              id: 'b',
+              name: '餐厅',
+              dimensions: { length: 3, width: 3, height: 2.8 },
+              position: { x: 1.5, y: 1.4, z: 0 },
+              furniture: [
+                { id: 'table', name: '餐桌', dimensions: { length: 1.2, width: 0.8, height: 0.75 }, position: { x: 0.5, y: 0.375, z: 0 } },
+              ],
+            },
+          ],
+        },
+      },
+      { op: 'setOpenings', roomId: 'a', side: 'east', kind: 'door' }, // 共墙上的门 → 合并后丢弃
+      { op: 'setOpenings', roomId: 'a', side: 'south', kind: 'window', from: 0.5, to: 1.5 },
+      { op: 'setOpenings', roomId: 'b', side: 'east', kind: 'door' },
+    ])
+    const merged = executeOps(scene, [{ op: 'mergeRoom', keep: 'a', remove: 'b' }]).scene
+    expect(topRooms(merged)).toHaveLength(1)
+    const room = topRooms(merged)[0]
+    expect(room.id).toBe('a')
+    expect(room.name).toBe('客厅')
+    const rb = footprintBounds(room.footprint)
+    expect(rb.maxX - rb.minX).toBeCloseTo(6, 5)
+    // 家具并入（绝对坐标不变）
+    expect(room.furniture.map((f) => f.id).sort()).toEqual(['sofa', 'table'])
+    // 共墙（a 的东墙）门丢弃；b 的东墙门保留并映射到合并后的东墙
+    expect(room.doors).toHaveLength(1)
+    expect(room.doors[0].edgeIndex).toBe(1)
+    // a 的南墙窗局部区间不变（a 在最西侧，起点不变）
+    expect(room.windows).toHaveLength(1)
+    expect(room.windows[0].from).toBeCloseTo(0.5, 5)
+    expect(room.windows[0].to).toBeCloseTo(1.5, 5)
+  })
+
+  it('mergeRoom 垂直合并 + remove 是入口房间时入口迁移；并集非矩形/房间缺失失败跳过', () => {
+    const scene = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'a',
+              name: '主卧',
+              dimensions: { length: 3, width: 2, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 1 },
+            },
+            {
+              id: 'b',
+              name: '主卧卫生间',
+              dimensions: { length: 3, width: 2, height: 2.8 },
+              position: { x: 0, y: 1.4, z: -1 },
+            },
+          ],
+        },
+      },
+    ])
+    // 手工把 b 设为入口房间
+    const withEntrance = executeOps(scene, [
+      { op: 'setHouse', entranceRoomId: 'b', entranceDir: 'south' },
+    ]).scene
+    const merged = executeOps(withEntrance, [{ op: 'mergeRoom', keep: 'a', remove: 'b' }]).scene
+    expect(topRooms(merged)).toHaveLength(1)
+    expect(merged.root.entranceRoomId).toBe('a') // 入口迁移到 keep
+    // 并集非矩形（错位）→ 跳过
+    const lShape = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'a',
+              name: '卧室',
+              footprint: [
+                { x: 0, z: 0 },
+                { x: 3, z: 0 },
+                { x: 3, z: 3 },
+                { x: 1.5, z: 3 },
+                { x: 1.5, z: 1.5 },
+                { x: 0, z: 1.5 },
+              ],
+            },
+            {
+              id: 'b',
+              name: '书房',
+              dimensions: { length: 2, width: 2, height: 2.8 },
+              position: { x: 3.5, y: 1.4, z: 0.5 },
+            },
+          ],
+        },
+      },
+    ])
+    const bad = executeOps(lShape, [{ op: 'mergeRoom', keep: 'a', remove: 'b' }])
+    expect(bad.skipped.length).toBe(1)
+    // 房间缺失 → 跳过
+    const ghost = executeOps(scene, [{ op: 'mergeRoom', keep: 'a', remove: 'ghost' }])
+    expect(ghost.skipped.length).toBe(1)
+  })
+
+  it('mergeRoom keep 嵌套在 remove 内（并集非矩形）失败跳过且不丢房间；splitRoom 作用于嵌套房间', () => {
+    const scene = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'bedroom',
+              name: '主卧',
+              dimensions: { length: 6, width: 4, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+              nestedRooms: [
+                {
+                  id: 'bath',
+                  name: '主卧卫生间',
+                  dimensions: { length: 2.8, width: 2.4, height: 2.8 },
+                  side: 'east',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ])
+    // keep=bath 嵌套在 remove=bedroom 内：并集非矩形 → 跳过，且不能丢房间（交换角色保护）
+    const merged = executeOps(scene, [{ op: 'mergeRoom', keep: 'bath', remove: 'bedroom' }])
+    expect(merged.skipped.length).toBe(1)
+    expect(topRooms(merged.scene)).toHaveLength(1)
+    expect((findNodeById(merged.scene.root, 'bedroom') as RoomNode).nestedRooms).toHaveLength(1)
+    // 拆分嵌套房间：卫生间竖切（其中心 x≈1.45）
+    const bath = findNodeById(scene.root, 'bath') as RoomNode
+    const bc = footprintCenter(bath.footprint)
+    const split = executeOps(scene, [{ op: 'splitRoom', id: 'bath', axis: 'x', position: bc.x }]).scene
+    const bedroom = findNodeById(split.root, 'bedroom') as RoomNode
+    expect(bedroom.nestedRooms).toHaveLength(2)
+    expect(bedroom.nestedRooms.some((n) => n.id === 'bath')).toBe(true)
+  })
 })
 
 describe('executeOps - setHouse / 约束兜底 / 楼层高度', () => {

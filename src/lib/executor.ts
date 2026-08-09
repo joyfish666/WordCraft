@@ -10,7 +10,14 @@ import {
   updateNodeFootprint,
   updateNodePosition,
 } from './modelTree'
-import { isCorridorName, WALL_THICKNESS, DOOR_WIDTH, computeDoorZones } from './roomGeometry'
+import { mergeRoomsLayout, splitRoomLayout, sharedWallEdgeDir } from './planEdit'
+import {
+  isCorridorName,
+  sharedWallOwner,
+  WALL_THICKNESS,
+  DOOR_WIDTH,
+  computeDoorZones,
+} from './roomGeometry'
 import type { Dir, Op, RoomSpec } from '../types/ops'
 import type {
   Dimensions,
@@ -103,6 +110,10 @@ export function applyOp(scene: SceneModel, op: Op): SceneModel {
       return applyMoveRoom(scene, op)
     case 'nestRoom':
       return applyNestRoom(scene, op)
+    case 'splitRoom':
+      return applySplitRoom(scene, op)
+    case 'mergeRoom':
+      return applyMergeRoom(scene, op)
     case 'addFurniture':
       return applyAddFurniture(scene, op)
     case 'updateFurniture':
@@ -419,6 +430,119 @@ function applyAddAdjacency(scene: SceneModel, op: Extract<Op, { op: 'addAdjacenc
   return moveAdjacent(scene, op.neighborId, { roomId: op.roomId, dir: op.side }, 'addAdjacency')
 }
 
+// ---------------------------------------------------------------------------
+// P4 拆房 / 合并（平面图编辑产出，LLM 也可用）
+// ---------------------------------------------------------------------------
+
+/** 把房间替换为其所在容器内的若干新房间（顶层/嵌套均可，不可变更新） */
+function replaceRoom(scene: SceneModel, id: string, rooms: RoomNode[]): SceneModel {
+  const replaceList = (list: RoomNode[]): RoomNode[] => {
+    const out: RoomNode[] = []
+    for (const r of list) {
+      if (r.id === id) {
+        out.push(...rooms)
+        continue
+      }
+      const nested = replaceList(r.nestedRooms)
+      out.push({ ...r, nestedRooms: nested })
+    }
+    return out
+  }
+  const level = scene.root.levels[0]
+  return { ...scene, root: { ...scene.root, levels: [{ ...level, rooms: replaceList(level.rooms) }] } }
+}
+
+/**
+ * splitRoom：把矩形房间沿轴线（axis 'x' 竖切 / 'z' 横切）在 position（世界坐标）处切成两间。
+ * 原房间保留 id 与西/南部分，新房间排到东/北侧（name 可选，默认「原名2」）；
+ * 家具/嵌套房间按中心归属两半；显式开洞按边重映射（跨切线丢弃）；
+ * 共墙自动开一扇门——门加在共享墙的**渲染侧**（sharedWallOwner，与墙体方案同源），
+ * 避免门开在非渲染侧变成静默空操作（坑 43 同源）。非矩形房间/切线太靠边抛错跳过。
+ */
+function applySplitRoom(scene: SceneModel, op: Extract<Op, { op: 'splitRoom' }>): SceneModel {
+  const room = findRoom(scene, op.id)
+  if (!room) throw new Error(`房间「${op.id}」不存在`)
+  const newId = createId()
+  const newName = op.name ?? `${room.name}2`
+  const split = splitRoomLayout(room, op.axis, op.position, newId, newName)
+  if (!split) {
+    throw new Error('只有矩形房间可以拆分，且切线两侧需各 ≥ 1m')
+  }
+  // 共墙自动开一扇门：加在渲染共享墙的一侧（坑 43：非渲染侧开洞是静默空操作）
+  const ownerIsA = sharedWallOwner(split.a, split.b)
+  const owner = ownerIsA ? split.a : split.b
+  const dir = sharedWallEdgeDir(op.axis, ownerIsA)
+  const oBounds = footprintBounds(owner.footprint)
+  // 共享墙边长 = 垂直于切线方向的房间跨度
+  const edgeLen = op.axis === 'x' ? oBounds.maxZ - oBounds.minZ : oBounds.maxX - oBounds.minX
+  const w = Math.min(DOOR_WIDTH, Math.max(0.3, edgeLen - 2 * WALL_THICKNESS))
+  const from = (edgeLen - w) / 2
+  const opening = {
+    edgeIndex: edgeDirIndex(owner.footprint, dir),
+    from,
+    to: from + w,
+    width: w,
+  }
+  const withDoor: RoomNode = { ...owner, doors: [...owner.doors, opening] }
+  const parts = ownerIsA ? [withDoor, split.b] : [split.a, withDoor]
+  return replaceRoom(scene, op.id, parts)
+}
+
+/** 按方向找矩形足迹边下标（坑 39 约定：0=南 1=东 2=北 3=西；按几何方向解析） */
+function edgeDirIndex(fp: Point2D[], dir: 'north' | 'south' | 'east' | 'west'): number {
+  const n = fp.length
+  const c = footprintCenter(fp)
+  for (let i = 0; i < n; i++) {
+    const a = fp[i]
+    const b = fp[(i + 1) % n]
+    const EPS = 1e-6
+    if (Math.abs(a.z - b.z) < EPS) {
+      if (dir === 'north' && a.z > c.z + EPS) return i
+      if (dir === 'south' && a.z < c.z - EPS) return i
+    } else {
+      if (dir === 'east' && a.x > c.x + EPS) return i
+      if (dir === 'west' && a.x < c.x - EPS) return i
+    }
+  }
+  throw new Error(`足迹没有 ${dir} 向边`)
+}
+
+/**
+ * mergeRoom：合并两个并集为矩形的相邻房间（keep 保留 id/名称，remove 并入）。
+ * 家具/嵌套房间保持世界坐标；显式开洞重映射（共墙上的开洞丢弃）；
+ * remove 是入户房间时入口迁移到 keep。非矩形/并集非矩形抛错跳过。
+ */
+function applyMergeRoom(scene: SceneModel, op: Extract<Op, { op: 'mergeRoom' }>): SceneModel {
+  if (op.keep === op.remove) throw new Error('keep 与 remove 不能是同一个房间')
+  let keepId = op.keep
+  let removeId = op.remove
+  let keep = findRoom(scene, keepId)
+  let remove = findRoom(scene, removeId)
+  if (!keep) throw new Error(`房间「${keepId}」不存在`)
+  if (!remove) throw new Error(`房间「${removeId}」不存在`)
+  // keep 嵌套在 remove 内：removeNode(remove) 会连 keep 一起删掉，先交换角色
+  if (isDescendantOf(remove, keep.id)) {
+    const tmp = keep
+    keep = remove
+    remove = tmp
+    const tmpId = keepId
+    keepId = removeId
+    removeId = tmpId
+  }
+  const merged = mergeRoomsLayout(keep, remove)
+  if (!merged) throw new Error('两个房间并集不是合法矩形，无法合并（需矩形且共享完整共墙）')
+  // 先删 remove（含其嵌套），再原地替换 keep 为合并结果
+  let root = removeNode(scene.root, removeId) as SceneModel['root']
+  if (root.entranceRoomId === removeId) {
+    root = { ...root, entranceRoomId: keepId }
+  }
+  const replaced = {
+    ...scene,
+    root,
+  }
+  return replaceRoom(replaced, keepId, [merged])
+}
+
 /** 把 id 房间移到 relativeTo 房间的 dir 侧相邻（moveRoom / addAdjacency 共用）。
  *  嵌套房间（如主卧卫生间）会被提升到顶层再贴靠——"移出来/取消内嵌"语义（坑 48）。 */
 function moveAdjacent(
@@ -603,11 +727,39 @@ function findEdgeBySide(room: RoomNode, dir: Dir): { edgeIndex: number; length: 
   return best
 }
 
+/** 按足迹边下标取边（坑 39 约定：Opening.edgeIndex 引用 footprint 顶点环边序号；退化边返回 null） */
+function edgeByIndex(room: RoomNode, index: number): { edgeIndex: number; length: number } | null {
+  const fp = room.footprint
+  const n = fp.length
+  if (n === 0) return null
+  const idx = ((index % n) + n) % n
+  const a = fp[idx]
+  const b = fp[(idx + 1) % n]
+  if (Math.abs(a.z - b.z) < 1e-6) return { edgeIndex: idx, length: Math.abs(b.x - a.x) }
+  if (Math.abs(a.x - b.x) < 1e-6) return { edgeIndex: idx, length: Math.abs(b.z - a.z) }
+  return null
+}
+
 function applySetOpenings(scene: SceneModel, op: Extract<Op, { op: 'setOpenings' }>): SceneModel {
   const room = findRoom(scene, op.roomId)
   if (!room) throw new Error(`房间「${op.roomId}」不存在`)
-  const edge = findEdgeBySide(room, op.side)
+  // P4：UI 提供精确边下标（edgeIndex）；LLM 沿用 side（取该方向最长边，确定性）
+  const edge = op.edgeIndex !== undefined ? edgeByIndex(room, op.edgeIndex) : findEdgeBySide(room, op.side)
   if (!edge) throw new Error(`房间「${op.roomId}」没有 ${op.side} 向边`)
+
+  if (op.remove) {
+    // P4 删除开洞：同边同种；from/to 给定时只删与之重叠的开洞，省略则整边清除
+    return mapRoom(scene, op.roomId, (r) => {
+      const key = op.kind === 'door' ? 'doors' : 'windows'
+      const rest = r[key].filter((o) => {
+        if (o.edgeIndex !== edge.edgeIndex) return true
+        if (op.from === undefined || op.to === undefined) return false
+        return o.to <= op.from + 1e-6 || o.from >= op.to - 1e-6
+      })
+      return { ...r, [key]: rest }
+    })
+  }
+
   const width = op.kind === 'door' ? DOOR_WIDTH : DEFAULT_WINDOW_WIDTH
   let from = op.from ?? (edge.length - width) / 2
   let to = op.to ?? (edge.length + width) / 2

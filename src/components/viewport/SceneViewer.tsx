@@ -10,6 +10,7 @@ import { useModelStore } from '../../store/useModelStore'
 import { CornerCompassRose, CornerCompassSensor, WorldCompass } from './Compass'
 import { GizmoControls } from './GizmoControls'
 import { PlanAnnotations } from './PlanAnnotations'
+import { PlanEditLayer } from './PlanEditLayer'
 import { PlanRig } from './PlanRig'
 import { Viewport3D } from './Viewport3D'
 
@@ -54,6 +55,7 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
   const controlsRef = useRef<OrbitControlsImpl>(null)
   const compassRef = useRef<HTMLDivElement>(null)
   const glRef = useRef<THREE.WebGLRenderer | null>(null)
+  const planGroupRef = useRef<THREE.Group>(null)
 
   useImperativeHandle(ref, () => ({
     resetView: () => controlsRef.current?.reset(),
@@ -122,7 +124,9 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
     <>
       <Canvas
         className="scene-canvas"
-        // 初始视角：房屋正南侧斜向下，完整看到南立面（含入户门）
+        // 初始视角：房屋正南侧斜向下，完整看到南立面（含入户门）。
+        // 世界 +x=东、+z=北 为左手系（坑 26），内容组整体沿 X 镜像后，
+        // 从南侧朝北看呈现「上北下南、左西右东」——与平面图（标准地图）一致。
         camera={{ position: [0, 9, -10], fov: 50 }}
         dpr={[1, 2]}
         // preserveDrawingBuffer：截图 toDataURL 需要读取绘制缓冲（antialias 默认已开）
@@ -138,17 +142,23 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
         <ambientLight intensity={0.7} />
         <directionalLight position={[6, 10, 6]} intensity={0.9} />
         <ScreenshotBridge glRef={glRef} />
-        {/* 2D 平面图 = 北朝上东朝右的标准地图：内容沿 X 镜像（右手相机下俯视投影东西镜像，
-            坑 26 旧约定"东在左"即源于此；镜像后罗盘/门/墙的方向与地图直觉一致）。 */}
-        <group scale={planMode ? [-1, 1, 1] : [1, 1, 1]}>
+        {/* 世界坐标 +x=东、+z=北 是左手系（坑 26），内容整体沿 X 镜像：
+            3D 与 2D 平面图一致呈现「上北下南、左西右东」（标准地图方向）——
+            南视角正对入户门时东在右侧、北在远处上方。P4 编辑层在镜像组内渲染：
+            指针世界坐标经 group.worldToLocal 还原为足迹坐标。 */}
+        <group ref={planGroupRef} scale={[-1, 1, 1]}>
           <Viewport3D />
-          <GizmoControls planMode={planMode} />
           {planMode && <PlanAnnotations />}
+          {/* P4 平面图自由编辑交互层（选择/移动/顶点/门窗/拆房/合并） */}
+          {planMode && <PlanEditLayer groupRef={planGroupRef} />}
           {/* 世界锚定罗盘（在镜像组内：任意视图方向均正确） */}
           <WorldCompass />
         </group>
+        {/* Gizmo 渲染在镜像组之外（避免手柄方向/拖拽随镜像反转），
+            代理坐标与读写处做 x 取反与镜像内容对齐（见 GizmoControls） */}
+        <GizmoControls planMode={planMode} />
         {planMode && <PlanRig controlsRef={controlsRef} />}
-        <CornerCompassSensor compassRef={compassRef} planMode={planMode} />
+        <CornerCompassSensor compassRef={compassRef} />
         <OrbitControls
           key={planMode ? 'ortho' : 'persp'}
           ref={controlsRef}
