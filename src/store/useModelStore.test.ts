@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { footprintBounds } from '../lib/footprint'
 import { findNodeById } from '../lib/modelTree'
 import { createSampleModel } from '../lib/sampleModel'
+import { useChatStore } from './useChatStore'
 import { useModelStore } from './useModelStore'
-import type { FurnitureNode, ModelNode } from '../types/model'
+import type { FurnitureNode, ModelNode, RoomNode } from '../types/model'
 
 /** 从当前 store 场景取家具节点（测试断言目标均为家具） */
 function furnitureById(id: string): FurnitureNode {
@@ -13,6 +15,7 @@ function furnitureById(id: string): FurnitureNode {
 
 beforeEach(() => {
   localStorage.clear()
+  useChatStore.setState({ messages: [], isGenerating: false, generationStack: [], editOps: [] })
   useModelStore.setState({
     scene: null,
     selectedId: null,
@@ -91,10 +94,21 @@ describe('useModelStore', () => {
   it('updateSelected 提交后把越墙字段约束进墙内', () => {
     useModelStore.getState().setScene(createSampleModel())
     useModelStore.getState().selectNode('bed-master')
-    // 床已旋转（半宽 0.75），主卧内缩后可活动 X ∈ [-1.6, 1.1]；-2 出界 → 拉到 -1.6
+    // 床已旋转（半宽 0.75）；-2 出界 → 拉回墙内，且不压嵌套卫生间占地（坑 47）
     useModelStore.getState().updateSelected({ position: { x: -2 } })
     const bed = furnitureById('bed-master')
-    expect(bed.position.x).toBe(-1.6)
+    expect(bed.position.x).toBeGreaterThanOrEqual(-1.6)
+    expect(bed.position.x).toBeLessThanOrEqual(1.1)
+    const master = findNodeById(useModelStore.getState().scene!.root, 'room-master') as RoomNode
+    const bath = findNodeById(useModelStore.getState().scene!.root, 'bath-master') as RoomNode
+    const kb = footprintBounds(bath.footprint)
+    const overlapsBath =
+      bed.position.x + bed.dimensions.length / 2 > kb.minX + 1e-6 &&
+      bed.position.x - bed.dimensions.length / 2 < kb.maxX - 1e-6 &&
+      bed.position.z + bed.dimensions.width / 2 > kb.minZ + 1e-6 &&
+      bed.position.z - bed.dimensions.width / 2 < kb.maxZ - 1e-6
+    expect(overlapsBath).toBe(false)
+    void master
   })
 
   it('undo / redo 回退与重做编辑', () => {
@@ -178,8 +192,17 @@ describe('useModelStore', () => {
     useModelStore.getState().previewSelected({ position: { x: -2 } }) // 越墙
     useModelStore.getState().commitDrag(base)
     const bed = furnitureById('bed-master')
-    // 床已旋转（半宽 0.75），主卧可活动 X ∈ [-1.6, 1.1]；-2 → 拉回 -1.6
-    expect(bed.position.x).toBe(-1.6)
+    // 拉回墙内（床半宽 0.75），且不压嵌套卫生间占地（坑 47）
+    expect(bed.position.x).toBeGreaterThanOrEqual(-1.6)
+    expect(bed.position.x).toBeLessThanOrEqual(1.1)
+    const bath = findNodeById(useModelStore.getState().scene!.root, 'bath-master') as RoomNode
+    const kb = footprintBounds(bath.footprint)
+    const overlapsBath =
+      bed.position.x + bed.dimensions.length / 2 > kb.minX + 1e-6 &&
+      bed.position.x - bed.dimensions.length / 2 < kb.maxX - 1e-6 &&
+      bed.position.z + bed.dimensions.width / 2 > kb.minZ + 1e-6 &&
+      bed.position.z - bed.dimensions.width / 2 < kb.maxZ - 1e-6
+    expect(overlapsBath).toBe(false)
     expect(useModelStore.getState().past.length).toBe(1)
     // 撤销回到拖拽前
     useModelStore.getState().undo()
@@ -194,5 +217,92 @@ describe('useModelStore', () => {
     useModelStore.getState().selectNode('bed-master')
     useModelStore.getState().commitDrag(base)
     expect(useModelStore.getState().past.length).toBe(0)
+  })
+})
+
+describe('useModelStore 手动编辑 → 编辑操作日志（P3 双向同步）', () => {
+  it('translateSelected 移动家具时记录 updateFurniture op', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('sofa-living')
+    useModelStore.getState().translateSelected(1, 0, 0)
+    const ops = useChatStore.getState().editOps
+    expect(ops).toHaveLength(1)
+    const op = ops[0]
+    expect(op.op).toBe('updateFurniture')
+    if (op.op !== 'updateFurniture') return
+    expect(op.id).toBe('sofa-living')
+    expect(op.roomId).toBe('room-living')
+    expect(op.patch.position).toBeDefined()
+  })
+
+  it('移动房间时记录 updateRoom footprint op', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('room-living')
+    useModelStore.getState().translateSelected(2, 0, 0)
+    const ops = useChatStore.getState().editOps
+    expect(ops).toHaveLength(1)
+    const op = ops[0]
+    expect(op.op).toBe('updateRoom')
+    if (op.op !== 'updateRoom') return
+    expect(op.id).toBe('room-living')
+    expect(op.patch.footprint).toHaveLength(4)
+  })
+
+  it('resetSelectedPosition 也记录 op（复位属于一次编辑）', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('sofa-living')
+    useModelStore.getState().translateSelected(1, 0, 0)
+    useModelStore.getState().resetSelectedPosition()
+    expect(useChatStore.getState().editOps).toHaveLength(2)
+  })
+
+  it('updateSelected 改名/改尺寸记录对应 op', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('wardrobe-master')
+    useModelStore.getState().updateSelected({ name: '大衣柜', dimensions: { width: 0.8 } })
+    const ops = useChatStore.getState().editOps
+    expect(ops).toHaveLength(1)
+    const op = ops[0]
+    expect(op.op).toBe('updateFurniture')
+    if (op.op !== 'updateFurniture') return
+    expect(op.patch.name).toBe('大衣柜')
+    // patch 携带编辑后的全量尺寸（编辑前的长宽可能已交换/旋转，以实际状态为准）
+    expect(op.patch.dimensions).toEqual(furnitureById('wardrobe-master').dimensions)
+    expect(op.patch.dimensions!.width).toBe(0.8)
+  })
+
+  it('空补丁不记录 op', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('bed-master')
+    useModelStore.getState().updateSelected({})
+    expect(useChatStore.getState().editOps).toHaveLength(0)
+  })
+
+  it('commitDrag 把整次拖拽记为一条 op', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    const base = useModelStore.getState().scene
+    useModelStore.getState().selectNode('bed-master')
+    useModelStore.getState().previewSelected({ position: { z: 2.5 } })
+    useModelStore.getState().commitDrag(base)
+    expect(useChatStore.getState().editOps).toHaveLength(1)
+    const op = useChatStore.getState().editOps[0]
+    expect(op.op).toBe('updateFurniture')
+  })
+
+  it('setScene 载入新场景时清空编辑日志（旧日志描述的是已替换的场景）', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('sofa-living')
+    useModelStore.getState().translateSelected(1, 0, 0)
+    expect(useChatStore.getState().editOps).toHaveLength(1)
+    useModelStore.getState().setScene(createSampleModel())
+    expect(useChatStore.getState().editOps).toHaveLength(0)
+  })
+
+  it('resetScene 清空编辑日志', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('sofa-living')
+    useModelStore.getState().translateSelected(1, 0, 0)
+    useModelStore.getState().resetScene()
+    expect(useChatStore.getState().editOps).toHaveLength(0)
   })
 })

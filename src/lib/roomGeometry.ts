@@ -29,7 +29,10 @@ export function isCorridorName(name: string): boolean {
 
 /** 判断是否为开放空间（客厅/餐厅/厨房等）：与走廊/开放空间之间不设墙 */
 export function isOpenRoom(name: string): boolean {
-  return /客厅|餐厅|厨房|起居室|玄关|门厅|走廊|连廊|过道|通道|中庭/.test(name) && !ROOM_TYPE_RE.test(name)
+  return (
+    /客厅|餐厅|厨房|起居室|玄关|门厅|走廊|连廊|过道|通道|中庭/.test(name) &&
+    !ROOM_TYPE_RE.test(name)
+  )
 }
 
 /** 判断是否为私密房间（卧室/书房等）：彼此之间不直接开门，经走廊/卫生间连通 */
@@ -42,6 +45,11 @@ export function bathroomOwner(name: string): string | null {
   const idx = name.indexOf('卫生间')
   if (idx <= 0) return null
   return name.slice(0, idx)
+}
+
+/** 是否为卫生间类房间（命名归属如"主卧卫生间"，或普通"卫生间/浴室/厕所"） */
+function isBathroomName(name: string): boolean {
+  return bathroomOwner(name) !== null || /卫生间|浴室|厕所/.test(name)
 }
 
 /**
@@ -102,6 +110,24 @@ export interface WallPlan {
 /** 取指定方向（外向法线）的边；矩形房间每方向恰一条 */
 export function edgeOf(plan: WallPlan, dir: DoorDirection): WallEdge | undefined {
   return plan.edges.find((e) => e.dir === dir)
+}
+
+/**
+ * 墙组的世界锚点：墙段局部坐标以**边起点为 0**（坑 37），
+ * 渲染 group 必须锚在边起点（start），世界映射 = start + local；
+ * 锚在边中点会让整段墙的中心点偏到边的终点（偏移半个边长，P1 回归实录见 notes 坑 41）。
+ * 轴 'x' 边平放；轴 'z' 边渲染时 -90° 旋转（局部 +x → 世界 +z）。
+ */
+export function wallGroupPosition(
+  edge: { axis: 'x' | 'z'; start: number; line: number },
+  baseY: number,
+): [number, number, number] {
+  return edge.axis === 'x' ? [edge.start, baseY, edge.line] : [edge.line, baseY, edge.start]
+}
+
+/** 墙段的世界区间（段局部坐标以边起点为 0，坑 37）：世界 = start + [from, to] */
+export function segmentWorldRange(edge: WallEdge, seg: WallSegment): { from: number; to: number } {
+  return { from: edge.start + seg.from, to: edge.start + seg.to }
 }
 
 /** 由房间足迹构造各边墙段（基座：整段实心墙，暂不开洞；段局部坐标以边起点为 0） */
@@ -182,7 +208,12 @@ function addDoorOnFace(edge: WallEdge, from: number, to: number, markEntrance = 
 }
 
 /** 在 [from,to] 区间上应用指定类型，切分并覆盖既有墙段 */
-function splitSegments(segs: WallSegment[], from: number, to: number, kind: WallSegmentKind): WallSegment[] {
+function splitSegments(
+  segs: WallSegment[],
+  from: number,
+  to: number,
+  kind: WallSegmentKind,
+): WallSegment[] {
   const out: WallSegment[] = []
   for (const s of segs) {
     if (to <= s.from || from >= s.to) {
@@ -221,11 +252,14 @@ export function defaultWallPlan(room: RoomNode): WallPlan {
 }
 
 /** 嵌套房间的门朝向：指向父房间中心（从父房间进嵌套房间） */
-export function nestedDoorDirection(node: RoomNode, parentCenter: { x: number; z: number }): DoorDirection {
+export function nestedDoorDirection(
+  node: RoomNode,
+  parentCenter: { x: number; z: number },
+): DoorDirection {
   const c = footprintCenter(node.footprint)
   const dx = parentCenter.x - c.x
   const dz = parentCenter.z - c.z
-  return Math.abs(dx) >= Math.abs(dz) ? (dx > 0 ? 'east' : 'west') : (dz > 0 ? 'north' : 'south')
+  return Math.abs(dx) >= Math.abs(dz) ? (dx > 0 ? 'east' : 'west') : dz > 0 ? 'north' : 'south'
 }
 
 export interface WallPlanOptions {
@@ -268,7 +302,11 @@ export function applyOpenings(plan: Map<string, WallPlan>, rooms: RoomNode[]): v
             continue
           }
           if (s.from < from) out.push({ ...s, to: from })
-          out.push({ from: Math.max(s.from, from), to: Math.min(s.to, to), kind: kind === 'doors' ? 'door' : 'window' })
+          out.push({
+            from: Math.max(s.from, from),
+            to: Math.min(s.to, to),
+            kind: kind === 'doors' ? 'door' : 'window',
+          })
           if (s.to > to) out.push({ ...s, from: to })
         }
         edge.segments = out
@@ -300,6 +338,34 @@ export function computeWallPlan(
     })
   }
 
+  // 卫生间唯一门预扫描：每间卫生间至多一扇推导门（用户显式 setOpenings 可另加）。
+  // 优先级：命名归属房间（主卧卫生间 → 主卧）> 走廊 > 邻居中 id 最小者（确定性）；
+  // 目标集合为空（无邻居）时该卫生间不参与开门判定。
+  const bathroomDoorTargets = new Map<string, Set<string>>()
+  for (const R of rooms) {
+    if (!isBathroomName(R.name)) continue
+    const nbs: RoomNode[] = []
+    for (const edge of plan.get(R.id)!.edges) {
+      for (const nb of neighborsAlongEdge(edge, rooms, edgesByRoom)) {
+        if (!nbs.some((x) => x.id === nb.room.id)) nbs.push(nb.room)
+      }
+    }
+    if (nbs.length === 0) continue
+    let targets: RoomNode[]
+    const owner = bathroomOwner(R.name)
+    const owned = owner !== null ? nbs.filter((x) => x.name === owner) : []
+    if (owned.length > 0) {
+      targets = owned
+    } else {
+      const corridor = nbs.filter((x) => isCorridorName(x.name))
+      targets =
+        corridor.length > 0
+          ? corridor
+          : [...nbs].sort((a, b) => (a.id < b.id ? -1 : 1)).slice(0, 1)
+    }
+    bathroomDoorTargets.set(R.id, new Set(targets.map((t) => t.id)))
+  }
+
   for (const R of rooms) {
     const p = plan.get(R.id)!
     for (let i = 0; i < p.edges.length; i++) {
@@ -316,20 +382,16 @@ export function computeWallPlan(
         }
         if (ownerIsA(R, N)) {
           // 决定是否开门：
-          // - 涉及卫生间时，用卫生间的归属规则（主卧卫生间→主卧、走廊卫生间→走廊），其余连接为实心墙
-          // - 公共卫生间（归属名在房间列表中不存在，如"公共卫生间"）允许与走廊开门
+          // - 卫生间（含归属/公共/普通）走唯一门规则：命名归属房间（主卧卫生间→主卧）
+          //   或走廊优先（公共/普通卫生间默认只开一扇门，用户显式 setOpenings 可另加）
           // - 两侧都不是卫生间且都是私密房间（卧室/书房）时，不直接开门
-          const rBath = bathroomOwner(R.name)
-          const nBath = bathroomOwner(N.name)
+          // - 私密房间不直连非走廊开放空间（厨房/客厅/餐厅），只连走廊
+          const rTargets = bathroomDoorTargets.get(R.id)
+          const nTargets = bathroomDoorTargets.get(N.id)
           let hasDoor = true
-          if (rBath || nBath) {
-            hasDoor = (rBath ? N.name === rBath : false) || (nBath ? R.name === nBath : false)
-            if (!hasDoor) {
-              // 归属房间不存在 → 视为公共卫生间，可与走廊开门
-              hasDoor =
-                (rBath ? isCorridorName(N.name) && !rooms.some((x) => x.name === rBath) : false) ||
-                (nBath ? isCorridorName(R.name) && !rooms.some((x) => x.name === nBath) : false)
-            }
+          if (rTargets || nTargets) {
+            hasDoor =
+              (rTargets ? rTargets.has(N.id) : false) || (nTargets ? nTargets.has(R.id) : false)
           } else {
             const rPrivate = isPrivateRoom(R.name)
             const nPrivate = isPrivateRoom(N.name)
@@ -495,7 +557,8 @@ export function nestedWallPlan(
     const diff = Math.abs(order.indexOf(d) - pIdx)
     return Math.min(diff, 4 - diff)
   }
-  let doorEdge: WallEdge | null = result.edges.find((e) => e.dir === preferred && hasWall(e)) ?? null
+  let doorEdge: WallEdge | null =
+    result.edges.find((e) => e.dir === preferred && hasWall(e)) ?? null
   if (!doorEdge) {
     const candidates = result.edges.filter(hasWall).sort((a, b) => dist(a.dir) - dist(b.dir))
     doorEdge = candidates[0] ?? null

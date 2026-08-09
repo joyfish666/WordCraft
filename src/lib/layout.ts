@@ -1,5 +1,5 @@
 import { logDebug } from './debugLog'
-import { levelHeight, rectFootprint, translateFootprint } from './footprint'
+import { footprintCenter, levelHeight, rectFootprint, translateFootprint } from './footprint'
 import { applyFurnitureConventions } from './furniturePlacement'
 import { normalizeContainment } from './modelTree'
 import { WALL_THICKNESS, isCorridorName } from './roomGeometry'
@@ -9,6 +9,7 @@ import type {
   HouseNode,
   HouseNodeV2,
   LevelNode,
+  Point2D,
   RoomNode,
   RoomNodeV2,
   SceneModel,
@@ -95,7 +96,11 @@ function resolveHouse(house: HouseNodeV2): HouseNode {
  * - 均无 → 按常理靠父房间东北角
  * 结果会约束在父房间内部（去墙厚），normalizeContainment 也会再次兜底。
  */
-function placeNested(n: RoomNodeV2, parentLen: number, parentWid: number): { x: number; z: number } {
+function placeNested(
+  n: RoomNodeV2,
+  parentLen: number,
+  parentWid: number,
+): { x: number; z: number } {
   const halfX = Math.max(0, (parentLen - n.dimensions.length) / 2 - WALL_THICKNESS)
   const halfZ = Math.max(0, (parentWid - n.dimensions.width) / 2 - WALL_THICKNESS)
 
@@ -136,33 +141,37 @@ function placeNested(n: RoomNodeV2, parentLen: number, parentWid: number): { x: 
 /**
  * 由 RoomNodeV2 构建 v3 RoomNode：矩形足迹居地面，家具相对房间中心偏移为绝对坐标；
  * 嵌套子房间（如卧室内卫生间）保留在父房间内部，按 side/常理角落放置。
+ * footprint 参数：custom 模式显式顶点环（世界坐标），提供时优先于 dimensions 矩形。
  */
-function makeRoom(r: RoomNodeV2, cx: number, cz: number): RoomNode {
+export function makeRoom(r: RoomNodeV2, cx: number, cz: number, footprint?: Point2D[]): RoomNode {
   const H = r.dimensions.height
+  // 显式 footprint 时以足迹中心为家具锚点；否则以矩形中心为锚点
+  const anchor = footprint && footprint.length >= 4 ? footprintCenter(footprint) : { x: cx, z: cz }
   const furniture = r.children.filter((c) => c.type !== 'room') as FurnitureNodeV2[]
   const nested = r.children.filter((c) => c.type === 'room') as RoomNodeV2[]
   return {
     id: r.id,
     type: 'room',
     name: r.name,
-    footprint: rectFootprint(cx, cz, r.dimensions.length, r.dimensions.width),
+    footprint:
+      footprint && footprint.length >= 4
+        ? footprint
+        : rectFootprint(cx, cz, r.dimensions.length, r.dimensions.width),
     height: H,
     doors: [],
     windows: [],
-    furniture: furniture.map(
-      (f): FurnitureNode => ({
-        id: f.id,
-        type: 'furniture',
-        name: f.name,
-        dimensions: f.dimensions,
-        position: { x: cx + f.position.x, y: f.position.y, z: cz + f.position.z },
-        rotationY: f.rotationY,
-        description: f.description,
-      }),
-    ),
+    furniture: furniture.map((f): FurnitureNode => ({
+      id: f.id,
+      type: 'furniture',
+      name: f.name,
+      dimensions: f.dimensions,
+      position: { x: anchor.x + f.position.x, y: f.position.y, z: anchor.z + f.position.z },
+      rotationY: f.rotationY,
+      description: f.description,
+    })),
     nestedRooms: nested.map((n) => {
       const rel = placeNested(n, r.dimensions.length, r.dimensions.width)
-      return makeRoom(n, cx + rel.x, cz + rel.z)
+      return makeRoom(n, anchor.x + rel.x, anchor.z + rel.z)
     }),
   }
 }
@@ -355,12 +364,7 @@ function leastLoaded(counts: Record<LivingSide, number>): LivingSide {
 }
 
 /** 沿中心房间某一边排成一排，贴邻中心，行内房间无缝相连 */
-function placeRow(
-  sideRooms: RoomNodeV2[],
-  side: LivingSide,
-  cl: number,
-  cw: number,
-): RoomNode[] {
+function placeRow(sideRooms: RoomNodeV2[], side: LivingSide, cl: number, cw: number): RoomNode[] {
   const horizontal = side === 'north' || side === 'south'
   const along = (r: RoomNodeV2) => (horizontal ? r.dimensions.length : r.dimensions.width)
   const depth = (r: RoomNodeV2) => (horizontal ? r.dimensions.width : r.dimensions.length)
@@ -384,6 +388,8 @@ function placeRow(
 // ---------------------------------------------------------------------------
 
 function resolveCustom(house: HouseNodeV2): HouseNode {
-  const children = house.children.map((r) => makeRoom(r, r.position?.x ?? 0, r.position?.z ?? 0))
+  const children = house.children.map((r) =>
+    makeRoom(r, r.position?.x ?? 0, r.position?.z ?? 0, r.footprint),
+  )
   return finalizeHouse(house, children)
 }

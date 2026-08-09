@@ -238,6 +238,9 @@ export function HomePage() {
         thinking: config.thinking,
         history,
         userInput: input,
+        currentScene: useModelStore.getState().scene,
+        // P3 双向同步：手动编辑日志随上下文喂给 LLM，让 AI 基于用户改过的版本继续
+        editOps: useChatStore.getState().editOps,
       })
       addMessage({ role: 'assistant', content: reply, model })
       // 记录生成前的场景，供「撤销生成」回退
@@ -493,7 +496,11 @@ export function HomePage() {
         </section>
 
         <section className="panel home__viewport">
-          <div className="view-mode-toggle segmented" role="group" aria-label={t('home.viewModeAria')}>
+          <div
+            className="view-mode-toggle segmented"
+            role="group"
+            aria-label={t('home.viewModeAria')}
+          >
             <button
               type="button"
               className={`segmented__btn ${!planMode ? 'segmented__btn--active' : ''}`}
@@ -521,7 +528,9 @@ export function HomePage() {
             <button className="debug-panel__toggle" onClick={() => setDebugOpen((o) => !o)}>
               {debugOpen ? '▾' : '▸'} {t('home.debugLog')}
             </button>
-            <span className="debug-panel__count">{t('home.debugCount', { count: debugEntries.length })}</span>
+            <span className="debug-panel__count">
+              {t('home.debugCount', { count: debugEntries.length })}
+            </span>
             <div className="debug-panel__actions">
               <Button
                 variant="ghost"
@@ -538,11 +547,7 @@ export function HomePage() {
               >
                 {t('home.download')}
               </Button>
-              <Button
-                variant="ghost"
-                onClick={clearDebug}
-                disabled={debugEntries.length === 0}
-              >
+              <Button variant="ghost" onClick={clearDebug} disabled={debugEntries.length === 0}>
                 {t('home.clear')}
               </Button>
             </div>
@@ -619,29 +624,29 @@ export function HomePage() {
         </div>
 
         <span className="dim-info">
-          {selected ? (
-            (() => {
-              const dims = nodeDims(selected)
-              const pos = nodePosition(selected)
-              return (
-                <>
-                  {t('home.selectedInfo', {
-                    name: selected.name,
-                    l: dims.length,
-                    w: dims.width,
-                    h: dims.height,
-                    x: pos.x.toFixed(2),
-                    z: pos.z.toFixed(2),
-                  })}
-                  {isContainer(selected) ? t('home.selectedChildren', { count: childCount(selected) }) : ''}
-                </>
-              )
-            })()
-          ) : focusId ? (
-            t('home.focusedHint')
-          ) : (
-            t('home.selectHint')
-          )}
+          {selected
+            ? (() => {
+                const dims = nodeDims(selected)
+                const pos = nodePosition(selected)
+                return (
+                  <>
+                    {t('home.selectedInfo', {
+                      name: selected.name,
+                      l: dims.length,
+                      w: dims.width,
+                      h: dims.height,
+                      x: pos.x.toFixed(2),
+                      z: pos.z.toFixed(2),
+                    })}
+                    {isContainer(selected)
+                      ? t('home.selectedChildren', { count: childCount(selected) })
+                      : ''}
+                  </>
+                )
+              })()
+            : focusId
+              ? t('home.focusedHint')
+              : t('home.selectHint')}
         </span>
       </footer>
 

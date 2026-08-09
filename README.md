@@ -11,8 +11,10 @@
 
 ## Features
 
-- 🚀 **Text-to-3D**: describe your requirements in one sentence (e.g. "three bedrooms, a living room and a kitchen, en-suite in the master"), the LLM outputs a semantic contract and the code lays it out into a 3D model deterministically
+- 🚀 **Text-to-3D**: describe your requirements in one sentence (e.g. "three bedrooms, a living room and a kitchen, en-suite in the master"), the LLM outputs operation sequences (ops) and the code executes them deterministically; multi-turn chat only makes local changes
+- 🔄 **Bidirectional sync**: manual edits (drag / resize) are recorded as an op log that flows back into the chat — the AI always works on your latest version
 - 🎨 **Minimalist visuals**: wireframe + color blocks focused on structure and dimensions
+- 🧭 **Consistent directions**: world-anchored compass + corner compass + a standard plan view (north up, east right)
 - 🔧 **Precise editing**: a property panel (exact values) + Gizmo handles (direct dragging), with undo/redo
 - 🔒 **Privacy-first**: pure frontend, conversations / models / API keys all stay in the browser
 - 📤 **Easy sharing**: one-click HD screenshot + a share code that fully restores the model
@@ -39,14 +41,14 @@
 | Code compression | **lz-string** | Efficient JSON compression |
 | HTTP | **Axios** | API requests with interceptors and error handling |
 | Build | **Vite** | Fast dev/build tooling |
-| Testing | **Vitest + Testing Library** | Unit and component tests (214 cases) |
+| Testing | **Vitest + Testing Library** | Unit and component tests (307 cases) |
 
 ## Project Docs
 
 | Doc | Content |
 |-----|---------|
-| [docs/design.md](docs/design.md) | Current design plan: v3 architecture (operation contract + footprint geometry + bidirectional sync + free editing, P1 implemented) |
-| [docs/architecture.md](docs/architecture.md) | Technical architecture of the current implementation (v3 footprint model + v2 semantic contract) |
+| [docs/design.md](docs/design.md) | Current design plan: v3 architecture (operation contract + footprint geometry + bidirectional sync + free editing, P1/P2/P3 implemented) |
+| [docs/architecture.md](docs/architecture.md) | Technical architecture of the current implementation (v3 footprint model + ops operation contract) |
 | [docs/history.md](docs/history.md) | Key decisions across three generations of the architecture |
 | [docs/notes.md](docs/notes.md) | Dev notes and pitfalls — read before touching the code |
 
@@ -62,7 +64,7 @@ npm run build    # type check + build
 
 ## Roadmap
 
-- [ ] **v3 free design**: ~~P1 data model v3~~ (footprints + migration + window segments, ✅ done) → operation-contract generation (local edits + bidirectional sync) → plan-view editing (draw walls / drag vertices / place doors & windows)
+- [ ] **v3 free design**: ~~P1 data model v3~~ (footprints + migration + window segments, ✅ done) → ~~P2 operation-contract generation~~ (op sequence + executor + prompt rewrite, ✅ done) → ~~P3 bidirectional sync~~ (edits flow back into chat + slimmed context, ✅ done) → plan-view editing (draw walls / drag vertices / place doors & windows)
 - [ ] Mobile adaptation
 - [ ] 2D plan enhancements (furniture footprints / door symbols / dimension labels)
 - [ ] More furniture kinds, performance tuning

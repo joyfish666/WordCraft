@@ -23,6 +23,7 @@ import {
   WALL_THICKNESS,
   defaultWallPlan,
   nestedDoorDirection,
+  wallGroupPosition,
   wallPlanWithDoor,
   type WallPlan,
   type WallSegmentKind,
@@ -59,7 +60,15 @@ interface WallSegmentBoxProps {
  * - 'door'：门洞（左右墙段 + 入户门扇/门头标识；室内门保持空门洞）
  * - 'window'：窗洞（下窗台 + 半透明玻璃 + 上楣），永远渲染为开洞（坑 2 原则）
  */
-function WallSegmentBox({ from, to, height, thickness, kind, entrance, material }: WallSegmentBoxProps) {
+function WallSegmentBox({
+  from,
+  to,
+  height,
+  thickness,
+  kind,
+  entrance,
+  material,
+}: WallSegmentBoxProps) {
   if (kind === 'open') return null
   const len = to - from
   const center = (from + to) / 2
@@ -93,7 +102,13 @@ function WallSegmentBox({ from, to, height, thickness, kind, entrance, material 
             {/* 窗框示意（网格线框，与玻璃不同面避免共面闪烁） */}
             <mesh position={[center, sillH + paneH / 2, 0]}>
               <boxGeometry args={[len, paneH, thickness]} />
-              <meshStandardMaterial color="#2f3542" wireframe transparent opacity={0.3} depthWrite={false} />
+              <meshStandardMaterial
+                color="#2f3542"
+                wireframe
+                transparent
+                opacity={0.3}
+                depthWrite={false}
+              />
             </mesh>
           </>
         )}
@@ -159,7 +174,10 @@ function floorPolygon(room: RoomNode, plan: WallPlan): { x: number; z: number }[
     const prev = offset[(i - 1 + n) % n]
     const cur = offset[i]
     if (prev.axis === cur.axis) continue // 退化（共线边）跳过
-    pts.push({ x: prev.axis === 'z' ? prev.line : cur.line, z: prev.axis === 'x' ? prev.line : cur.line })
+    pts.push({
+      x: prev.axis === 'z' ? prev.line : cur.line,
+      z: prev.axis === 'x' ? prev.line : cur.line,
+    })
   }
   return pts.length >= 3 ? pts : room.footprint
 }
@@ -176,7 +194,14 @@ interface RoomShellProps {
 }
 
 /** 房间外壳：足迹实体地板（外扩覆盖墙脚）+ 沿足迹边分段实心墙（门洞/窗洞留空） */
-function RoomShell({ room, material, isSelected, plan, nested = false, screenshotMode = false }: RoomShellProps) {
+function RoomShell({
+  room,
+  material,
+  isSelected,
+  plan,
+  nested = false,
+  screenshotMode = false,
+}: RoomShellProps) {
   const H = room.height
   const bounds = footprintBounds(room.footprint)
   const bw = bounds.maxX - bounds.minX
@@ -194,9 +219,7 @@ function RoomShell({ room, material, isSelected, plan, nested = false, screensho
 
   const wall = (edge: (typeof plan.edges)[number], idx: number) => {
     const isX = edge.axis === 'x'
-    const pos: [number, number, number] = isX
-      ? [edge.start + edge.length / 2, wallBaseY, edge.line]
-      : [edge.line, wallBaseY, edge.start + edge.length / 2]
+    const pos = wallGroupPosition(edge, wallBaseY)
     return (
       <group key={idx} position={pos} rotation={isX ? [0, 0, 0] : [0, -Math.PI / 2, 0]}>
         {edge.segments.map((seg, i) => (
@@ -296,10 +319,7 @@ export function ModelNodeView({
       return (
         <>
           {!screenshotMode && level && (
-            <mesh
-              raycast={() => null}
-              position={[dims.cx, dims.height / 2, dims.cz]}
-            >
+            <mesh raycast={() => null} position={[dims.cx, dims.height / 2, dims.cz]}>
               <boxGeometry args={[dims.width, dims.height, dims.depth]} />
               <meshBasicMaterial color="#8a93a5" wireframe transparent opacity={0.12} />
             </mesh>
@@ -323,18 +343,38 @@ export function ModelNodeView({
     const baseColor = roomFaceColor(node.name, siblingIndex, colorMode)
     let material: ShellMaterial
     if (isFocusedRoom) {
-      material = { color: baseColor, transparent: true, opacity: 0.1, depthWrite: false, wireframe: wireframeEnabled }
+      material = {
+        color: baseColor,
+        transparent: true,
+        opacity: 0.1,
+        depthWrite: false,
+        wireframe: wireframeEnabled,
+      }
     } else if (ghosted) {
-      material = { color: '#2f3542', transparent: true, opacity: 0.18, depthWrite: false, wireframe: wireframeEnabled }
+      material = {
+        color: '#2f3542',
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+        wireframe: wireframeEnabled,
+      }
     } else {
-      material = { color: baseColor, transparent: false, opacity: 1, depthWrite: true, wireframe: wireframeEnabled }
+      material = {
+        color: baseColor,
+        transparent: false,
+        opacity: 1,
+        depthWrite: true,
+        wireframe: wireframeEnabled,
+      }
     }
 
     const isNestedRoom = ancestors.length > 1
     // 嵌套房间：门朝向父房间中心（从父房间进嵌套房间）；顶层房间用共享墙方案或兜底
     const plan =
       wallPlan?.get(node.id) ??
-      (isNestedRoom && parentCenter ? wallPlanWithDoor(node, nestedDoorDirection(node, parentCenter)) : defaultWallPlan(node))
+      (isNestedRoom && parentCenter
+        ? wallPlanWithDoor(node, nestedDoorDirection(node, parentCenter))
+        : defaultWallPlan(node))
 
     const roomCenterPos = roomCenter(node)
     return (
@@ -354,12 +394,7 @@ export function ModelNodeView({
           screenshotMode={screenshotMode}
         />
         {node.furniture.map((child) => (
-          <ModelNodeView
-            key={child.id}
-            node={child}
-            ancestors={childAncestors}
-            parentRoom={node}
-          />
+          <ModelNodeView key={child.id} node={child} ancestors={childAncestors} parentRoom={node} />
         ))}
         {node.nestedRooms.map((child, i) => (
           <ModelNodeView
@@ -381,7 +416,13 @@ export function ModelNodeView({
   // 朝向由家具在父房间内贴靠（或最近）的墙决定——床头板朝墙、柜门朝房间内
   const fill = colorMode === 'colorblind' ? FURNITURE_COLORBLIND : FURNITURE_COLOR
   const kind = furnitureKind(node.name)
-  const facing = parentRoom ? facingFromRoom(node, { position: roomCenter(parentRoom), dimensions: roomDims(parentRoom) }, BACK_AXIS[kind]) : 'north'
+  const facing = parentRoom
+    ? facingFromRoom(
+        node,
+        { position: roomCenter(parentRoom), dimensions: roomDims(parentRoom) },
+        BACK_AXIS[kind],
+      )
+    : 'north'
   const parts = buildFurnitureParts(
     kind,
     node.dimensions.length,
@@ -404,7 +445,11 @@ export function ModelNodeView({
   const furnitureNode = node as FurnitureNode
   return (
     <group
-      position={[furnitureNode.position.x, furnitureNode.position.y + FLOOR_THICKNESS, furnitureNode.position.z]}
+      position={[
+        furnitureNode.position.x,
+        furnitureNode.position.y + FLOOR_THICKNESS,
+        furnitureNode.position.z,
+      ]}
       onClick={(e) => {
         // 停止冒泡：选中部件而非冒泡到父房间
         e.stopPropagation()

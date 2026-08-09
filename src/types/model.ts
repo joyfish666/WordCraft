@@ -73,7 +73,7 @@ export interface LevelNode {
   rooms: RoomNode[]
 }
 
-/** 整屋（v3）：楼层列表 + 入户房间 id（迁移保留，南外墙生成入户门） */
+/** 整屋（v3）：楼层列表 + 入户房间 id（迁移保留，在入口房间入口方向外墙生成入户门） */
 export interface HouseNode {
   id: string
   type: 'house'
@@ -83,6 +83,8 @@ export interface HouseNode {
   levels: LevelNode[]
   /** 入户房间 id，用于在外墙生成入户大门 */
   entranceRoomId?: string
+  /** 入户门方向（入口房间哪面外墙开门，默认 south 南墙；setHouse 可改） */
+  entranceDir?: 'north' | 'south' | 'east' | 'west'
 }
 
 /** 模型中的任意节点（容器或叶节点） */
@@ -123,6 +125,8 @@ export interface RoomNodeV2 {
   dimensions: Dimensions
   /** custom 模式的绝对位置（房间中心） */
   position?: Position
+  /** 自定义足迹顶点环（仅 custom 模式生效：L 形/U 形直接表达；世界坐标，整屋居中时随整体平移） */
+  footprint?: Point2D[]
   /** 布置意图：corridor 模板为 'left'|'right'；living 模板为 'north'|'south'|'east'|'west' */
   side?: string
   /** 子节点：家具，或嵌套的子房间（如卧室内的卫生间，布局时自动拍平） */

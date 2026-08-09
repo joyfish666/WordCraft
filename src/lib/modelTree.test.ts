@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createSampleModel } from './sampleModel'
-import { footprintCenter, rectFootprint } from './footprint'
+import { footprintBounds, footprintCenter, rectFootprint } from './footprint'
 import {
   countNodes,
   findNodeById,
@@ -105,9 +105,27 @@ describe('modelTree', () => {
     }
     const normalized = normalizeContainment(sceneOut)
     const bed = findNodeById(normalized.root, 'bed-master') as FurnitureNode
-    // 示例床已旋转为 1.5×2.0（半宽 0.75），可活动范围：x ∈ [-2.35+0.75, 1.85-0.75] = [-1.6, 1.1]
-    // 床现贴北墙（z=2.0），仅 x 被拉回
-    expect(bed.position.x).toBe(-1.6)
+    const master = findNodeById(normalized.root, 'room-master') as RoomNode
+    const mb = footprintBounds(master.footprint)
+    // 拉回墙内（半宽 0.75，含墙厚内缩）
+    expect(bed.position.x).toBeGreaterThanOrEqual(mb.minX + 0.15 + 0.75 - 1e-9)
+    expect(bed.position.x).toBeLessThanOrEqual(mb.maxX - 0.15 - 0.75 + 1e-9)
+    // 且不压嵌套卫生间占地（坑 47：旧实现钳制回墙边即止，可能压住内嵌卫生间）
+    const bath = findNodeById(normalized.root, 'bath-master') as RoomNode
+    const kb = footprintBounds(bath.footprint)
+    const bedBox = {
+      minX: bed.position.x - bed.dimensions.length / 2,
+      maxX: bed.position.x + bed.dimensions.length / 2,
+      minZ: bed.position.z - bed.dimensions.width / 2,
+      maxZ: bed.position.z + bed.dimensions.width / 2,
+    }
+    const overlapsBath =
+      bedBox.minX < kb.maxX - 1e-6 &&
+      bedBox.maxX > kb.minX + 1e-6 &&
+      bedBox.minZ < kb.maxZ - 1e-6 &&
+      bedBox.maxZ > kb.minZ + 1e-6
+    expect(overlapsBath).toBe(false)
+    // 床仍贴北墙（z 不被推出范围）
     expect(bed.position.z).toBeCloseTo(2, 5)
   })
 
