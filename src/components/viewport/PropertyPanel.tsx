@@ -209,8 +209,8 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
           ))}
         </div>
         {/* 方向与罗盘一致（世界锚定罗盘）：东=世界 +x、西=世界 -x、北=+z、南=-z。
-            3D 默认南视角下东在屏幕左侧（面向北、东在左，符合透视），2D 平面图为标准地图（北朝上东朝右）。
-            内部墙/走廊代码的 east=+x 与罗盘一致，无需镜像。 */}
+            3D 内容整体沿 X 镜像（坑 26），南视角下东在屏幕右侧（上北下南、左西右东），
+            与 2D 平面图（标准地图）一致。内部墙/走廊代码的 east=+x 与罗盘一致，无需镜像。 */}
         <div className="prop-nudge">
           <button type="button" className="prop-nudge__btn" title={t('property.nudgeEast')} onClick={() => translateSelected(stepSize, 0, 0)}>
             {t('property.east')}

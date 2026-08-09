@@ -63,6 +63,11 @@ export type Op =
   | { op: 'removeRoom'; id: string }
   | { op: 'moveRoom'; id: string; relativeTo?: { roomId: string; dir: Dir } }
   | { op: 'nestRoom'; id: string; into: string; side?: Dir }
+  /** P4 平面图编辑：把矩形房间沿轴线（axis 'x' = 竖切、'z' = 横切）切成两个房间，
+   *  原房间保留 id 与西/南半部分，新房间排到东/北侧，共墙自动开一扇门 */
+  | { op: 'splitRoom'; id: string; axis: 'x' | 'z'; position: number; name?: string }
+  /** P4 平面图编辑：合并两个并集为矩形的相邻房间（keep 保留 id/名称/层高，remove 并入） */
+  | { op: 'mergeRoom'; keep: string; remove: string }
   | {
       op: 'addFurniture'
       roomId: string
@@ -92,6 +97,11 @@ export type Op =
       kind: 'door' | 'window'
       from?: number
       to?: number
+      /** P4 平面图编辑：精确指定 footprint 边下标（坑 39：矩形 0=南 1=东 2=北 3=西），
+       *  省略时按 side 取该方向最长边（LLM 沿用 side 语义） */
+      edgeIndex?: number
+      /** P4：删除同边同种开洞；给定 from/to 时只删与之重叠的开洞，省略则整边清除 */
+      remove?: boolean
     }
   | { op: 'addAdjacency'; roomId: string; neighborId: string; side: Dir }
 

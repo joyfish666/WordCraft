@@ -18,7 +18,7 @@ import { countNodes, getPathToNode, isContainer } from '../lib/modelTree'
 import { createSampleModel } from '../lib/sampleModel'
 import { withWatermark } from '../lib/watermark'
 import { toChatHistory, useChatStore, type ChatMessageItem } from '../store/useChatStore'
-import { useModelStore } from '../store/useModelStore'
+import { useModelStore, type PlanTool } from '../store/useModelStore'
 import { useProjectStore } from '../store/useProjectStore'
 import { useShareStore } from '../store/useShareStore'
 import { getActiveApiConfig, useSettingsStore } from '../store/useSettingsStore'
@@ -100,6 +100,10 @@ export function HomePage() {
   const [shareShot, setShareShot] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'3d' | 'plan'>('3d')
   const planMode = viewMode === 'plan'
+  const planTool = useModelStore((s) => s.planTool)
+  const openingKind = useModelStore((s) => s.openingKind)
+  const setPlanTool = useModelStore((s) => s.setPlanTool)
+  const setOpeningKind = useModelStore((s) => s.setOpeningKind)
   const logRef = useRef<HTMLDivElement>(null)
   const debugRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<SceneViewerHandle>(null)
@@ -517,6 +521,68 @@ export function HomePage() {
               {t('home.viewPlan')}
             </button>
           </div>
+          {planMode && (
+            <div className="plan-toolbar">
+              <div className="plan-toolbar__row">
+                <div className="plan-toolbar__tools segmented" role="toolbar" aria-label={t('plan.toolAria')}>
+                  {(
+                    [
+                      ['select', t('plan.toolSelect'), t('plan.toolSelectTitle')],
+                      ['move', t('plan.toolMove'), t('plan.toolMoveTitle')],
+                      ['vertex', t('plan.toolVertex'), t('plan.toolVertexTitle')],
+                      ['opening', t('plan.toolOpening'), t('plan.toolOpeningTitle')],
+                      ['split', t('plan.toolSplit'), t('plan.toolSplitTitle')],
+                      ['merge', t('plan.toolMerge'), t('plan.toolMergeTitle')],
+                    ] as Array<[PlanTool, string, string]>
+                  ).map(([tool, label, title]) => (
+                    <button
+                      key={tool}
+                      type="button"
+                      className={`segmented__btn ${planTool === tool ? 'segmented__btn--active' : ''}`}
+                      onClick={() => setPlanTool(tool)}
+                      title={title}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {planTool === 'opening' && (
+                  <div className="plan-toolbar__kind segmented" role="group" aria-label={t('plan.toolOpening')}>
+                    {(
+                      [
+                        ['door', t('plan.kindDoor')],
+                        ['window', t('plan.kindWindow')],
+                      ] as Array<['door' | 'window', string]>
+                    ).map(([kind, label]) => (
+                      <button
+                        key={kind}
+                        type="button"
+                        className={`segmented__btn ${openingKind === kind ? 'segmented__btn--active' : ''}`}
+                        onClick={() => setOpeningKind(kind)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="plan-toolbar__hint">
+                {planTool === 'move'
+                  ? t('plan.hintMove')
+                  : planTool === 'vertex'
+                    ? t('plan.hintVertex')
+                    : planTool === 'opening'
+                      ? t('plan.hintOpening', {
+                          kind: openingKind === 'door' ? t('plan.kindDoor') : t('plan.kindWindow'),
+                        })
+                      : planTool === 'split'
+                        ? t('plan.hintSplit')
+                        : planTool === 'merge'
+                          ? t('plan.hintMerge')
+                          : ''}
+              </div>
+            </div>
+          )}
           <SceneViewer ref={viewportRef} planMode={planMode} />
           {selected && <PropertyPanel node={selected} />}
         </section>

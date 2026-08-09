@@ -89,7 +89,11 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 24. **相机切换必须用 drei 相机组件**：R3F 核心**不处理** `makeDefault`，只有 drei 的 `OrthographicCamera`/`PerspectiveCamera` 封装才切换 `state.camera` 并在卸载时恢复。`SceneViewer` 用 `{planMode && <OrthographicCamera makeDefault .../>}` + `<OrbitControls key={planMode?'ortho':'persp'} .../>`（key 强制重挂载绑定新相机）+ `enableRotate={!planMode}`。
 25. **正交相机 pan 公式**：`SceneViewer.pan` 对正交相机 scale = `1/zoom`（drei ortho frustum 恒等于像素尺寸）；透视分支保持 `2*distance*tan(fov/2)/clientHeight`。别把透视公式套到正交上。正北朝上靠 `camera.up.set(0,0,1)` + `lookAt(整屋中心)`。
-26. **方向约定（2026-08-09 已反转，务必读）：世界 +x=东、+z=北，与罗盘/地图/属性面板全部一致**——旧版（坑 26 原文）因右手相机在默认南视角下把 +x 投影到屏幕左侧、屏幕覆盖层罗盘又按"北朝上东朝右"绘制，导致 E/W 镜像（"走廊东侧"显示在"地图西侧"），当时把属性面板微调改成了 东=-x 与之"对齐"。现改为**真实方向**：① 罗盘改为**世界锚定**（`WorldCompass`，drei Html 钉在整屋包围盒外沿的四个世界方位，任意视角/平面图都指向真实东西南北，见 architecture §5）；② 2D 平面图内容沿 X 镜像（`SceneViewer` 内 `<group scale={[-1,1,1]}>`，仅 planMode）→ 标准地图：北朝上、东朝右；③ 属性面板微调按钮 东=+x、西=-x。**改罗盘/平面图/微调按钮时别再按旧镜像约定改回去**；3D 默认南视角下东在屏幕左侧是透视正确的（面向北、东在左），罗盘 E 也在左侧，两者一致。
+26. **方向约定（务必读）：世界 +x=东、+z=北，罗盘/地图/属性面板全部一致，渲染整体沿 X 镜像**。注意：**+x=东、+z=北 是左手系**（右手系在 x=东、y=上 时 z 必为南，如 Minecraft 的 +z=南），因此不镜像时 3D 渲染相对"人站在场景中"天然左右镜像。现行做法：**3D 与 2D 平面图内容都放在 `scale=[-1,1,1]` 的镜像组里**（`SceneViewer`），呈现标准地图方向——**上北下南、左西右东**；默认相机在南侧（`[0,9,-10]` 朝北看，正对入户门），镜像后东在屏幕右侧，与平面图一致。配套三处镜像补偿（改其中任何一处都要同步检查）：
+   ① 世界锚定罗盘（`WorldCompass`）在镜像组内渲染，锚点自动随内容镜像，无需额外处理；
+   ② 右上角覆盖层罗盘（`CornerCompassSensor`）在组外（DOM），按相机矩阵投影世界方向——**必须把方向 x 取反再投影**（内容镜像了，世界方向也要镜像，否则 E/W 标签指反）；
+   ③ **Gizmo（TransformControls）必须渲染在镜像组之外**，代理坐标取节点镜像位置（`-x, y, z`），读写处对称还原（`GizmoControls` 的 sync/readback 各有一处取反）——放在组内会因「手柄渲染镜像 + 拖拽沿世界轴」导致拖拽方向视觉反转（坑 55）。
+   属性面板微调按钮 东=+x、西=-x，与镜像后的视觉（东在右）一致。**改罗盘/平面图/Gizmo/相机时别再按旧镜像约定改回去**。
 
 ### 3.5 存储与持久化
 
@@ -133,22 +137,23 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 - **手动编辑不触发重排**：改房间尺寸/位置不会重跑布局引擎（见坑 22）。
 - **家具-家具避让是"贪心顺序"**：生成时常理按 children 顺序逐个放置并避让已放置家具，非全局最优。
 - **属性面板/Gizmo 编辑不避让门口**：`normalizeContainment` 只约束进父房间外边界与推出嵌套占地。
+- **房间移动不带动家具**：移动房间（属性面板/Gizmo/平面图移动工具）只平移足迹，家具保持绝对坐标再被 `normalizeContainment` 约束进新房间内（与 Gizmo 既有行为一致；v2 语义下 LLM 看到的仍是 footprint op）。
 - **LLM 输出质量依赖提示词**（当前 DeepSeek v4-flash）。多轮修改、家具常理摆放等依赖 LLM 遵循度。
-- **窗（P2 起 LLM 可产出，UI 无入口）**：v3 模型/墙体/渲染已支持 `window` 段与 `RoomNode.windows` 显式开洞，P2 的 `setOpenings` 操作让 LLM 可以开窗，但 UI 手工点墙放门窗仍属 P4 平面图编辑。
+- **拆分仅支持矩形房间**：`splitRoom` 只接受 4 点矩形足迹（L 形等需先拖顶点/或用 addRoom 重建）；合并要求并集为合法矩形（面积守恒）。
 - **无楼梯/无楼层**：`LevelNode` 已在模型中预留单层，楼层/楼梯属 Phase 5。
-- **footprint 编辑仍是矩形语义**：P1 布局引擎只产矩形足迹；属性面板改房间尺寸 = 足迹按包围盒缩放（L 形多边形会被拉伸，属已知边界，P4 拖顶点编辑时再处理）。
-- **P2 ops 已知边界**：① `updateRoom.patch.side` 对已平铺房间无几何意义（接受并忽略）；② `setOpenings` 只替换同边同种开洞，无删除开洞的操作；③ `relativeTo` 仅支持贴靠单个房间，多房间约束推理（"客厅北接阳台"）属 Phase 5；④ `addRoom` 无 `relativeTo` 时排东侧，可能不贴已有房间。
-- **P3 已知边界**：① 撤销/重做栈仍是整场景快照，未降到 op 粒度（行为与用户无关，op 粒度化属后续优化）；② 编辑日志不随撤销/重做弹栈——撤销后的场景摘要仍权威，日志里的过期 op 由 LLM 结合摘要自行消解；③ 手动编辑仅覆盖 属性面板/Gizmo/位移微调 四入口（translateSelected/resetSelectedPosition/updateSelected/commitDrag），无删除类手动编辑（P4 平面图编辑才引入增删）。
+- **footprint 编辑仍是矩形语义**：P1 布局引擎只产矩形足迹；属性面板改房间尺寸 = 足迹按包围盒缩放（L 形多边形会被拉伸，属已知边界，P4 拖顶点编辑后建议改用顶点工具改形状）。
+- **P2 ops 已知边界**：① `updateRoom.patch.side` 对已平铺房间无几何意义（接受并忽略）；② ~~`setOpenings` 无删除开洞~~（**P4 已补齐**：`remove: true` + 可选 `from/to` 只删重叠者；`edgeIndex` 精确指边）；③ `relativeTo` 仅支持贴靠单个房间，多房间约束推理（"客厅北接阳台"）属 Phase 5；④ `addRoom` 无 `relativeTo` 时排东侧，可能不贴已有房间。
+- **P3 已知边界**：① 撤销/重做栈仍是整场景快照，未降到 op 粒度（行为与用户无关，op 粒度化属后续优化）；② 编辑日志不随撤销/重做弹栈——撤销后的场景摘要仍权威，日志里的过期 op 由 LLM 结合摘要自行消解；③ ~~手动编辑仅覆盖 属性面板/Gizmo/位移微调 四入口，无删除类手动编辑~~（**P4 已补齐**：平面图编辑提供增（拆房/放门窗/画墙）删（合并/删门窗/拖顶点缩小）全套入口）。
 
 ## 5. v3 实施注意事项（开始改之前读）
 
-> 状态：**P1（数据模型 v3）、P2（契约动词化）与 P3（双向同步）已完成**（2026-08-09）。以下条目除标注「✓ 已完成」外均属后续阶段（P4-P5）要求。
+> 状态：**P1（数据模型 v3）、P2（契约动词化）、P3（双向同步）与 P4（平面图自由编辑）已完成**（2026-08-09）。以下条目除标注「✓ 已完成」外均属后续阶段（P5）要求。
 
 1. **✓ P1 是纯重构**：数据模型 v3 只是内部格式升级，禁止借机夹带新功能；验收 = 旧数据可打开 + 用例全绿 + 截图无回归。P1 已达成：214 用例全绿、migrateModel 覆盖旧项目 JSON/旧分享口令/旧持久化三条路径、示例模型几何与 v1 完全一致（houseBounds 12.3×10 断言不回归）。
 2. **✓ 迁移函数必须幂等且可测**：`migrateModel(v1 → v3)` 写成纯函数，覆盖旧项目 JSON 与旧分享口令两条路径；分享口令加版本前缀 `wc3:` 后，旧口令解码兼容（`decodeShareCode` 对无前缀口令直接解压），解压/迁移失败走降级提示而非崩溃（`migration.test.ts` 覆盖）。
 3. **✓ op 执行器逐条容错**（P2）：任何一条 op 失败只回滚该条，绝不整屋回滚；执行顺序必须确定（数组顺序），禁止依赖对象键序。已落地：`executeOps` 逐条 try/catch，`skipped` 记录失败原因；单条 op 的 zod 校验也在 `parseOps` 里逐条做（一条无效不连累整批）。
-4. **编辑器与对话共用执行器**（P3/P4）：平面图编辑产出与对话 op 同构，否则撤销栈/对话上下文会出现两套语义。
-5. **footprint 顶点约束**（P4）：正交约束（每边水平/垂直）在生成与编辑两处都做，编辑器用网格吸附兜底；自交多边形必须在编辑时拒绝。
+4. **编辑器与对话共用执行器**（P3/P4 已达成）：平面图编辑产出与对话 op 同构，撤销栈/对话上下文单套语义。
+5. **✓ footprint 顶点约束（P4 已落地）**：正交约束（每边水平/垂直）由 `dragVertexFootprint`（`lib/planEdit.ts`）保证——被拖顶点取指针网格点、前驱/后继沿边滑行；编辑器用 0.1m 网格吸附兜底；自交/自触多边形在编辑时拒绝（`footprintValid`：每边轴对齐且 ≥ 0.3m + 非相邻边不相交，测试覆盖）。
 6. **✓ 墙段泛化小心镜像**：足迹边按顺序遍历时，局部坐标方向统一为 + 轴（坑 37：段局部 0 = 边起点），渲染按边轴决定旋转（轴 'x' 平放 / 轴 'z' `-90°`），不再重蹈东西墙镜像的坑 1。
 7. **✓ window 段渲染**：沿用门段"永远渲染为开洞"的原则（坑 2），`WallSegmentKind` 加枚举后同步检查所有分支（`ModelNodeView.WallSegmentBox` + 测试）。
 8. **多轮上下文摘要**（P2 已落地/P3 完成）：房间摘要必须含 id（LLM 靠 id 引用节点），且与 ops 日志按时间顺序拼装，避免模型看到乱序的"当前状态"。当前 `buildSceneSummary` 输出 整屋 + 递归房间（含嵌套）+ 家具 的 id/名称/尺寸 + **顶层房间邻接表（邻居-方位）**，作为 user 消息注入；P3 已用精简摘要替代"上一轮 ops 原文"（token 省 80%+），邻接表判定与墙体同源（任一边共线 |线差|≤0.4 且区间重叠即相邻，方位 = 邻居相对本房间的方向），供 LLM 选择 relativeTo/moveRoom 的 dir。
@@ -176,13 +181,24 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 41. **渲染 group 必须锚在边起点，不是边中点**：P1 把墙段局部坐标从"墙中心为 0"改为"**边起点为 0**"（坑 37），`footprintEdges` 基座段 = `[0, length]`、嵌套覆盖判定用 `rEdge.start + seg.from`——但 `ModelNodeView` 的墙组 `position` 仍沿用 v1 的 `start + length/2`（边中点），两者差半个边长：整段墙 `[0, len]` 的中心（局部 `len/2`）被画到"边中点 + len/2" = **边的终点**，表现为**所有墙（东西+南北）整体向边尾端漂移半个边长**（用户报告："x=1 到 x=2 应该是墙，结果 x=1.5 到 x=2.5 是墙"）。修复：`wallGroupPosition` 锚在边起点（轴 'x' → `[start, y, line]`；轴 'z' → `[line, y, start]`，旋转后局部 +x → 世界 +z），世界映射统一 = `start + local`。**改段坐标约定时，必须同步检查渲染锚点与所有 `start + seg.from` 的使用点**（`segmentWorldRange` 已抽出并有回归测试：墙段世界区间不得越出房间足迹边界）。
 
+### 3.11 平面图编辑（P4 落地实录）
+
+49. **编辑层必须渲染在镜像 group 内，指针坐标经 `worldToLocal` 还原**：`SceneViewer` 的渲染内容（3D 与 2D 平面图）都在 `<group scale={[-1,1,1]}>` 镜像组内（坑 26）。`PlanEditLayer` 的网格若渲染在镜像组外，方向/命中全反；射线在世界 y=0 平面取交点（`Raycaster.setFromCamera(pointer, camera)` + `intersectPlane`）后必须经 `group.worldToLocal` 转足迹坐标——直接在组外算局部坐标会在 X 轴镜像（±1 倍）。改命中/拖拽换算时别绕过这个转换。
+50. **splitRoom 的共墙门必须加在渲染共享墙的一侧**（坑 43 同源）：拆房后两房间的共享墙只由一方渲染（`sharedWallOwner`：非走廊优先、同则 id 小者），把门开在非渲染侧的 `doors` 上是**静默空操作**（`applyOpenings` 只切实心墙段）。`applySplitRoom` 先判 owner 再决定门加在 a 的东/北墙（owner=a）或 b 的西/南墙（owner=b），`sharedWallEdgeDir(axis, ownerIsA)` 统一推导。
+51. **mergeRoom 里 keep 嵌套在 remove 内必须先交换角色**：`removeNode(remove)` 会连同其嵌套后代一起删除——若 keep 是 remove 的嵌套子房间，先交换（keep↔remove）再合并，失败（并集非矩形）也能保证场景不丢房间；合并入口房间时 `entranceRoomId` 要迁移到 keep。
+52. **平面图编辑的拖拽一律「预览不记历史 + 结束一次性 commit」**（同坑 21 的 Gizmo 模式）：`previewFootprint`/`previewSelected` 只改场景，`commitPlanEdit(baseScene, id)` 结束时压入拖拽前快照 + `editDiffToOps` 记一条 op；**切换工具时必须先 commit 再清拖拽状态**（否则预览过的场景没有撤销点）。非拖拽类编辑（放门窗/拆房/合并）走 `applyPlanOps`：`executeOps` 后同时检查 `applied > 0` 与 `JSON.stringify` 前后一致（同边同区间重复开洞等"执行成功但无变化"不记历史）。
+53. **拖拽要用 R3F 指针捕获**：`capturePointer`（`e.target.setPointerCapture(e.pointerId)`，R3F 捕获语义会把捕获对象并入后续事件的命中列表）——否则拖顶点时指针悬停手柄对象，move 事件被手柄吃掉、平面收不到，拖拽停顿。手柄与平面都要注册 onPointerMove/onPointerUp，且都做归属校验（drag.roomId/vertexIndex 匹配才处理）。
+54. **拆房切线的确定性**：splitRoom 的 position 是世界坐标（不是局部区间），矩形判定用 `footprintIsRect`（4 点轴对齐环）；切线两侧必须各 ≥ `MIN_ROOM_SIDE`(1m)（房间过小/切线太靠边直接拒绝，UI alert 提示）；开洞重映射按「边方向（几何判定，不依赖环起点）+ 沿边世界区间」归属 A/B，跨切线丢弃。
+55. **Gizmo 必须在镜像组之外渲染，代理坐标 x 取反**（坑 26 的③，2026-08-09 落实）：3D 内容整体沿 X 镜像（左手系补偿）后，TransformControls 若仍在镜像组内——手柄网格随组镜像（+x 手柄显示在左），但拖拽位移仍沿世界 +x 应用（对象往右移动）→ **手柄方向与拖拽效果视觉反转**。修法：`GizmoControls` 移到镜像组外，代理 `position.x` 取反与节点的视觉位置对齐（节点世界 (x,y,z) → 代理 (-x,y,z)），`handleObjectChange` 提交时 `x: -g.position.x` 还原；scale 模式不受影响（缩放对镜像对称）。
+
 ## 6. 快速文件地图
 
 | 需求 | 改哪里 |
 |------|--------|
 | 生成链路/提示词（ops 契约 + 场景摘要 + 编辑日志 + 快照容错） | `lib/chat.ts`（`buildSystemPrompt`/`buildSceneSummary`/`buildEditOpsLog`/`resolveRawOutput`） |
 | 双向同步（手动编辑 → op 日志）【P3 新增】 | `lib/editOps.ts`（`editDiffToOps`）+ `useModelStore`（提交处记录）+ `useChatStore.editOps`/`toChatHistory` |
-| ops 执行器（逐条容错/macro/addRoom 贴靠/家具/开洞） | `lib/executor.ts`（`executeOps`/`applyOp`/`diffSceneV2`）【新增】 |
+| ops 执行器（逐条容错/macro/addRoom 贴靠/家具/开洞/**splitRoom/mergeRoom【P4】**） | `lib/executor.ts`（`executeOps`/`applyOp`/`diffSceneV2`）【新增】 |
+| 平面图编辑纯函数（网格吸附/正交顶点拖拽/自交校验/墙命中/平移吸附/拆合布局）【P4】 | `lib/planEdit.ts`（`snapToGrid`/`dragVertexFootprint`/`footprintValid`/`hitWallOnEdge`/`snapRoomTranslation`/`splitRoomLayout`/`mergeRoomsLayout`）【新增】 |
 | ops 契约类型 | `types/ops.ts`【新增】 |
 | ops Zod 校验（判别联合白名单） | `schemas/ops.schema.ts`【新增】 |
 | 布局/平铺 | `lib/layout.ts`（`makeRoom` 导出；custom 支持 `footprint` 顶点环） |
@@ -200,6 +216,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | 家具部件模型（分类/拼装/包围盒） | `lib/furniturePresets.ts` + `ModelNodeView.tsx`（`FurnitureMesh`） |
 | 项目库 UI/保存/守卫 | `ProjectLibraryDialog.tsx` + `HomePage.tsx` + `db/database.ts` + `store/useProjectStore.ts` |
 | 2D 平面图（取景/标注） | `lib/planGeometry.ts`（足迹推导包围盒）、`PlanRig.tsx`、`PlanAnnotations.tsx`、`SceneViewer.tsx` |
+| 平面图自由编辑交互层【P4】 | `PlanEditLayer.tsx`（工具手势/命中/拖拽）+ `useModelStore`（`planTool`/`openingKind`/`previewFootprint`/`commitPlanEdit`/`applyPlanOps`）+ HomePage 工具栏 |
 | 共享配色（2D/3D 一致） | `lib/palette.ts` |
 | Gizmo 编辑 | `GizmoControls.tsx` + `SceneViewer.tsx` + `PropertyPanel.tsx` + `useModelStore.ts` |
 | 截图分享/口令 | `ShareDialog.tsx` + `HomePage.tsx` + `SceneViewer.tsx` + `lib/watermark.ts` + `lib/compression.ts`（`wc3:` 前缀）+ `store/useShareStore.ts` |

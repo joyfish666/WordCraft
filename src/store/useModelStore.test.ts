@@ -22,6 +22,7 @@ beforeEach(() => {
     focusId: null,
     stepSize: 0.5,
     gizmoMode: 'translate',
+    planTool: 'select',
     screenshotMode: false,
     initialPositions: {},
     past: [],
@@ -304,5 +305,95 @@ describe('useModelStore 手动编辑 → 编辑操作日志（P3 双向同步）
     useModelStore.getState().translateSelected(1, 0, 0)
     useModelStore.getState().resetScene()
     expect(useChatStore.getState().editOps).toHaveLength(0)
+  })
+})
+
+describe('useModelStore 平面图编辑（P4）', () => {
+  it('planTool 会话内可切换；setScene 载入新场景复位为 select', () => {
+    useModelStore.getState().setPlanTool('vertex')
+    expect(useModelStore.getState().planTool).toBe('vertex')
+    useModelStore.getState().setScene(createSampleModel())
+    expect(useModelStore.getState().planTool).toBe('select')
+  })
+
+  it('previewFootprint 实时替换房间足迹（不记历史、不记录编辑日志）', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    const room = findNodeById(useModelStore.getState().scene!.root, 'room-master') as RoomNode
+    const base = useModelStore.getState().scene!
+    const shifted = room.footprint.map((p) => ({ x: p.x + 1, z: p.z }))
+    useModelStore.getState().previewFootprint('room-master', shifted)
+    const after = findNodeById(useModelStore.getState().scene!.root, 'room-master') as RoomNode
+    expect(after.footprint[0].x).toBeCloseTo(room.footprint[0].x + 1, 5)
+    expect(useModelStore.getState().past).toHaveLength(0)
+    expect(useChatStore.getState().editOps).toHaveLength(0)
+    // commitPlanEdit：压入拖拽前快照 + 记录一条 updateRoom footprint op
+    useModelStore.getState().commitPlanEdit(base, 'room-master')
+    expect(useModelStore.getState().past).toHaveLength(1)
+    expect(useChatStore.getState().editOps).toHaveLength(1)
+    expect(useChatStore.getState().editOps[0]).toMatchObject({
+      op: 'updateRoom',
+      id: 'room-master',
+    })
+    // 撤销回到拖拽前
+    useModelStore.getState().undo()
+    const undone = findNodeById(useModelStore.getState().scene!.root, 'room-master') as RoomNode
+    expect(undone.footprint[0].x).toBeCloseTo(room.footprint[0].x, 5)
+  })
+
+  it('commitPlanEdit 无变化（场景引用相同）不记历史', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    const base = useModelStore.getState().scene!
+    useModelStore.getState().commitPlanEdit(base, 'room-master')
+    expect(useModelStore.getState().past).toHaveLength(0)
+    expect(useChatStore.getState().editOps).toHaveLength(0)
+  })
+
+  it('applyPlanOps 执行 setOpenings：更新场景 + 记历史 + 追加编辑日志', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    const before = useModelStore.getState().scene!
+    useModelStore.getState().applyPlanOps([
+      { op: 'setOpenings', roomId: 'room-master', side: 'north', kind: 'window', edgeIndex: 2, from: 1, to: 2.5 },
+    ])
+    const room = findNodeById(useModelStore.getState().scene!.root, 'room-master') as RoomNode
+    expect(room.windows).toHaveLength(1)
+    expect(room.windows[0].edgeIndex).toBe(2)
+    expect(useModelStore.getState().past).toHaveLength(1)
+    expect(useModelStore.getState().past[0]).toBe(before)
+    expect(useChatStore.getState().editOps).toHaveLength(1)
+    expect(useChatStore.getState().editOps[0]).toMatchObject({ op: 'setOpenings', roomId: 'room-master' })
+  })
+
+  it('applyPlanOps 空列表 / 全部失败 / 无实际变化时不记历史', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().applyPlanOps([])
+    expect(useModelStore.getState().past).toHaveLength(0)
+    // 房间不存在 → 单条跳过（applied 0）不记历史
+    useModelStore.getState().applyPlanOps([{ op: 'setOpenings', roomId: 'ghost', side: 'north', kind: 'door' }])
+    expect(useModelStore.getState().past).toHaveLength(0)
+    expect(useChatStore.getState().editOps).toHaveLength(0)
+    // 同边同区间开洞重复 → 执行后 JSON 相同，不记历史
+    useModelStore.getState().applyPlanOps([
+      { op: 'setOpenings', roomId: 'room-master', side: 'north', kind: 'window', edgeIndex: 2, from: 1, to: 2.5 },
+    ])
+    const pastLen = useModelStore.getState().past.length
+    useModelStore.getState().applyPlanOps([
+      { op: 'setOpenings', roomId: 'room-master', side: 'north', kind: 'window', edgeIndex: 2, from: 1, to: 2.5 },
+    ])
+    expect(useModelStore.getState().past.length).toBe(pastLen)
+    expect(useChatStore.getState().editOps).toHaveLength(1)
+  })
+
+  it('applyPlanOps 拆房 splitRoom：两个房间 + 可撤销 + 编辑日志', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    const before = useModelStore.getState().scene!
+    const beforeCount = before.root.levels[0].rooms.length
+    useModelStore.getState().applyPlanOps([{ op: 'splitRoom', id: 'room-master', axis: 'x', position: 0 }])
+    const rooms = useModelStore.getState().scene!.root.levels[0].rooms
+    expect(rooms).toHaveLength(beforeCount + 1)
+    expect(rooms.some((r) => r.id === 'room-master')).toBe(true)
+    useModelStore.getState().undo()
+    expect(useModelStore.getState().scene).toBe(before)
+    expect(useChatStore.getState().editOps).toHaveLength(1)
+    expect(useChatStore.getState().editOps[0]).toMatchObject({ op: 'splitRoom' })
   })
 })

@@ -1,17 +1,20 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { editDiffToOps } from '../lib/editOps'
+import { executeOps } from '../lib/executor'
 import { nodePosition } from '../lib/footprint'
 import { migrateModel } from '../lib/migration'
 import {
   findNodeById,
   normalizeContainment,
   updateNodeFields,
+  updateNodeFootprint,
   updateNodePosition,
   walk,
   type NodeFieldsPatch,
 } from '../lib/modelTree'
-import type { ModelNode, Position, SceneModel } from '../types/model'
+import type { ModelNode, Point2D, Position, SceneModel } from '../types/model'
+import type { Op } from '../types/ops'
 import { useChatStore } from './useChatStore'
 
 /** 以不可变方式更新场景中某节点位置；root 恒为整屋，故在此收窄类型 */
@@ -37,6 +40,9 @@ function recordEditOps(before: SceneModel, after: SceneModel, id: string): void 
   if (ops.length > 0) useChatStore.getState().pushEditOps(ops)
 }
 
+/** 平面图编辑工具（P4，design.md §6）：会话内状态，不持久化 */
+export type PlanTool = 'select' | 'move' | 'vertex' | 'opening' | 'split' | 'merge'
+
 interface ModelState {
   /** 当前场景模型（整屋根节点），null 表示空场景 */
   scene: SceneModel | null
@@ -48,6 +54,10 @@ interface ModelState {
   stepSize: number
   /** Gizmo 手柄模式：移动 / 缩放（会话内，不持久化） */
   gizmoMode: 'translate' | 'scale'
+  /** 平面图编辑工具（P4：选择/移动/顶点/门窗/拆房/合并，会话内不持久化） */
+  planTool: PlanTool
+  /** 门窗工具的放置种类（会话内不持久化） */
+  openingKind: 'door' | 'window'
   /** 截图瞬间隐藏辅助元素（网格/选中框/手柄/标注），会话内不持久化 */
   screenshotMode: boolean
   /** 场景加载时的各节点初始位置，用于「复位」 */
@@ -63,6 +73,8 @@ interface ModelState {
   setFocus: (id: string | null) => void
   setStepSize: (step: number) => void
   setGizmoMode: (mode: 'translate' | 'scale') => void
+  setPlanTool: (tool: PlanTool) => void
+  setOpeningKind: (kind: 'door' | 'window') => void
   setScreenshotMode: (v: boolean) => void
 
   /** 按增量移动选中模块（每次调用为一个可撤销步骤） */
@@ -73,8 +85,14 @@ interface ModelState {
   updateSelected: (patch: NodeFieldsPatch) => void
   /** Gizmo 拖拽实时预览：更新选中节点位置/尺寸，不记历史、不约束（避免每帧刷撤销栈与约束回弹） */
   previewSelected: (patch: NodeFieldsPatch) => void
+  /** 平面图顶点拖拽实时预览：直接替换房间足迹，不记历史、不约束 */
+  previewFootprint: (id: string, footprint: Point2D[]) => void
   /** Gizmo 拖拽结束：把拖拽前的 baseScene 压入撤销栈（若确有变化），并对当前场景约束进墙内 */
   commitDrag: (baseScene: SceneModel | null) => void
+  /** 平面图编辑提交（非拖拽类：放门窗/拆房/合并）：执行 ops → 记历史 → 追加编辑日志 */
+  applyPlanOps: (ops: Op[]) => void
+  /** 平面图拖拽结束：同 commitDrag，但以指定 id 生成编辑日志（供拖顶点/拖房间用） */
+  commitPlanEdit: (baseScene: SceneModel | null, id: string) => void
   /** 撤销最近一次编辑 */
   undo: () => void
   /** 重做最近一次撤销 */
@@ -89,6 +107,8 @@ export const useModelStore = create<ModelState>()(
       focusId: null,
       stepSize: 0.5,
       gizmoMode: 'translate',
+      planTool: 'select',
+      openingKind: 'door',
       screenshotMode: false,
       initialPositions: {},
       past: [],
@@ -102,19 +122,21 @@ export const useModelStore = create<ModelState>()(
           initialPositions[n.id] = nodePosition(n)
         })
         // 新模型取代旧场景：清空编辑历史，避免撤销回到被替换的旧模型
-        set({ scene: normalized, selectedId: null, focusId: null, initialPositions, past: [], future: [] })
+        set({ scene: normalized, selectedId: null, focusId: null, initialPositions, past: [], future: [], planTool: 'select' })
         // 场景被整体替换（生成/打开项目/加载示例/口令还原）：旧的编辑日志描述的是已不存在的前一场景
         useChatStore.getState().clearEditOps()
       },
 
       resetScene: () => {
-        set({ scene: null, selectedId: null, focusId: null, initialPositions: {}, past: [], future: [] })
+        set({ scene: null, selectedId: null, focusId: null, initialPositions: {}, past: [], future: [], planTool: 'select' })
         useChatStore.getState().clearEditOps()
       },
       selectNode: (id) => set({ selectedId: id }),
       setFocus: (id) => set({ focusId: id }),
       setStepSize: (step) => set({ stepSize: step }),
       setGizmoMode: (mode) => set({ gizmoMode: mode }),
+      setPlanTool: (tool) => set({ planTool: tool }),
+      setOpeningKind: (kind) => set({ openingKind: kind }),
       setScreenshotMode: (v) => set({ screenshotMode: v }),
 
       translateSelected: (dx, dy, dz) =>
@@ -163,6 +185,15 @@ export const useModelStore = create<ModelState>()(
           return { scene: { ...state.scene, root: nextRoot } }
         }),
 
+      previewFootprint: (id, footprint) =>
+        set((state) => {
+          if (!state.scene) return state
+          const nextRoot = updateNodeFootprint(state.scene.root, id, footprint) as SceneModel['root']
+          if (nextRoot === state.scene.root) return state
+          // 顶点拖拽中不约束、不记历史（结束时由 commitPlanEdit 统一处理）
+          return { scene: { ...state.scene, root: nextRoot } }
+        }),
+
       commitDrag: (baseScene) =>
         set((state) => {
           if (!state.scene || !baseScene || state.scene === baseScene) return state // 无场景 / 拖拽无变化
@@ -170,6 +201,26 @@ export const useModelStore = create<ModelState>()(
           // 拖拽前的场景作为历史快照；当前场景约束进墙内作为新状态
           const scene = normalizeContainment(state.scene)
           if (state.selectedId) recordEditOps(before, scene, state.selectedId)
+          return { scene, ...pushPast({ scene: before, past: state.past }) }
+        }),
+
+      applyPlanOps: (ops) =>
+        set((state) => {
+          if (!state.scene || ops.length === 0) return state
+          const result = executeOps(state.scene, ops)
+          if (result.applied === 0) return state
+          if (JSON.stringify(result.scene) === JSON.stringify(state.scene)) return state // 无实际变化
+          useChatStore.getState().pushEditOps(ops)
+          return { scene: result.scene, ...pushPast(state) }
+        }),
+
+      commitPlanEdit: (baseScene, id) =>
+        set((state) => {
+          if (!state.scene || !baseScene || state.scene === baseScene) return state
+          const before: SceneModel = baseScene
+          // 拖拽前的场景作为历史快照；当前场景约束进墙内作为新状态（与 commitDrag 同行为）
+          const scene = normalizeContainment(state.scene)
+          recordEditOps(before, scene, id)
           return { scene, ...pushPast({ scene: before, past: state.past }) }
         }),
 

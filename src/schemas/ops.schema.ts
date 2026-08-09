@@ -161,6 +161,26 @@ export const setOpeningsOpSchema = z.object({
   kind: z.enum(['door', 'window']),
   from: z.number().optional(),
   to: z.number().optional(),
+  // P4：精确指定 footprint 边下标（坑 39 约定），省略时按 side 取该方向最长边
+  edgeIndex: z.number().int().nonnegative().optional(),
+  // P4：删除同边同种开洞（给定 from/to 只删重叠者）
+  remove: z.boolean().optional(),
+})
+
+/** P4：画墙拆房间——把矩形房间沿轴线（'x' 竖切 / 'z' 横切）切成两个，共墙自动开一扇门 */
+export const splitRoomOpSchema = z.object({
+  op: z.literal('splitRoom'),
+  id: z.string().min(1),
+  axis: z.enum(['x', 'z']),
+  position: z.number(),
+  name: z.string().min(1).optional(),
+})
+
+/** P4：合并房间——两个并集为矩形的相邻房间合并（keep 保留，remove 并入） */
+export const mergeRoomOpSchema = z.object({
+  op: z.literal('mergeRoom'),
+  keep: z.string().min(1),
+  remove: z.string().min(1),
 })
 
 export const addAdjacencyOpSchema = z.object({
@@ -179,6 +199,8 @@ export const opSchema = z.discriminatedUnion('op', [
   removeRoomOpSchema,
   moveRoomOpSchema,
   nestRoomOpSchema,
+  splitRoomOpSchema,
+  mergeRoomOpSchema,
   addFurnitureOpSchema,
   updateFurnitureOpSchema,
   removeFurnitureOpSchema,

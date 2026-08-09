@@ -231,8 +231,9 @@ function hasAnyDoor(p: WallPlan): boolean {
   return p.edges.some((e) => e.segments.some((s) => s.kind === 'door'))
 }
 
-/** 共享墙持有方：非走廊优先；同为走廊/房间时取 id 较小者（确定性） */
-function ownerIsA(a: RoomNode, b: RoomNode): boolean {
+/** 共享墙持有方：非走廊优先；同为走廊/房间时取 id 较小者（确定性）。
+ *  拆分/合并（P4）在渲染侧开共墙门时复用该判定：true = a 渲染共享墙。 */
+export function sharedWallOwner(a: RoomNode, b: RoomNode): boolean {
   const aC = isCorridorName(a.name)
   const bC = isCorridorName(b.name)
   return aC !== bC ? !aC : a.id < b.id
@@ -380,7 +381,7 @@ export function computeWallPlan(
           segs = splitSegments(segs, nb.from, nb.to, 'open')
           continue
         }
-        if (ownerIsA(R, N)) {
+        if (sharedWallOwner(R, N)) {
           // 决定是否开门：
           // - 卫生间（含归属/公共/普通）走唯一门规则：命名归属房间（主卧卫生间→主卧）
           //   或走廊优先（公共/普通卫生间默认只开一扇门，用户显式 setOpenings 可另加）

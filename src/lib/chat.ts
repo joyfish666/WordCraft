@@ -48,8 +48,10 @@ export function buildSystemPrompt(): string {
    - {"op":"addFurniture","roomId":"房间id","id":"可选","name":"家具名","dimensions":{"length","width","height"},"position":{"x","y","z"}}
    - {"op":"updateFurniture","roomId":...,"id":...,"patch":{"name":...,"dimensions":{...},"position":{...}}}
    - {"op":"removeFurniture","roomId":...,"id":...}
-   - {"op":"setOpenings","roomId":...,"side":"north|south|east|west","kind":"door|window","from":"可选","to":"可选"} —— 在房间某面墙开洞；不填 from/to 时居中开标准大小（门 0.9m、窗 1.5m）
-   - {"op":"addAdjacency","roomId":...,"neighborId":...,"side":"..."} —— 把 neighborId 房间移到 roomId 的 side 侧相邻
+    - {"op":"setOpenings","roomId":...,"side":"north|south|east|west","kind":"door|window","from":"可选","to":"可选","remove":"可选(true)"} —— 在房间某面墙开洞；不填 from/to 时居中开标准大小（门 0.9m、窗 1.5m）；**"remove":true 删除该边同种开洞**（用户要求去掉门/窗时用）
+    - {"op":"splitRoom","id":"房间id","axis":"x|z","position":"世界坐标","name":"可选新房间名"} —— 把**矩形**房间沿轴线切成两间（axis x=竖切、z=横切；position 为世界坐标，两侧需各 ≥ 1m），共墙自动开一扇门；拆出来的新房间默认叫「原名2」
+    - {"op":"mergeRoom","keep":"保留的房间id","remove":"被合并的房间id"} —— 合并两个相邻房间（并集必须是矩形），keep 保留名称与 id
+    - {"op":"addAdjacency","roomId":...,"neighborId":...,"side":"..."} —— 把 neighborId 房间移到 roomId 的 side 侧相邻
 4. id 规则：所有节点 id 全局唯一；**修改已有对象时必须复用其 id**（见「当前房屋状态」）；多轮对话中保持已有 id 不变，不要删除无关对象。修改布局意图时优先用 moveRoom/addRoom（带 relativeTo）局部调整；只有整体重排才用 macro。
 5. 尺寸约定（单位：米）：length 为东西向，width 为南北向，height 为层高（默认 2.8）。相邻房间的墙应贴合（间隙为 0）。
 6. 家具：**每个房间必须包含该房间常见且合理的家具，不要留空房间**——客厅：沙发/茶几/电视柜；卧室：床/衣柜（主卧再加床头柜等）；餐厅：餐桌/餐椅；厨房：橱柜/冰箱/灶台；卫生间：马桶/洗手池等（每类至少配 1-2 件）。家具 position 相对所在房间中心：x/z 为相对中心偏移，y 为家具高度的一半（底面贴房间地面）。摆放应合理（床靠墙、衣柜贴墙、桌椅避开通道、中间留活动空间），只以所在房间为框架考虑、无需考虑整屋布局；家具不得超出房间范围、不得嵌入墙体、不得堵住门洞。
