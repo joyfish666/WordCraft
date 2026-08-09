@@ -1,4 +1,5 @@
 import { Edges } from '@react-three/drei'
+import * as THREE from 'three'
 import {
   BACK_AXIS,
   buildFurnitureParts,
@@ -6,6 +7,7 @@ import {
   furnitureKind,
   partsBounds,
 } from '../../lib/furniturePresets'
+import { footprintBounds, houseLevelsBounds, roomCenter, roomDims } from '../../lib/footprint'
 import { isContainer } from '../../lib/modelTree'
 import {
   ENTRANCE_DOOR_COLOR,
@@ -27,7 +29,7 @@ import {
 } from '../../lib/roomGeometry'
 import { useModelStore } from '../../store/useModelStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
-import type { ContainerNode, ModelNode, Position } from '../../types/model'
+import type { FurnitureNode, ModelNode, Position, RoomNode } from '../../types/model'
 
 /** 地板厚度：做成可见的实体板，墙体从地板顶面升起（墙的底部是地板） */
 export const FLOOR_THICKNESS = 0.12
@@ -55,6 +57,7 @@ interface WallSegmentBoxProps {
  * 渲染沿局部 X 轴的一段墙。
  * - 'wall'：实体墙
  * - 'door'：门洞（左右墙段 + 入户门扇/门头标识；室内门保持空门洞）
+ * - 'window'：窗洞（下窗台 + 半透明玻璃 + 上楣），永远渲染为开洞（坑 2 原则）
  */
 function WallSegmentBox({ from, to, height, thickness, kind, entrance, material }: WallSegmentBoxProps) {
   if (kind === 'open') return null
@@ -66,6 +69,41 @@ function WallSegmentBox({ from, to, height, thickness, kind, entrance, material 
         <boxGeometry args={[len, height, thickness]} />
         <meshStandardMaterial {...material} />
       </mesh>
+    )
+  }
+  if (kind === 'window') {
+    // 窗洞：窗台（实体）+ 半透明玻璃（内含镂空示意线框）+ 窗楣（实体）
+    const sillH = Math.min(0.9, height)
+    const paneH = Math.max(0, Math.min(1.2, height - sillH))
+    const rest = Math.max(0, height - sillH - paneH)
+    return (
+      <>
+        {sillH > 0 && (
+          <mesh position={[center, sillH / 2, 0]}>
+            <boxGeometry args={[len, sillH, thickness]} />
+            <meshStandardMaterial {...material} />
+          </mesh>
+        )}
+        {paneH > 0 && (
+          <>
+            <mesh position={[center, sillH + paneH / 2, 0]}>
+              <boxGeometry args={[len, paneH, 0.04]} />
+              <meshStandardMaterial color="#8fd0ff" transparent opacity={0.45} depthWrite={false} />
+            </mesh>
+            {/* 窗框示意（网格线框，与玻璃不同面避免共面闪烁） */}
+            <mesh position={[center, sillH + paneH / 2, 0]}>
+              <boxGeometry args={[len, paneH, thickness]} />
+              <meshStandardMaterial color="#2f3542" wireframe transparent opacity={0.3} depthWrite={false} />
+            </mesh>
+          </>
+        )}
+        {rest > 0 && (
+          <mesh position={[center, sillH + paneH + rest / 2, 0]}>
+            <boxGeometry args={[len, rest, thickness]} />
+            <meshStandardMaterial {...material} />
+          </mesh>
+        )}
+      </>
     )
   }
   // door 段：必定渲染为门洞（门段宽度即 DOOR_WIDTH，不再落入实心墙分支）
@@ -103,8 +141,31 @@ function WallSegmentBox({ from, to, height, thickness, kind, entrance, material 
   )
 }
 
+/**
+ * 地板多边形：足迹在非共享边外扩一个墙厚（共享边到边界，邻居地板接续）。
+ * 逐边求偏移线交点——正交多边形下与旧"矩形四边外扩"语义一致。
+ */
+function floorPolygon(room: RoomNode, plan: WallPlan): { x: number; z: number }[] {
+  const edges = plan.edges
+  const n = edges.length
+  if (n < 3) return room.footprint
+  const offset = edges.map((e) => {
+    const t = e.shared ? 0 : WALL_THICKNESS
+    const d = e.dir === 'north' || e.dir === 'east' ? t : -t
+    return { axis: e.axis, line: e.line + d }
+  })
+  const pts: { x: number; z: number }[] = []
+  for (let i = 0; i < n; i++) {
+    const prev = offset[(i - 1 + n) % n]
+    const cur = offset[i]
+    if (prev.axis === cur.axis) continue // 退化（共线边）跳过
+    pts.push({ x: prev.axis === 'z' ? prev.line : cur.line, z: prev.axis === 'x' ? prev.line : cur.line })
+  }
+  return pts.length >= 3 ? pts : room.footprint
+}
+
 interface RoomShellProps {
-  room: ContainerNode
+  room: RoomNode
   material: ShellMaterial
   isSelected: boolean
   plan: WallPlan
@@ -114,61 +175,61 @@ interface RoomShellProps {
   screenshotMode?: boolean
 }
 
-/** 房间外壳：实体地板 + 分段实心墙（共享/开放/门洞按段处理），外墙始终保留 */
+/** 房间外壳：足迹实体地板（外扩覆盖墙脚）+ 沿足迹边分段实心墙（门洞/窗洞留空） */
 function RoomShell({ room, material, isSelected, plan, nested = false, screenshotMode = false }: RoomShellProps) {
-  const { length: L, width: W, height: H } = room.dimensions
-  const cx = room.position.x
-  const cz = room.position.z
-  const baseY = room.position.y - H / 2
+  const H = room.height
+  const bounds = footprintBounds(room.footprint)
+  const bw = bounds.maxX - bounds.minX
+  const bd = bounds.maxZ - bounds.minZ
+  const cx = (bounds.minX + bounds.maxX) / 2
+  const cz = (bounds.minZ + bounds.maxZ) / 2
+  const baseY = 0
   const wallBaseY = baseY + FLOOR_THICKNESS
   const floorLift = nested ? 0.012 : 0
 
-  // 地板：非共享边外扩一个墙厚；共享边到边界（邻居地板接续）
-  const xmin = plan.west.shared ? cx - L / 2 : cx - L / 2 - WALL_THICKNESS
-  const xmax = plan.east.shared ? cx + L / 2 : cx + L / 2 + WALL_THICKNESS
-  const zmin = plan.south.shared ? cz - W / 2 : cz - W / 2 - WALL_THICKNESS
-  const zmax = plan.north.shared ? cz + W / 2 : cz + W / 2 + WALL_THICKNESS
-
-  const wall = (
-    dir: keyof WallPlan,
-    position: [number, number, number],
-    rotation: [number, number, number],
-  ) => (
-    <group position={position} rotation={rotation}>
-      {plan[dir].segments.map((seg, i) => (
-        <WallSegmentBox
-          key={i}
-          from={seg.from}
-          to={seg.to}
-          height={H}
-          thickness={WALL_THICKNESS}
-          kind={seg.kind}
-          entrance={seg.entrance}
-          material={material}
-        />
-      ))}
-    </group>
+  // 地板形状：Shape 位于 XY 平面，经 -90° X 旋转铺平到 XZ（shape 坐标 y = -世界 z）
+  const floorShape = new THREE.Shape(
+    floorPolygon(room, plan).map((p) => new THREE.Vector2(p.x, -p.z)),
   )
+
+  const wall = (edge: (typeof plan.edges)[number], idx: number) => {
+    const isX = edge.axis === 'x'
+    const pos: [number, number, number] = isX
+      ? [edge.start + edge.length / 2, wallBaseY, edge.line]
+      : [edge.line, wallBaseY, edge.start + edge.length / 2]
+    return (
+      <group key={idx} position={pos} rotation={isX ? [0, 0, 0] : [0, -Math.PI / 2, 0]}>
+        {edge.segments.map((seg, i) => (
+          <WallSegmentBox
+            key={i}
+            from={seg.from}
+            to={seg.to}
+            height={H}
+            thickness={WALL_THICKNESS}
+            kind={seg.kind}
+            entrance={seg.entrance}
+            material={material}
+          />
+        ))}
+      </group>
+    )
+  }
 
   return (
     <>
-      {/* 实体地板（嵌套子房间的地板略微抬高，避免与父地板重叠闪烁） */}
-      <mesh position={[(xmin + xmax) / 2, baseY + FLOOR_THICKNESS / 2 + floorLift, (zmin + zmax) / 2]}>
-        <boxGeometry args={[xmax - xmin, FLOOR_THICKNESS, zmax - zmin]} />
-        <meshStandardMaterial {...material} />
+      {/* 足迹实体地板（嵌套子房间的地板略微抬高，避免与父地板重叠闪烁） */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, baseY + floorLift, 0]}>
+        <extrudeGeometry args={[floorShape, { depth: FLOOR_THICKNESS, bevelEnabled: false }]} />
+        <meshStandardMaterial {...material} side={THREE.DoubleSide} />
       </mesh>
 
-      {/* 四面墙：按分段渲染（开放段留空、共享段按持有方渲染） */}
-      {wall('north', [cx, wallBaseY, cz + W / 2], [0, 0, 0])}
-      {wall('south', [cx, wallBaseY, cz - W / 2], [0, 0, 0])}
-      {/* 东/西墙用 -90° 旋转：使墙段局部坐标方向与 wallInfo 一致（否则镜像导致外墙段错位） */}
-      {wall('east', [cx + L / 2, wallBaseY, cz], [0, -Math.PI / 2, 0])}
-      {wall('west', [cx - L / 2, wallBaseY, cz], [0, -Math.PI / 2, 0])}
+      {/* 沿足迹边渲染墙段：轴 'x' 平放、轴 'z' -90° 旋转，局部方向与墙段坐标统一（避免镜像） */}
+      {plan.edges.map((edge, idx) => wall(edge, idx))}
 
       {/* 选中轮廓（不参与射线检测：否则会挡在房间内部件上方，使部件点不到） */}
       {isSelected && !screenshotMode && (
         <mesh raycast={() => null} position={[cx, baseY + (FLOOR_THICKNESS + H) / 2, cz]}>
-          <boxGeometry args={[L, FLOOR_THICKNESS + H, W]} />
+          <boxGeometry args={[bw, FLOOR_THICKNESS + H, bd]} />
           <meshBasicMaterial color="#ffd93d" wireframe transparent opacity={0.7} />
         </mesh>
       )}
@@ -178,7 +239,7 @@ function RoomShell({ room, material, isSelected, plan, nested = false, screensho
 
 interface ModelNodeViewProps {
   node: ModelNode
-  /** 兄弟容器索引，用于分配不同房间色 */
+  /** 兄弟容器索引，用于分配不同房间色（嵌套房间 = 父家具数 + 嵌套下标） */
   siblingIndex?: number
   /** 祖先节点 id，用于判断是否位于聚焦房间内 */
   ancestors?: string[]
@@ -187,12 +248,12 @@ interface ModelNodeViewProps {
   /** 父房间中心（嵌套房间据此决定门朝向父房间内部） */
   parentCenter?: Position
   /** 直接父房间（家具据此计算贴靠的墙来决定朝向） */
-  parentRoom?: ContainerNode
+  parentRoom?: RoomNode
 }
 
 /**
  * 递归渲染层级模型。
- * - 整屋视图：房间为实心墙体+地板（分段），门与墙同高，开放空间连通，外墙完整
+ * - 整屋视图：房间为足迹地板 + 沿边分段墙（门洞/窗洞/开放段），开放空间连通，外墙完整
  * - 聚焦视图（focusId 指向某房间）：该房间外壳透明化以便查看内部实体家具，
  *   其他房间外壳虚化；家具仍遵循 实体/虚化 两态
  */
@@ -229,30 +290,28 @@ export function ModelNodeView({
 
   if (isContainer(node)) {
     if (node.type === 'house') {
+      // 房屋线框盒（视觉轮廓）：由所有房间足迹包围盒计算，不参与射线检测
+      const dims = houseBoundsFor(node)
+      const level = node.levels[0]
       return (
         <>
-          {/* 房屋线框盒仅作视觉轮廓，不参与射线检测：
-              否则它横跨整屋且最高，每次点击部件/房间都会先命中它（先 deselect、清空聚焦）。
-              空白处点击由 Canvas onPointerMissed 兜底取消选中。 */}
-          {!screenshotMode && (
+          {!screenshotMode && level && (
             <mesh
               raycast={() => null}
-              position={[0, node.dimensions.height / 2, 0]}
+              position={[dims.cx, dims.height / 2, dims.cz]}
             >
-              <boxGeometry
-                args={[node.dimensions.length, node.dimensions.height, node.dimensions.width]}
-              />
+              <boxGeometry args={[dims.width, dims.height, dims.depth]} />
               <meshBasicMaterial color="#8a93a5" wireframe transparent opacity={0.12} />
             </mesh>
           )}
-          {node.children.map((child, i) => (
+          {level?.rooms.map((child, i) => (
             <ModelNodeView
               key={child.id}
               node={child}
               siblingIndex={i}
               ancestors={childAncestors}
               wallPlan={wallPlan}
-              parentCenter={node.position}
+              parentCenter={{ x: 0, y: 0, z: 0 }}
             />
           ))}
         </>
@@ -277,6 +336,7 @@ export function ModelNodeView({
       wallPlan?.get(node.id) ??
       (isNestedRoom && parentCenter ? wallPlanWithDoor(node, nestedDoorDirection(node, parentCenter)) : defaultWallPlan(node))
 
+    const roomCenterPos = roomCenter(node)
     return (
       <group
         onClick={(e) => {
@@ -293,14 +353,22 @@ export function ModelNodeView({
           nested={isNestedRoom}
           screenshotMode={screenshotMode}
         />
-        {node.children.map((child, i) => (
+        {node.furniture.map((child) => (
           <ModelNodeView
             key={child.id}
             node={child}
-            siblingIndex={i}
+            ancestors={childAncestors}
+            parentRoom={node}
+          />
+        ))}
+        {node.nestedRooms.map((child, i) => (
+          <ModelNodeView
+            key={child.id}
+            node={child}
+            siblingIndex={node.furniture.length + i}
             ancestors={childAncestors}
             wallPlan={wallPlan}
-            parentCenter={node.position}
+            parentCenter={roomCenterPos}
             parentRoom={node}
           />
         ))}
@@ -308,12 +376,12 @@ export function ModelNodeView({
     )
   }
 
-  // 家具 / 墙体：实体 vs 虚化两种状态（y 抬升一个地板厚度，使其立在地板顶面）
+  // 家具：实体 vs 虚化两种状态（y 抬升一个地板厚度，使其立在地板顶面）
   // 按名称识别家具种类并拼装部件（床/衣柜/沙发…），未识别回退为单个整盒；
   // 朝向由家具在父房间内贴靠（或最近）的墙决定——床头板朝墙、柜门朝房间内
   const fill = colorMode === 'colorblind' ? FURNITURE_COLORBLIND : FURNITURE_COLOR
   const kind = furnitureKind(node.name)
-  const facing = parentRoom ? facingFromRoom(node, parentRoom, BACK_AXIS[kind]) : 'north'
+  const facing = parentRoom ? facingFromRoom(node, { position: roomCenter(parentRoom), dimensions: roomDims(parentRoom) }, BACK_AXIS[kind]) : 'north'
   const parts = buildFurnitureParts(
     kind,
     node.dimensions.length,
@@ -333,9 +401,10 @@ export function ModelNodeView({
     (bounds.max[2] + bounds.min[2]) / 2,
   ]
   const showOutline = !screenshotMode && (isSelected || !ghosted)
+  const furnitureNode = node as FurnitureNode
   return (
     <group
-      position={[node.position.x, node.position.y + FLOOR_THICKNESS, node.position.z]}
+      position={[furnitureNode.position.x, furnitureNode.position.y + FLOOR_THICKNESS, furnitureNode.position.z]}
       onClick={(e) => {
         // 停止冒泡：选中部件而非冒泡到父房间
         e.stopPropagation()
@@ -373,4 +442,24 @@ export function ModelNodeView({
       )}
     </group>
   )
+}
+
+/** 房屋线框盒：所有房间足迹并集 + 最高层高 */
+function houseBoundsFor(node: Parameters<typeof houseLevelsBounds>[0]): {
+  cx: number
+  cz: number
+  width: number
+  depth: number
+  height: number
+} {
+  const b = houseLevelsBounds(node)
+  const height = Math.max(...node.levels.map((l) => l.height), 2.8)
+  if (!b) return { cx: 0, cz: 0, width: 4, depth: 3, height }
+  return {
+    cx: (b.minX + b.maxX) / 2,
+    cz: (b.minZ + b.maxZ) / 2,
+    width: b.maxX - b.minX + WALL_THICKNESS * 2,
+    depth: b.maxZ - b.minZ + WALL_THICKNESS * 2,
+    height,
+  }
 }

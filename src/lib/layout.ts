@@ -1,14 +1,15 @@
 import { logDebug } from './debugLog'
+import { levelHeight, rectFootprint, translateFootprint } from './footprint'
 import { applyFurnitureConventions } from './furniturePlacement'
-import { isContainer, normalizeContainment } from './modelTree'
+import { normalizeContainment } from './modelTree'
 import { WALL_THICKNESS, isCorridorName } from './roomGeometry'
 import type {
-  ContainerNode,
   FurnitureNode,
   FurnitureNodeV2,
+  HouseNode,
   HouseNodeV2,
-  ModelNode,
-  Position,
+  LevelNode,
+  RoomNode,
   RoomNodeV2,
   SceneModel,
   SceneModelV2,
@@ -21,9 +22,10 @@ const SIDES = ['north', 'south', 'east', 'west'] as const
 type LivingSide = (typeof SIDES)[number]
 
 /**
- * 将 v2 语义模型解析为 v1 绝对坐标模型（供渲染/存储/墙体方案消费）。
+ * 将 v2 语义模型解析为 v3 绝对坐标模型（足迹几何，供渲染/存储/墙体方案消费）。
  * - auto 模式：由布局引擎确定性平铺（走廊型 / 客厅居中型）
  * - custom 模式：使用 LLM 提供的房间绝对坐标
+ * - 房间一律转为 4 点矩形足迹（v3 支持任意正交多边形，P1 平铺仍为矩形）
  * - 家具位置统一由「相对房间中心」偏移为绝对坐标，并经 normalizeContainment 约束进墙内
  */
 export function resolveLayout(scene: SceneModelV2): SceneModel {
@@ -34,26 +36,51 @@ export function resolveLayout(scene: SceneModelV2): SceneModel {
     house: scene.root.name,
   })
   const root = resolveHouse(scene.root)
-  let model = normalizeContainment({ version: 1, root })
+  let model = normalizeContainment({ version: 3, root })
   // 常规布局（auto）按家具常理贴墙放置；custom 自由布局保留大模型的显式坐标
   if (layout.mode === 'auto') {
     model = applyFurnitureConventions(model)
     model = normalizeContainment(model)
   }
+  const rooms = model.root.levels[0].rooms
   logDebug('布局解析完成', {
     house: model.root.name,
-    houseDimensions: model.root.dimensions,
-    rooms: model.root.children.map((c) => ({
+    rooms: rooms.map((c) => ({
       name: c.name,
-      position: c.position,
-      dimensions: c.dimensions,
-      furniture: c.type === 'room' ? c.children.length : 0,
+      center: centerOf(c),
+      dims: dimsOf(c),
+      furniture: c.furniture.length,
     })),
   })
   return model
 }
 
-function resolveHouse(house: HouseNodeV2): ContainerNode {
+function centerOf(r: RoomNode): { x: number; z: number } {
+  let sx = 0
+  let sz = 0
+  for (const p of r.footprint) {
+    sx += p.x
+    sz += p.z
+  }
+  const n = r.footprint.length
+  return n > 0 ? { x: sx / n, z: sz / n } : { x: 0, z: 0 }
+}
+
+function dimsOf(r: RoomNode): { length: number; width: number } {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  for (const p of r.footprint) {
+    if (p.x < minX) minX = p.x
+    if (p.x > maxX) maxX = p.x
+    if (p.z < minZ) minZ = p.z
+    if (p.z > maxZ) maxZ = p.z
+  }
+  return { length: maxX - minX, width: maxZ - minZ }
+}
+
+function resolveHouse(house: HouseNodeV2): HouseNode {
   const layout = house.layout
   if (layout.mode === 'auto') {
     return layout.template === 'corridor' ? resolveCorridor(house) : resolveLiving(house)
@@ -107,109 +134,110 @@ function placeNested(n: RoomNodeV2, parentLen: number, parentWid: number): { x: 
 }
 
 /**
- * 由 RoomNodeV2 构建 ContainerNode：房间居地面，家具相对房间中心偏移为绝对坐标；
+ * 由 RoomNodeV2 构建 v3 RoomNode：矩形足迹居地面，家具相对房间中心偏移为绝对坐标；
  * 嵌套子房间（如卧室内卫生间）保留在父房间内部，按 side/常理角落放置。
  */
-function makeRoom(r: RoomNodeV2, cx: number, cz: number): ContainerNode {
+function makeRoom(r: RoomNodeV2, cx: number, cz: number): RoomNode {
   const H = r.dimensions.height
   const furniture = r.children.filter((c) => c.type !== 'room') as FurnitureNodeV2[]
   const nested = r.children.filter((c) => c.type === 'room') as RoomNodeV2[]
-  const children: ModelNode[] = [
-    ...furniture.map((f): FurnitureNode => ({
-      id: f.id,
-      type: f.type,
-      name: f.name,
-      dimensions: f.dimensions,
-      position: { x: cx + f.position.x, y: f.position.y, z: cz + f.position.z },
-      rotationY: f.rotationY,
-      description: f.description,
-    })),
-    // 嵌套子房间：位于父房间内部，按 side 靠边或常理靠角
-    ...nested.map((n) => {
-      const rel = placeNested(n, r.dimensions.length, r.dimensions.width)
-      return makeRoom(n, cx + rel.x, cz + rel.z)
-    }),
-  ]
   return {
     id: r.id,
     type: 'room',
     name: r.name,
-    dimensions: r.dimensions,
-    position: { x: cx, y: H / 2, z: cz },
-    children,
+    footprint: rectFootprint(cx, cz, r.dimensions.length, r.dimensions.width),
+    height: H,
+    doors: [],
+    windows: [],
+    furniture: furniture.map(
+      (f): FurnitureNode => ({
+        id: f.id,
+        type: 'furniture',
+        name: f.name,
+        dimensions: f.dimensions,
+        position: { x: cx + f.position.x, y: f.position.y, z: cz + f.position.z },
+        rotationY: f.rotationY,
+        description: f.description,
+      }),
+    ),
+    nestedRooms: nested.map((n) => {
+      const rel = placeNested(n, r.dimensions.length, r.dimensions.width)
+      return makeRoom(n, cx + rel.x, cz + rel.z)
+    }),
   }
 }
 
-/** 求所有房间+走廊的包围盒并平移到整屋中心（原点），返回整屋根节点 */
-function finalizeHouse(house: HouseNodeV2, children: ContainerNode[]): ContainerNode {
-  if (children.length === 0) {
+/** 求所有房间足迹的包围盒并平移到整屋中心（原点），返回 v3 整屋根节点（单层） */
+function finalizeHouse(house: HouseNodeV2, rooms: RoomNode[]): HouseNode {
+  const roomId = `level-${house.id}`
+  if (rooms.length === 0) {
     return {
       id: house.id,
       type: 'house',
       name: house.name,
-      dimensions: { length: 4, width: 3, height: 2.8 },
-      position: { x: 0, y: 0, z: 0 },
-      children,
+      levels: [{ id: roomId, height: house.dimensions.height, rooms: [] }],
+      ...(house.layout.mode === 'auto' && house.layout.template === 'corridor'
+        ? { entranceRoomId: house.layout.corridor?.entranceRoomId }
+        : {}),
     }
   }
-  const xs: number[] = []
-  const zs: number[] = []
-  let maxTop = 0
-  for (const c of children) {
-    xs.push(c.position.x - c.dimensions.length / 2, c.position.x + c.dimensions.length / 2)
-    zs.push(c.position.z - c.dimensions.width / 2, c.position.z + c.dimensions.width / 2)
-    maxTop = Math.max(maxTop, c.position.y + c.dimensions.height / 2)
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  for (const r of rooms) {
+    for (const p of r.footprint) {
+      if (p.x < minX) minX = p.x
+      if (p.x > maxX) maxX = p.x
+      if (p.z < minZ) minZ = p.z
+      if (p.z > maxZ) maxZ = p.z
+    }
   }
-  const minX = Math.min(...xs) - WALL_THICKNESS
-  const maxX = Math.max(...xs) + WALL_THICKNESS
-  const minZ = Math.min(...zs) - WALL_THICKNESS
-  const maxZ = Math.max(...zs) + WALL_THICKNESS
   const centerX = (minX + maxX) / 2
   const centerZ = (minZ + maxZ) / 2
+  // 平移整棵树（顶层 + 嵌套房间足迹 + 家具），保持相对关系
+  const centered = rooms.map((r) => translateRoom(r, -centerX, -centerZ))
 
+  const level: LevelNode = {
+    id: roomId,
+    height: Math.max(levelHeight(centered), house.dimensions.height),
+    rooms: centered,
+  }
   return {
     id: house.id,
     type: 'house',
     name: house.name,
-    dimensions: {
-      length: maxX - minX,
-      width: maxZ - minZ,
-      height: Math.max(maxTop, house.dimensions.height),
-    },
-    position: { x: 0, y: 0, z: 0 },
     // 记录入户房间，供墙体方案在南外墙开入户门
-    entranceRoomId:
-      house.layout.mode === 'auto' && house.layout.template === 'corridor'
-        ? house.layout.corridor?.entranceRoomId
-        : undefined,
-    children: children.map((c) => translateNode(c, -centerX, -centerZ)),
+    ...(house.layout.mode === 'auto' && house.layout.template === 'corridor'
+      ? { entranceRoomId: house.layout.corridor?.entranceRoomId }
+      : {}),
+    levels: [level],
   }
 }
 
-/** 平移一个容器节点（含其子节点与家具），保持相对关系 */
-function translateNode(node: ContainerNode, dx: number, dz: number): ContainerNode {
+/** 平移一个房间（含其家具与嵌套房间足迹），保持相对关系 */
+function translateRoom(node: RoomNode, dx: number, dz: number): RoomNode {
   return {
     ...node,
-    position: { ...node.position, x: node.position.x + dx, z: node.position.z + dz },
-    children: node.children.map((c) =>
-      isContainer(c) ? translateNode(c, dx, dz) : shiftPosition(c, dx, dz),
-    ),
+    footprint: translateFootprint(node.footprint, dx, dz),
+    furniture: node.furniture.map((f) => ({
+      ...f,
+      position: { ...f.position, x: f.position.x + dx, z: f.position.z + dz },
+    })),
+    nestedRooms: node.nestedRooms.map((n) => translateRoom(n, dx, dz)),
   }
-}
-
-function shiftPosition<T extends { position: Position }>(node: T, dx: number, dz: number): T {
-  return { ...node, position: { ...node.position, x: node.position.x + dx, z: node.position.z + dz } }
 }
 
 // ---------------------------------------------------------------------------
 // 走廊型
 // ---------------------------------------------------------------------------
 
-function resolveCorridor(house: HouseNodeV2): ContainerNode {
+function resolveCorridor(house: HouseNodeV2): HouseNode {
   const layout = house.layout
-  const corridorWidth = layout.mode === 'auto' && layout.template === 'corridor'
-    ? (layout.corridor?.width ?? DEFAULT_CORRIDOR_WIDTH)
-    : DEFAULT_CORRIDOR_WIDTH
+  const corridorWidth =
+    layout.mode === 'auto' && layout.template === 'corridor'
+      ? (layout.corridor?.width ?? DEFAULT_CORRIDOR_WIDTH)
+      : DEFAULT_CORRIDOR_WIDTH
   const entranceId =
     layout.mode === 'auto' && layout.template === 'corridor'
       ? layout.corridor?.entranceRoomId
@@ -255,7 +283,7 @@ function resolveCorridor(house: HouseNodeV2): ContainerNode {
   })
 
   const cursor = { left: 0, right: 0 }
-  const placed: ContainerNode[] = ordered.map((r, i) => {
+  const placed: RoomNode[] = ordered.map((r, i) => {
     const along = r.dimensions.length
     const depth = r.dimensions.width
     const side = sideOf[i]!
@@ -270,13 +298,16 @@ function resolveCorridor(house: HouseNodeV2): ContainerNode {
   const totalLength = Math.max(cursor.left, cursor.right)
   const corridorH = Math.max(...ordered.map((r) => r.dimensions.height), DEFAULT_ROOM_HEIGHT)
 
-  const corridor: ContainerNode = {
+  const corridor: RoomNode = {
     id: 'corridor',
     type: 'room',
     name: '走廊',
-    dimensions: { length: totalLength, width: corridorWidth, height: corridorH },
-    position: { x: totalLength / 2, y: corridorH / 2, z: 0 },
-    children: [],
+    footprint: rectFootprint(totalLength / 2, 0, totalLength, corridorWidth),
+    height: corridorH,
+    doors: [],
+    windows: [],
+    furniture: [],
+    nestedRooms: [],
   }
 
   return finalizeHouse(house, [corridor, ...placed])
@@ -286,7 +317,7 @@ function resolveCorridor(house: HouseNodeV2): ContainerNode {
 // 客厅居中型
 // ---------------------------------------------------------------------------
 
-function resolveLiving(house: HouseNodeV2): ContainerNode {
+function resolveLiving(house: HouseNodeV2): HouseNode {
   const rooms = house.children.filter((r) => !isCorridorName(r.name))
   const layout = house.layout
   const centerId = layout.mode === 'auto' && layout.template === 'living' ? layout.centerRoomId : ''
@@ -329,7 +360,7 @@ function placeRow(
   side: LivingSide,
   cl: number,
   cw: number,
-): ContainerNode[] {
+): RoomNode[] {
   const horizontal = side === 'north' || side === 'south'
   const along = (r: RoomNodeV2) => (horizontal ? r.dimensions.length : r.dimensions.width)
   const depth = (r: RoomNodeV2) => (horizontal ? r.dimensions.width : r.dimensions.length)
@@ -352,7 +383,7 @@ function placeRow(
 // 自由型
 // ---------------------------------------------------------------------------
 
-function resolveCustom(house: HouseNodeV2): ContainerNode {
+function resolveCustom(house: HouseNodeV2): HouseNode {
   const children = house.children.map((r) => makeRoom(r, r.position?.x ?? 0, r.position?.z ?? 0))
   return finalizeHouse(house, children)
 }

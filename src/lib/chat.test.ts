@@ -110,8 +110,9 @@ describe('generateModelFromChat', () => {
     })
     expect(result.model.root.name).toBe('示例房')
     // 走廊被引擎生成，房间已平铺
-    expect(result.model.root.children.some((c) => c.name === '走廊')).toBe(true)
-    expect(result.model.root.children.some((c) => c.name === '主卧')).toBe(true)
+    const rooms = result.model.root.levels[0].rooms
+    expect(rooms.some((c) => c.name === '走廊')).toBe(true)
+    expect(rooms.some((c) => c.name === '主卧')).toBe(true)
   })
 
   it('请求体启用流式并包含系统提示、历史与思考模式', async () => {

@@ -1,6 +1,8 @@
 # 言筑（WordCraft）设计方案 —— v3「自由设计」
 
-> 版本：v3 草案 · 状态：已评审，待实施 · 配套文档：[技术架构（现行实现）](architecture.md) · [版本演进](history.md) · [开发注意事项](notes.md)
+> 版本：v3 草案 · 状态：已评审，P1（数据模型 v3）已实施 · 配套文档：[技术架构（现行实现）](architecture.md) · [版本演进](history.md) · [开发注意事项](notes.md)
+
+> **P1 进度**（2026-08-09 完成）：§3 数据模型 v3 已落地——v3 类型、`migrateModel` 迁移（项目 JSON/分享口令/持久化三路径）、足迹渲染（Shape 地板 + 沿边墙段）、`window` 段与显式开洞覆盖层。验收达标：旧数据可打开（迁移测试）、用例全绿（214）、示例截图无回归（houseBounds 断言不变）。P2 起按 §9 计划推进。
 
 本文档描述言筑下一代的完整设计方案：在不推翻"语义/几何分离"这一已验证核心的前提下，让用户能够**自由输入、自由布局、自由编辑**，真正设计出自己心中的房屋。
 
@@ -84,19 +86,19 @@ StairNode  { id, fromLevel, toLevel, position, dimensions } // Phase 5 预留
 - **用户/LLM 显式开洞走覆盖层**：`RoomNode.doors / windows` 显式开口渲染时覆盖推导结果；
 - 好处：LLM 与首次生成零负担（不用输出墙），自由编辑窗/门时又是显式的。
 
-### 3.3 渲染适配
+### 3.3 渲染适配（✓ P1 已实施）
 
 - 房间从 `<boxGeometry>` 改为 `ShapeGeometry`/`ExtrudeGeometry`（footprint 顶点 → three.js Shape → 拉伸，`ModelNodeView.tsx`）；
-- 墙段沿足迹边摆放，删除东/西墙 `-90°` 旋转 hack（`ModelNodeView.tsx:165` 处注释说明的镜像问题随局部坐标泛化自然消失）；
-- 碰撞/家具兜底（`modelTree.ts` 的 `normalizeContainment`、`furniturePlacement.ts`）从"矩形半宽"改为"点到边距离"；
+- 墙段沿足迹边摆放，删除东/西墙 `-90°` 旋转 hack（`ModelNodeView.tsx` 中镜像问题随边轴统一局部坐标自然消失，轴 'x' 平放 / 轴 'z' `-90°` 由边轴推导）；
+- 碰撞/家具兜底（`modelTree.ts` 的 `normalizeContainment`、`furniturePlacement.ts`）从"矩形半宽"改为"点到边距离"（P1 用足迹包围盒近似，P4 拖顶点时精化）；
 - 平面图（`PlanRig` / `PlanAnnotations` / `planGeometry.ts`）同步消费 footprint。
 
-### 3.4 迁移与兼容
+### 3.4 迁移与兼容（✓ P1 已实施）
 
-- 新增 `migrateModel(v1 → v3)`：盒子 → 4 点足迹，`entranceRoomId` 保留；
-- 分享口令（`compression.ts` / `useShareStore.ts`）加版本前缀，旧口令迁移；
-- 项目库（`database.ts` / `useProjectStore.ts`）读取时迁移；
-- **Phase 1 为纯重构，零新功能**，唯一验收：190 用例适配全绿、旧数据可打开、截图无回归。
+- 新增 `migrateModel(v1 → v3)`：盒子 → 4 点足迹，`entranceRoomId` 保留（`lib/migration.ts`，幂等纯函数）；
+- 分享口令（`compression.ts` / `useShareStore.ts`）加版本前缀 `wc3:`，旧口令（无前缀）解码兼容并迁移；
+- 项目库（`database.ts` / `useProjectStore.ts`）与 localStorage 持久化（`useModelStore`/`useChatStore` persist version 2）读取时迁移；
+- **Phase 1 为纯重构，零新功能**，验收已达成：214 用例适配全绿、旧数据可打开、截图无回归。
 
 ## 4. 契约动词化：操作序列（Phase 2）
 
@@ -188,7 +190,7 @@ type Op =
 
 | 阶段 | 交付 | 验收标准 |
 |------|------|----------|
-| P1 数据模型 v3 | 模型 + 迁移 + footprint 渲染 + window 段 | 旧数据全可打开、用例全绿、截图无回归 |
+| ~~P1 数据模型 v3~~ ✅ | 模型 + 迁移 + footprint 渲染 + window 段 | 旧数据全可打开、用例全绿、截图无回归（**已完成**，214 用例） |
 | P2 契约动词化 | ops 契约 + 执行器 + 提示词重写 | 生成/多轮/撤销/分享全链路可用 |
 | P3 双向同步 | 编辑 op 日志 + 对话上下文改造 | 手动编辑后对话能看到改动 |
 | P4 平面图编辑 | 拖顶点/画墙/放门窗 | 纯手动从零搭一套房，全操作可撤销 |

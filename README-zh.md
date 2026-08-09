@@ -39,14 +39,14 @@
 | 口令压缩 | **lz-string** | 高效的 JSON 数据压缩算法 |
 | HTTP 请求 | **Axios** | 处理 API 请求，支持拦截器与错误处理 |
 | 构建工具 | **Vite** | 快速的开发构建工具 |
-| 测试框架 | **Vitest + Testing Library** | 单元测试与组件测试（190 用例） |
+| 测试框架 | **Vitest + Testing Library** | 单元测试与组件测试（214 用例） |
 
 ## 项目文档
 
 | 文档 | 内容 |
 |------|------|
-| [docs/design.md](docs/design.md) | 当前设计方案：v3 架构（操作契约 + 足迹几何 + 双向同步 + 自由编辑） |
-| [docs/architecture.md](docs/architecture.md) | 现行实现的技术架构与数据契约（v2 语义契约） |
+| [docs/design.md](docs/design.md) | 当前设计方案：v3 架构（操作契约 + 足迹几何 + 双向同步 + 自由编辑，P1 已实施） |
+| [docs/architecture.md](docs/architecture.md) | 现行实现的技术架构与数据契约（v3 足迹模型 + v2 语义契约） |
 | [docs/history.md](docs/history.md) | 三代架构演进的关键决策记录 |
 | [docs/notes.md](docs/notes.md) | 开发注意事项与踩坑记录，改代码前必读 |
 
@@ -62,7 +62,7 @@ npm run build    # 类型检查 + 构建
 
 ## 路线图
 
-- [ ] **v3 自由设计**：房间足迹几何（L/U 形）、操作契约生成（局部修改 + 双向同步）、平面图自由编辑（画墙/拖顶点/放门窗）
+- [ ] **v3 自由设计**：~~P1 数据模型 v3~~（足迹几何 + 迁移 + window 段，✅ 已完成）→ 操作契约生成（局部修改 + 双向同步）→ 平面图自由编辑（画墙/拖顶点/放门窗）
 - [ ] 移动端基础适配
 - [ ] 2D 平面图增强（家具足迹 / 门洞符号 / 尺寸标注）
 - [ ] 更多家具种类、性能优化

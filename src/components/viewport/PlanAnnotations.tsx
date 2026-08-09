@@ -1,5 +1,6 @@
 import { Html } from '@react-three/drei'
 import { useMemo } from 'react'
+import { houseDims, roomCenter, roomDims } from '../../lib/footprint'
 import { roomFaceColor } from '../../lib/palette'
 import { dimensionLines, houseBounds, roomLabelText, walkRooms } from '../../lib/planGeometry'
 import { useModelStore } from '../../store/useModelStore'
@@ -19,8 +20,8 @@ export function PlanAnnotations() {
   const colorMode = useSettingsStore((s) => s.colorMode)
   const language = useSettingsStore((s) => s.language) as Lang
 
-  // 标签/尺寸线高度：墙顶以上（墙高 = 整屋高度），避免被墙体遮挡
-  const labelY = scene ? scene.root.dimensions.height + 1 : 4
+  // 标签/尺寸线高度：墙顶以上（墙高 = 最高楼层高度），避免被墙体遮挡
+  const labelY = scene ? houseDims(scene.root).height + 0.2 : 4
   const bounds = useMemo(() => (scene ? houseBounds(scene) : null), [scene])
   const rooms = useMemo(() => (scene ? walkRooms(scene.root) : []), [scene])
   const dims = useMemo(
@@ -35,10 +36,11 @@ export function PlanAnnotations() {
       {rooms.map(({ node, siblingIndex, depth }) => {
         const color = roomFaceColor(node.name, siblingIndex, colorMode)
         const isActive = node.id === selectedId || node.id === focusId
+        const center = roomCenter(node)
         return (
           <Html
             key={node.id}
-            position={[node.position.x, labelY, node.position.z]}
+            position={[center.x, labelY, center.z]}
             center
             pointerEvents="none"
             zIndexRange={[9, 0]}
@@ -49,7 +51,7 @@ export function PlanAnnotations() {
               }`}
             >
               <span className="plan-label__chip" style={{ background: color }} />
-              <span>{roomLabelText(node.name, node.dimensions)}</span>
+              <span>{roomLabelText(node.name, roomDims(node))}</span>
             </div>
           </Html>
         )

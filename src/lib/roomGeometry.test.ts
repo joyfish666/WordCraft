@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import type { ContainerNode } from '../types/model'
+import { rectFootprint } from './footprint'
+import type { RoomNode } from '../types/model'
 import {
   DOOR_WIDTH,
   computeAllWallPlans,
   computeWallPlan,
   doorDirection,
+  edgeOf,
+  footprintEdges,
   isCorridorName,
   isOpenRoom,
   wallPlanWithDoor,
-  type WallFace,
+  type WallEdge,
 } from './roomGeometry'
 
 function room(
@@ -19,30 +22,33 @@ function room(
   len: number,
   wid: number,
   h = 2.8,
-): ContainerNode {
+): RoomNode {
   return {
     id,
     type: 'room',
     name,
-    dimensions: { length: len, width: wid, height: h },
-    position: { x, y: h / 2, z },
-    children: [],
+    footprint: rectFootprint(x, z, len, wid),
+    height: h,
+    doors: [],
+    windows: [],
+    furniture: [],
+    nestedRooms: [],
   }
 }
 
-/** 该墙是否有实体段（wall/door） */
-function rendersWall(face: WallFace): boolean {
-  return face.segments.some((s) => s.kind !== 'open')
+/** 该边是否有实体段（wall/door/window） */
+function rendersWall(edge: WallEdge): boolean {
+  return edge.segments.some((s) => s.kind !== 'open')
 }
 
-/** 该墙是否有门洞 */
-function hasDoor(face: WallFace): boolean {
-  return face.segments.some((s) => s.kind === 'door')
+/** 该边是否有门洞 */
+function hasDoor(edge: WallEdge | undefined): boolean {
+  return edge?.segments.some((s) => s.kind === 'door') ?? false
 }
 
-/** 该墙是否有留空段（开放连通） */
-function hasOpen(face: WallFace): boolean {
-  return face.segments.some((s) => s.kind === 'open')
+/** 该边是否有留空段（开放连通） */
+function hasOpen(edge: WallEdge | undefined): boolean {
+  return edge?.segments.some((s) => s.kind === 'open') ?? false
 }
 
 describe('isCorridorName / isOpenRoom', () => {
@@ -61,13 +67,33 @@ describe('isCorridorName / isOpenRoom', () => {
   })
 })
 
+describe('footprintEdges', () => {
+  it('矩形 4 点足迹 → 4 条轴对齐边，方向/线/区间正确', () => {
+    const r = room('r', '主卧', 0, 0, 3, 2)
+    const edges = footprintEdges(r)
+    expect(edges).toHaveLength(4)
+    const south = edges.find((e) => e.dir === 'south')!
+    expect(south.axis).toBe('x')
+    expect(south.line).toBe(-1)
+    expect(south.start).toBe(-1.5)
+    expect(south.length).toBe(3)
+    const north = edges.find((e) => e.dir === 'north')!
+    expect(north.line).toBe(1)
+    const east = edges.find((e) => e.dir === 'east')!
+    expect(east.axis).toBe('z')
+    expect(east.line).toBe(1.5)
+    const west = edges.find((e) => e.dir === 'west')!
+    expect(west.line).toBe(-1.5)
+  })
+})
+
 describe('doorDirection（兜底门朝向）', () => {
   it('房间在整屋左侧时门朝东（指向中心）', () => {
-    expect(doorDirection({ position: { x: -2, y: 1.4, z: 0 } })).toBe('east')
+    expect(doorDirection(room('a', '客厅', -2, 0, 3, 3))).toBe('east')
   })
 
   it('房间位于中心时默认朝北', () => {
-    expect(doorDirection({ position: { x: 0, y: 1.4, z: 0 } })).toBe('north')
+    expect(doorDirection(room('a', '客厅', 0, 0, 3, 3))).toBe('north')
   })
 })
 
@@ -76,11 +102,13 @@ describe('computeWallPlan（分段墙体）', () => {
     const master = room('master', '主卧', -2, 0, 3, 3)
     const corridor = room('corridor', '走廊', 0, 0, 1, 4)
     const plan = computeWallPlan([master, corridor])
-    expect(hasDoor(plan.get('master')!.east)).toBe(true)
-    expect(rendersWall(plan.get('master')!.east)).toBe(true)
+    const mEast = edgeOf(plan.get('master')!, 'east')!
+    const cWest = edgeOf(plan.get('corridor')!, 'west')!
+    expect(hasDoor(mEast)).toBe(true)
+    expect(rendersWall(mEast)).toBe(true)
     // 走廊西墙与主卧相邻段留空（由主卧渲染），主卧未覆盖的两端仍为外墙
-    expect(hasOpen(plan.get('corridor')!.west)).toBe(true)
-    expect(rendersWall(plan.get('corridor')!.west)).toBe(true)
+    expect(hasOpen(cWest)).toBe(true)
+    expect(rendersWall(cWest)).toBe(true)
   })
 
   it('两个非走廊房间相邻时由 id 较小者持有（私密-开放之间不开门）', () => {
@@ -88,8 +116,9 @@ describe('computeWallPlan（分段墙体）', () => {
     const b = room('b', '主卧', 0, 1.5, 3, 3)
     const plan = computeWallPlan([a, b])
     // a（id 较小）持有共享墙；但私密房间（主卧）不直连开放空间（客厅）→ 墙实体不开门
-    expect(rendersWall(plan.get('a')!.north)).toBe(true)
-    expect(hasDoor(plan.get('a')!.north)).toBe(false)
+    const aNorth = edgeOf(plan.get('a')!, 'north')!
+    expect(rendersWall(aNorth)).toBe(true)
+    expect(hasDoor(aNorth)).toBe(false)
   })
 
   it('走廊两侧：封闭房间开门，开放房间与走廊开放连通', () => {
@@ -98,10 +127,10 @@ describe('computeWallPlan（分段墙体）', () => {
     const living = room('living', '客厅', 2, 0, 3, 3)
     const plan = computeWallPlan([master, corridor, living])
     // 主卧封闭：东墙朝走廊，开门
-    expect(hasDoor(plan.get('master')!.east)).toBe(true)
+    expect(hasDoor(edgeOf(plan.get('master')!, 'east'))).toBe(true)
     // 客厅开放：与走廊开放连通（不设墙）；走廊东墙与客厅相邻段留空
-    expect(hasOpen(plan.get('living')!.west)).toBe(true)
-    expect(hasOpen(plan.get('corridor')!.east)).toBe(true)
+    expect(hasOpen(edgeOf(plan.get('living')!, 'west'))).toBe(true)
+    expect(hasOpen(edgeOf(plan.get('corridor')!, 'east'))).toBe(true)
   })
 
   it('私密房间（卧室）之间不直接开门', () => {
@@ -109,8 +138,9 @@ describe('computeWallPlan（分段墙体）', () => {
     const b = room('b', '次卧', 0, 1.5, 3, 3)
     const plan = computeWallPlan([a, b])
     // 两侧都是卧室：墙保留但不开门
-    expect(rendersWall(plan.get('a')!.north)).toBe(true)
-    expect(hasDoor(plan.get('a')!.north)).toBe(false)
+    const aNorth = edgeOf(plan.get('a')!, 'north')!
+    expect(rendersWall(aNorth)).toBe(true)
+    expect(hasDoor(aNorth)).toBe(false)
   })
 
   it('部分被相邻开放空间占用的墙，其余部分仍按外墙渲染（不向外部开口）', () => {
@@ -118,7 +148,7 @@ describe('computeWallPlan（分段墙体）', () => {
     const corridor = room('corridor', '走廊', 0, 0.5, 6, 1)
     const living = room('living', '客厅', 0, -1.5, 3, 3)
     const plan = computeWallPlan([corridor, living])
-    const south = plan.get('corridor')!.south
+    const south = edgeOf(plan.get('corridor')!, 'south')!
     // 与客厅相邻段开放连通，其余部分仍渲染为外墙
     expect(hasOpen(south)).toBe(true)
     expect(rendersWall(south)).toBe(true)
@@ -127,8 +157,8 @@ describe('computeWallPlan（分段墙体）', () => {
   it('无相邻房间时兜底开一扇朝整屋中心的门', () => {
     const a = room('a', '客厅', 0, 0, 3, 3)
     const plan = computeWallPlan([a])
-    expect(hasDoor(plan.get('a')!.north)).toBe(true)
-    expect(rendersWall(plan.get('a')!.east)).toBe(true)
+    expect(hasDoor(edgeOf(plan.get('a')!, 'north'))).toBe(true)
+    expect(rendersWall(edgeOf(plan.get('a')!, 'east')!)).toBe(true)
   })
 })
 
@@ -136,11 +166,11 @@ describe('wallPlanWithDoor（嵌套房间用）', () => {
   it('在指定方向开门，其余墙实体', () => {
     const a = room('a', '主卧', 0, 0, 3, 3)
     const plan = wallPlanWithDoor(a, 'north')
-    expect(hasDoor(plan.north)).toBe(true)
-    expect(hasDoor(plan.south)).toBe(false)
-    expect(hasDoor(plan.east)).toBe(false)
-    expect(hasDoor(plan.west)).toBe(false)
-    expect(rendersWall(plan.north)).toBe(true)
+    expect(hasDoor(edgeOf(plan, 'north'))).toBe(true)
+    expect(hasDoor(edgeOf(plan, 'south'))).toBe(false)
+    expect(hasDoor(edgeOf(plan, 'east'))).toBe(false)
+    expect(hasDoor(edgeOf(plan, 'west'))).toBe(false)
+    expect(rendersWall(edgeOf(plan, 'north')!)).toBe(true)
   })
 })
 
@@ -151,10 +181,10 @@ describe('入户门', () => {
     const bedroom = room('bedroom2', '次卧1', 3.25, 2.5, 3.5, 3)
     const plan = computeWallPlan([corridor, kitchen, bedroom])
     // 卧室南墙（朝走廊）开门
-    expect(plan.get('bedroom2')!.south.segments.some((s) => s.kind === 'door')).toBe(true)
+    expect(edgeOf(plan.get('bedroom2')!, 'south')!.segments.some((s) => s.kind === 'door')).toBe(true)
     // 卧室西墙（朝厨房）不开门（实心墙）
-    expect(plan.get('bedroom2')!.west.segments.some((s) => s.kind === 'door')).toBe(false)
-    expect(plan.get('bedroom2')!.west.segments.some((s) => s.kind === 'wall')).toBe(true)
+    expect(edgeOf(plan.get('bedroom2')!, 'west')!.segments.some((s) => s.kind === 'door')).toBe(false)
+    expect(edgeOf(plan.get('bedroom2')!, 'west')!.segments.some((s) => s.kind === 'wall')).toBe(true)
   })
 
   it('公共卫生间（归属房间不存在）与走廊开门，不与卧室开门', () => {
@@ -163,19 +193,20 @@ describe('入户门', () => {
     const pub = room('publicbath', '公共卫生间', 1, -1.0, 2, 2)
     const plan = computeWallPlan([corridor, bedroom, pub])
     // 公共卫生间北墙朝走廊：开门
-    expect(plan.get('publicbath')!.north.segments.some((s) => s.kind === 'door')).toBe(true)
+    expect(edgeOf(plan.get('publicbath')!, 'north')!.segments.some((s) => s.kind === 'door')).toBe(true)
     // 与卧室2之间：不开门（实心墙）
-    expect(plan.get('publicbath')!.east.segments.some((s) => s.kind === 'door')).toBe(false)
-    expect(plan.get('bedroom2')!.west.segments.some((s) => s.kind === 'door')).toBe(false)
+    expect(edgeOf(plan.get('publicbath')!, 'east')!.segments.some((s) => s.kind === 'door')).toBe(false)
+    expect(edgeOf(plan.get('bedroom2')!, 'west')!.segments.some((s) => s.kind === 'door')).toBe(false)
   })
 
   it('入户门开在指定房间的南外墙（居中）并标记为入户', () => {
     const living = room('living', '客厅', 0, -2, 3, 3)
     const master = room('master', '主卧', 0, 2, 3, 3)
     const plan = computeWallPlan([living, master], { entrance: 'south', entranceRoomId: 'living' })
-    expect(hasDoor(plan.get('living')!.south)).toBe(true)
-    expect(rendersWall(plan.get('living')!.south)).toBe(true)
-    expect(plan.get('living')!.south.segments.some((s) => s.entrance)).toBe(true)
+    const livingSouth = edgeOf(plan.get('living')!, 'south')!
+    expect(hasDoor(livingSouth)).toBe(true)
+    expect(rendersWall(livingSouth)).toBe(true)
+    expect(livingSouth.segments.some((s) => s.entrance)).toBe(true)
   })
 
   it('客厅比厨房大：客厅东墙未被厨房覆盖的部分仍渲染为外墙', () => {
@@ -184,7 +215,7 @@ describe('入户门', () => {
       room('kitchen', '厨房', 1.8, -1.8, 3, 3),
     ]
     const plan = computeWallPlan(rooms)
-    const east = plan.get('living_room')!.east
+    const east = edgeOf(plan.get('living_room')!, 'east')!
     // 与厨房共享段开放连通
     expect(hasOpen(east)).toBe(true)
     // 客厅独有部分（超出厨房，z 更靠南）仍为外墙
@@ -203,10 +234,11 @@ describe('入户门', () => {
       room('bedroom3', '书房', 3.75, 2.35, 3, 3),
     ]
     const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'living_room' })
-    expect(hasDoor(plan.get('living_room')!.south)).toBe(true)
-    expect(plan.get('living_room')!.south.segments.some((s) => s.entrance)).toBe(true)
+    const livingSouth = edgeOf(plan.get('living_room')!, 'south')!
+    expect(hasDoor(livingSouth)).toBe(true)
+    expect(livingSouth.segments.some((s) => s.entrance)).toBe(true)
     // 门段应为标准门宽（0.9m），确保渲染为真实门洞而非实心墙
-    const doorSeg = plan.get('living_room')!.south.segments.find((s) => s.kind === 'door')!
+    const doorSeg = livingSouth.segments.find((s) => s.kind === 'door')!
     expect(doorSeg.to - doorSeg.from).toBeCloseTo(DOOR_WIDTH)
   })
 })
@@ -216,7 +248,7 @@ describe('computeAllWallPlans / nestedWallPlan（真·内嵌嵌套房间）', ()
   // 示例：主卧 4×3 于原点，主卧卫生间 2×1.5 靠东北角 → 北/东墙线距父墙线恰 WALL_THICKNESS。
   function parentWithBath() {
     const bath = room('bath', '主卧卫生间', 0.85, 0.6, 2, 1.5)
-    const master = { ...room('master', '主卧', 0, 0, 4, 3), children: [bath] }
+    const master = { ...room('master', '主卧', 0, 0, 4, 3), nestedRooms: [bath] }
     return computeAllWallPlans([master])
   }
 
@@ -224,101 +256,143 @@ describe('computeAllWallPlans / nestedWallPlan（真·内嵌嵌套房间）', ()
     const plan = parentWithBath()
     const bath = plan.get('bath')!
     // 东北角：北/东与父墙线重合 → 全 open 且地板不外扩
-    expect(rendersWall(bath.north)).toBe(false)
-    expect(bath.north.shared).toBe(true)
-    expect(rendersWall(bath.east)).toBe(false)
-    expect(bath.east.shared).toBe(true)
+    expect(rendersWall(edgeOf(bath, 'north')!)).toBe(false)
+    expect(edgeOf(bath, 'north')!.shared).toBe(true)
+    expect(rendersWall(edgeOf(bath, 'east')!)).toBe(false)
+    expect(edgeOf(bath, 'east')!.shared).toBe(true)
     // 西/南为内部分隔墙：实心
-    expect(rendersWall(bath.west)).toBe(true)
-    expect(rendersWall(bath.south)).toBe(true)
+    expect(rendersWall(edgeOf(bath, 'west')!)).toBe(true)
+    expect(rendersWall(edgeOf(bath, 'south')!)).toBe(true)
     // 门朝父中心（西南 → west），仅此一面有门
-    expect(hasDoor(bath.west)).toBe(true)
-    expect(hasDoor(bath.south)).toBe(false)
-    expect(hasDoor(bath.north)).toBe(false)
-    expect(hasDoor(bath.east)).toBe(false)
+    expect(hasDoor(edgeOf(bath, 'west'))).toBe(true)
+    expect(hasDoor(edgeOf(bath, 'south'))).toBe(false)
+    expect(hasDoor(edgeOf(bath, 'north'))).toBe(false)
+    expect(hasDoor(edgeOf(bath, 'east'))).toBe(false)
   })
 
   it('父墙共享给邻居（父方案该处 open）时嵌套边仍 open（并集查到邻居墙）', () => {
     // 邻居 id 更小 → 邻居持有共享墙，父（master）东墙该处 open
     const bath = room('bath', '主卧卫生间', -1.15, 0.6, 2, 1.5)
-    const master = { ...room('master', '主卧', -2, 0, 4, 3), children: [bath] }
+    const master = { ...room('master', '主卧', -2, 0, 4, 3), nestedRooms: [bath] }
     const neighbor = room('a', '次卧', 2, 0, 4, 3)
     const plan = computeAllWallPlans([master, neighbor])
     // 父东墙：共享给邻居持有 → open
-    expect(hasOpen(plan.get('master')!.east)).toBe(true)
-    expect(rendersWall(plan.get('master')!.east)).toBe(false)
+    expect(hasOpen(edgeOf(plan.get('master')!, 'east'))).toBe(true)
+    expect(rendersWall(edgeOf(plan.get('master')!, 'east')!)).toBe(false)
     // 嵌套东墙（与共享墙线共线）仍被判定为已围护 → open，避免背靠背双重墙
-    expect(rendersWall(plan.get('bath')!.east)).toBe(false)
+    expect(rendersWall(edgeOf(plan.get('bath')!, 'east')!)).toBe(false)
   })
 
   it('父墙该处为开放连通（无墙）时，嵌套该边仍渲染实心墙', () => {
     // 客厅（开放）南墙与走廊开放连通（无墙）；嵌套卫生间靠南开放侧 → 该边不被覆盖
     const bath = room('bath', '卫生间', -0.35, 0.9, 2, 1.5)
-    const living = { ...room('living', '客厅', 0, 1.5, 3, 3), children: [bath] }
+    const living = { ...room('living', '客厅', 0, 1.5, 3, 3), nestedRooms: [bath] }
     const corridor = room('corridor', '走廊', 0, -0.6, 3, 1.2)
     const plan = computeAllWallPlans([living, corridor])
     // 客厅南墙（朝走廊）开放连通
-    expect(hasOpen(plan.get('living')!.south)).toBe(true)
-    expect(rendersWall(plan.get('living')!.south)).toBe(false)
+    expect(hasOpen(edgeOf(plan.get('living')!, 'south'))).toBe(true)
+    expect(rendersWall(edgeOf(plan.get('living')!, 'south')!)).toBe(false)
     // 嵌套南墙在开放连通侧：无外墙可依赖 → 渲染实心墙
-    expect(rendersWall(plan.get('bath')!.south)).toBe(true)
+    expect(rendersWall(edgeOf(plan.get('bath')!, 'south')!)).toBe(true)
     // 嵌套西墙贴客厅西外墙：被覆盖 → open
-    expect(rendersWall(plan.get('bath')!.west)).toBe(false)
+    expect(rendersWall(edgeOf(plan.get('bath')!, 'west')!)).toBe(false)
   })
 
   it('嵌套房间内移（墙线距父墙 > 墙厚）时四面实心、门朝父中心', () => {
     const bath = room('bath', '卫生间', 0.2, 0.2, 2, 1.5)
-    const master = { ...room('master', '主卧', 0, 0, 4, 3), children: [bath] }
+    const master = { ...room('master', '主卧', 0, 0, 4, 3), nestedRooms: [bath] }
     const plan = computeAllWallPlans([master])
     const b = plan.get('bath')!
-    expect(rendersWall(b.north)).toBe(true)
-    expect(rendersWall(b.south)).toBe(true)
-    expect(rendersWall(b.east)).toBe(true)
-    expect(rendersWall(b.west)).toBe(true)
+    expect(rendersWall(edgeOf(b, 'north')!)).toBe(true)
+    expect(rendersWall(edgeOf(b, 'south')!)).toBe(true)
+    expect(rendersWall(edgeOf(b, 'east')!)).toBe(true)
+    expect(rendersWall(edgeOf(b, 'west')!)).toBe(true)
     // 门朝父中心（西南 → west）
-    expect(hasDoor(b.west)).toBe(true)
-    expect(hasDoor(b.north)).toBe(false)
+    expect(hasDoor(edgeOf(b, 'west'))).toBe(true)
+    expect(hasDoor(edgeOf(b, 'north'))).toBe(false)
   })
 
   it('嵌套之嵌套：子房间查到祖辈分隔墙为 open', () => {
     // 衣帽间位于卫生间西墙内侧（西墙与卫生间西分隔墙共线，且完全落在其范围内）
     const wardrobe = room('wardrobe', '衣帽间', 0.35, 0.6, 1, 1)
-    const bath = { ...room('bath', '主卧卫生间', 0.85, 0.6, 2, 1.5), children: [wardrobe] }
-    const master = { ...room('master', '主卧', 0, 0, 4, 3), children: [bath] }
+    const bath = { ...room('bath', '主卧卫生间', 0.85, 0.6, 2, 1.5), nestedRooms: [wardrobe] }
+    const master = { ...room('master', '主卧', 0, 0, 4, 3), nestedRooms: [bath] }
     const plan = computeAllWallPlans([master])
     // 衣帽间西墙与卫生间西墙（内部分隔墙）共线 → 被围护 → open
-    expect(rendersWall(plan.get('wardrobe')!.west)).toBe(false)
+    expect(rendersWall(edgeOf(plan.get('wardrobe')!, 'west')!)).toBe(false)
     // 衣帽间朝卫生间中心（正东 → east）开门
-    expect(hasDoor(plan.get('wardrobe')!.east)).toBe(true)
+    expect(hasDoor(edgeOf(plan.get('wardrobe')!, 'east'))).toBe(true)
   })
 
   it('部分覆盖：嵌套边跨过开放走廊/外墙交界 → 混合段（部分 open 部分 wall）', () => {
     // 客厅北墙：走廊只占用东半段（开放），西半段仍是外墙
     const bath = room('bath', '卫生间', 0.85, 2.1, 2, 1.5)
-    const living = { ...room('living', '客厅', 0, 1.5, 4, 3), children: [bath] }
+    const living = { ...room('living', '客厅', 0, 1.5, 4, 3), nestedRooms: [bath] }
     const corridor = room('corridor', '走廊', 1, 3.6, 2, 1.2)
     const plan = computeAllWallPlans([living, corridor])
     // 客厅北墙有开放段（东）与外墙段（西）
-    expect(hasOpen(plan.get('living')!.north)).toBe(true)
-    expect(rendersWall(plan.get('living')!.north)).toBe(true)
+    expect(hasOpen(edgeOf(plan.get('living')!, 'north'))).toBe(true)
+    expect(rendersWall(edgeOf(plan.get('living')!, 'north')!)).toBe(true)
     // 嵌套北墙跨过开放/外墙交界 → 混合段
-    const north = plan.get('bath')!.north
+    const north = edgeOf(plan.get('bath')!, 'north')!
     expect(hasOpen(north)).toBe(true)
     expect(rendersWall(north)).toBe(true)
   })
 
   it('退化：嵌套房间≈父房间（四面全被覆盖）不 crash，全 open 且不开门', () => {
     const bath = room('bath', '卫生间', 0, 0, 3.8, 2.8)
-    const master = { ...room('master', '主卧', 0, 0, 4, 3), children: [bath] }
+    const master = { ...room('master', '主卧', 0, 0, 4, 3), nestedRooms: [bath] }
     const plan = computeAllWallPlans([master])
     const b = plan.get('bath')!
-    expect(rendersWall(b.north)).toBe(false)
-    expect(rendersWall(b.south)).toBe(false)
-    expect(rendersWall(b.east)).toBe(false)
-    expect(rendersWall(b.west)).toBe(false)
-    expect(hasDoor(b.north)).toBe(false)
-    expect(hasDoor(b.south)).toBe(false)
-    expect(hasDoor(b.east)).toBe(false)
-    expect(hasDoor(b.west)).toBe(false)
+    expect(rendersWall(edgeOf(b, 'north')!)).toBe(false)
+    expect(rendersWall(edgeOf(b, 'south')!)).toBe(false)
+    expect(rendersWall(edgeOf(b, 'east')!)).toBe(false)
+    expect(rendersWall(edgeOf(b, 'west')!)).toBe(false)
+    expect(hasDoor(edgeOf(b, 'north'))).toBe(false)
+    expect(hasDoor(edgeOf(b, 'south'))).toBe(false)
+    expect(hasDoor(edgeOf(b, 'east'))).toBe(false)
+    expect(hasDoor(edgeOf(b, 'west'))).toBe(false)
+  })
+})
+
+describe('显式开洞覆盖层（doors / windows）', () => {
+  it('window 开洞把实心墙段切成 window 段（渲染为开洞）', () => {
+    const r = {
+      ...room('a', '主卧', 0, 0, 3, 3),
+      windows: [{ edgeIndex: 0, from: 0.5, to: 1.5, width: 1 }], // 南墙（index 0）开窗
+    }
+    const plan = computeWallPlan([r])
+    const south = edgeOf(plan.get('a')!, 'south')!
+    expect(south.segments.some((s) => s.kind === 'window')).toBe(true)
+    // 未开洞部分仍是实体墙
+    expect(south.segments.some((s) => s.kind === 'wall')).toBe(true)
+    // 其余边不受影响（无窗段）
+    expect(edgeOf(plan.get('a')!, 'north')!.segments.some((s) => s.kind === 'window')).toBe(false)
+    expect(edgeOf(plan.get('a')!, 'west')!.segments.every((s) => s.kind === 'wall')).toBe(true)
+  })
+
+  it('door 开洞覆盖推导的实心墙，且兜底门判定会避开已开洞房间', () => {
+    const r = {
+      ...room('a', '主卧', 0, 0, 3, 3),
+      doors: [{ edgeIndex: 2, from: 1.05, to: 1.95, width: 0.9 }], // 北墙（index 2）开门
+    }
+    const plan = computeWallPlan([r])
+    const north = edgeOf(plan.get('a')!, 'north')!
+    expect(north.segments.some((s) => s.kind === 'door')).toBe(true)
+    // 已有门 → 不再追加兜底门（其他墙保持实体）
+    expect(edgeOf(plan.get('a')!, 'south')!.segments.every((s) => s.kind === 'wall')).toBe(true)
+  })
+
+  it('开洞区间越界/非法时静默跳过，不影响墙体', () => {
+    const r = {
+      ...room('a', '主卧', 0, 0, 3, 3),
+      windows: [
+        { edgeIndex: 9, from: 0, to: 1, width: 1 }, // 边不存在
+        { edgeIndex: 0, from: 2, to: 2, width: 0 }, // 零宽
+      ],
+    }
+    const plan = computeWallPlan([r])
+    expect(edgeOf(plan.get('a')!, 'north')!.segments.some((s) => s.kind === 'window')).toBe(false)
+    expect(edgeOf(plan.get('a')!, 'west')!.segments.every((s) => s.kind === 'wall')).toBe(true)
   })
 })

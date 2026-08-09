@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { createSampleModel } from './sampleModel'
+import { footprintCenter, rectFootprint } from './footprint'
 import {
   countNodes,
   findNodeById,
   getPathToNode,
-  isContainer,
   normalizeContainment,
   updateNodeFields,
   updateNodePosition,
 } from './modelTree'
+import type { FurnitureNode, RoomNode, SceneModel } from '../types/model'
 
 const scene = createSampleModel()
 
@@ -31,12 +32,23 @@ describe('modelTree', () => {
   it('updateNodePosition 不可变更新指定节点', () => {
     const next = updateNodePosition(scene.root, 'bed-master', { x: 9, y: 0.5, z: 9 })
     // 原树不受影响
-    expect(findNodeById(scene.root, 'bed-master')?.position.x).not.toBe(9)
+    expect((findNodeById(scene.root, 'bed-master') as FurnitureNode).position.x).not.toBe(9)
     // 新树已更新，且其他节点位置不变
-    expect(findNodeById(next, 'bed-master')?.position).toEqual({ x: 9, y: 0.5, z: 9 })
-    expect(findNodeById(next, 'sofa-living')?.position).toEqual(
-      findNodeById(scene.root, 'sofa-living')?.position,
+    expect((findNodeById(next, 'bed-master') as FurnitureNode).position).toEqual({ x: 9, y: 0.5, z: 9 })
+    expect((findNodeById(next, 'sofa-living') as FurnitureNode).position).toEqual(
+      (findNodeById(scene.root, 'sofa-living') as FurnitureNode).position,
     )
+  })
+
+  it('updateNodePosition 平移房间足迹（中心对齐新位置）', () => {
+    const master = findNodeById(scene.root, 'room-master') as RoomNode
+    const oldCenter = roomCenterOf(master)
+    const next = updateNodePosition(scene.root, 'room-master', { x: oldCenter.x + 1, y: 1.4, z: oldCenter.z })
+    const moved = findNodeById(next, 'room-master') as RoomNode
+    expect(roomCenterOf(moved).x).toBeCloseTo(oldCenter.x + 1)
+    expect(roomCenterOf(moved).z).toBeCloseTo(oldCenter.z)
+    // 足迹尺寸不变
+    expect(footprintSizeOf(moved)).toEqual(footprintSizeOf(master))
   })
 
   it('updateNodeFields 部分补丁合并更新（名称/尺寸/位置）', () => {
@@ -45,11 +57,24 @@ describe('modelTree', () => {
       dimensions: { width: 1.8 },
     })
     expect(findNodeById(scene.root, 'bed-master')?.name).toBe('双人床')
-    const bed = findNodeById(next, 'bed-master')
-    expect(bed?.name).toBe('加大双人床')
+    const bed = findNodeById(next, 'bed-master') as FurnitureNode
+    expect(bed.name).toBe('加大双人床')
     // 示例模型应用家具常理后双人床已旋转（长宽交换为 1.5×2.0），只补 width → 1.8
-    expect(bed?.dimensions).toEqual({ length: 1.5, width: 1.8, height: 0.5 })
-    expect(bed?.position).toEqual(findNodeById(scene.root, 'bed-master')?.position)
+    expect(bed.dimensions).toEqual({ length: 1.5, width: 1.8, height: 0.5 })
+    expect(bed.position).toEqual((findNodeById(scene.root, 'bed-master') as FurnitureNode).position)
+  })
+
+  it('updateNodeFields 修改房间尺寸 → 足迹缩放、层高独立更新', () => {
+    const master = findNodeById(scene.root, 'room-master') as RoomNode
+    const before = footprintSizeOf(master)
+    const next = updateNodeFields(scene.root, 'room-master', {
+      dimensions: { length: before.length + 1, height: 3 },
+    })
+    const moved = findNodeById(next, 'room-master') as RoomNode
+    const after = footprintSizeOf(moved)
+    expect(after.length).toBeCloseTo(before.length + 1)
+    expect(after.width).toBeCloseTo(before.width)
+    expect(moved.height).toBe(3)
   })
 
   it('updateNodeFields 空补丁 / 未命中节点返回原树引用', () => {
@@ -59,24 +84,27 @@ describe('modelTree', () => {
 
   it('normalizeContainment 将越墙的家具拉回房间内', () => {
     // 把主卧的双人床移到墙外（主卧 x 范围 -3.5~-0.5，内缩墙体 0.15）
-    const sceneOut = {
+    const sceneOut: SceneModel = {
       ...scene,
       root: {
         ...scene.root,
-        children: scene.root.children.map((r) =>
-          isContainer(r) && r.id === 'room-master'
-            ? {
-                ...r,
-                children: r.children.map((f) =>
-                  f.id === 'bed-master' ? { ...f, position: { ...f.position, x: -3.4 } } : f,
-                ),
-              }
-            : r,
-        ),
+        levels: scene.root.levels.map((level) => ({
+          ...level,
+          rooms: level.rooms.map((r) =>
+            r.id === 'room-master'
+              ? {
+                  ...r,
+                  furniture: r.furniture.map((f) =>
+                    f.id === 'bed-master' ? { ...f, position: { ...f.position, x: -3.4 } } : f,
+                  ),
+                }
+              : r,
+          ),
+        })),
       },
     }
     const normalized = normalizeContainment(sceneOut)
-    const bed = findNodeById(normalized.root, 'bed-master')!
+    const bed = findNodeById(normalized.root, 'bed-master') as FurnitureNode
     // 示例床已旋转为 1.5×2.0（半宽 0.75），可活动范围：x ∈ [-2.35+0.75, 1.85-0.75] = [-1.6, 1.1]
     // 床现贴北墙（z=2.0），仅 x 被拉回
     expect(bed.position.x).toBe(-1.6)
@@ -85,42 +113,46 @@ describe('modelTree', () => {
 
   it('父房间内嵌套子房间：家具被推出其占地（真·内嵌）', () => {
     // 主卧 4×3 内嵌主卧卫生间（NE 角），床头柜初始落在卫生间占地（足迹+墙厚）内
-    const nightstand = {
+    const nightstand: FurnitureNode = {
       id: 'stand',
-      type: 'furniture' as const,
+      type: 'furniture',
       name: '床头柜',
       dimensions: { length: 0.5, width: 0.5, height: 0.5 },
       position: { x: 0.5, y: 0.25, z: 0.6 },
     }
-    const bath = {
+    const bath: RoomNode = {
       id: 'bath',
-      type: 'room' as const,
+      type: 'room',
       name: '主卧卫生间',
-      dimensions: { length: 2, width: 1.5, height: 2.8 },
-      position: { x: 0.85, y: 1.4, z: 0.6 },
-      children: [],
+      footprint: rectFootprint(0.85, 0.6, 2, 1.5),
+      height: 2.8,
+      doors: [],
+      windows: [],
+      furniture: [],
+      nestedRooms: [],
     }
-    const master = {
+    const master: RoomNode = {
       id: 'master',
-      type: 'room' as const,
+      type: 'room',
       name: '主卧',
-      dimensions: { length: 4, width: 3, height: 2.8 },
-      position: { x: 0, y: 1.4, z: 0 },
-      children: [nightstand, bath],
+      footprint: rectFootprint(0, 0, 4, 3),
+      height: 2.8,
+      doors: [],
+      windows: [],
+      furniture: [nightstand],
+      nestedRooms: [bath],
     }
-    const sceneNested = {
-      version: 1 as const,
+    const sceneNested: SceneModel = {
+      version: 3,
       root: {
         id: 'house',
-        type: 'house' as const,
+        type: 'house',
         name: '屋',
-        dimensions: { length: 4, width: 3, height: 2.8 },
-        position: { x: 0, y: 0, z: 0 },
-        children: [master],
+        levels: [{ id: 'l1', height: 2.8, rooms: [master] }],
       },
     }
     const normalized = normalizeContainment(sceneNested)
-    const stand = findNodeById(normalized.root, 'stand')!
+    const stand = findNodeById(normalized.root, 'stand') as FurnitureNode
     const hx = stand.dimensions.length / 2
     const hz = stand.dimensions.width / 2
     // 卫生间占地（足迹 + 墙厚）：x∈[-0.3,2.0]，z∈[-0.3,1.5]
@@ -140,6 +172,34 @@ describe('modelTree', () => {
     expect(stand.position.x).toBeGreaterThanOrEqual(-1.85 + hx)
     expect(stand.position.x).toBeLessThanOrEqual(1.85 - hx)
     // 嵌套房间本身位置不被挪动
-    expect(findNodeById(normalized.root, 'bath')!.position).toEqual({ x: 0.85, y: 1.4, z: 0.6 })
+    const bathAfter = findNodeById(normalized.root, 'bath') as RoomNode
+    const bathCenter = footprintCenter(bathAfter.footprint)
+    expect(bathCenter.x).toBeCloseTo(0.85, 5)
+    expect(bathCenter.z).toBeCloseTo(0.6, 5)
   })
 })
+
+function roomCenterOf(r: RoomNode): { x: number; z: number } {
+  let sx = 0
+  let sz = 0
+  for (const p of r.footprint) {
+    sx += p.x
+    sz += p.z
+  }
+  const n = r.footprint.length
+  return { x: n ? sx / n : 0, z: n ? sz / n : 0 }
+}
+
+function footprintSizeOf(r: RoomNode): { length: number; width: number } {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  for (const p of r.footprint) {
+    minX = Math.min(minX, p.x)
+    maxX = Math.max(maxX, p.x)
+    minZ = Math.min(minZ, p.z)
+    maxZ = Math.max(maxZ, p.z)
+  }
+  return { length: maxX - minX, width: maxZ - minZ }
+}

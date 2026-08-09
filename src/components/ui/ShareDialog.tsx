@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { decompressObject } from '../../lib/compression'
+import { migrateModel } from '../../lib/migration'
 import { useT } from '../../i18n'
 import { useShareStore } from '../../store/useShareStore'
 import type { SceneModel } from '../../types/model'
@@ -65,10 +66,11 @@ export function ShareDialog({ open, onClose, code, screenshot, onRestore }: Shar
     }, 1500)
   }
 
-  /** 校验并还原口令：成功返回 true，失败提示错误 */
+  /** 校验并还原口令（旧 v1 口令自动迁移为 v3）：成功返回 true，失败提示错误 */
   const tryRestore = (rawCode: string): boolean => {
-    const model = decompressObject<SceneModel>(rawCode.trim())
-    if (!model || model.version !== 1 || !model.root || model.root.type !== 'house') {
+    const parsed = decompressObject<unknown>(rawCode.trim())
+    const model = migrateModel(parsed)
+    if (!model) {
       setMsg({ kind: 'err', text: t('share.invalid') })
       return false
     }

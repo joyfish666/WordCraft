@@ -1,5 +1,5 @@
+import { footprintBounds } from './footprint'
 import { furnitureKind } from './furniturePresets'
-import { isContainer } from './modelTree'
 import {
   DOOR_CLEARANCE,
   DOOR_WIDTH,
@@ -7,7 +7,7 @@ import {
   computeDoorZones,
   type DoorZoneInfo,
 } from './roomGeometry'
-import type { ContainerNode, FurnitureNode, SceneModel } from '../types/model'
+import type { FurnitureNode, RoomNode, SceneModel } from '../types/model'
 
 /**
  * 家具常理摆放：对生成模型做一次确定性兜底，让家具符合日常习惯。
@@ -38,7 +38,7 @@ export function isWallAnchored(name: string): boolean {
   return !FREE_STANDING_RE.test(name)
 }
 
-/** 房间内缩墙厚后的可活动范围 */
+/** 房间内缩墙厚后的可活动范围（足迹包围盒内缩） */
 interface InnerBounds {
   minX: number
   maxX: number
@@ -46,46 +46,46 @@ interface InnerBounds {
   maxZ: number
 }
 
-function innerBounds(room: ContainerNode): InnerBounds {
-  const { length, width } = room.dimensions
+function innerBounds(room: RoomNode): InnerBounds {
+  const b = footprintBounds(room.footprint)
   return {
-    minX: room.position.x - length / 2 + WALL_THICKNESS,
-    maxX: room.position.x + length / 2 - WALL_THICKNESS,
-    minZ: room.position.z - width / 2 + WALL_THICKNESS,
-    maxZ: room.position.z + width / 2 - WALL_THICKNESS,
+    minX: b.minX + WALL_THICKNESS,
+    maxX: b.maxX - WALL_THICKNESS,
+    minZ: b.minZ + WALL_THICKNESS,
+    maxZ: b.maxZ - WALL_THICKNESS,
   }
 }
 
-/** 嵌套子房间的禁止进入区：房间足迹 + 墙厚外扩，家具不得与之重叠 */
-function keepOutRect(room: ContainerNode): InnerBounds {
-  const { length, width } = room.dimensions
+/** 嵌套子房间的禁止进入区：房间足迹包围盒 + 墙厚外扩，家具不得与之重叠 */
+function keepOutRect(room: RoomNode): InnerBounds {
+  const b = footprintBounds(room.footprint)
   return {
-    minX: room.position.x - length / 2 - WALL_THICKNESS,
-    maxX: room.position.x + length / 2 + WALL_THICKNESS,
-    minZ: room.position.z - width / 2 - WALL_THICKNESS,
-    maxZ: room.position.z + width / 2 + WALL_THICKNESS,
+    minX: b.minX - WALL_THICKNESS,
+    maxX: b.maxX + WALL_THICKNESS,
+    minZ: b.minZ - WALL_THICKNESS,
+    maxZ: b.maxZ + WALL_THICKNESS,
   }
 }
 
 /** 房间门口的禁入区：从门所在墙内壁向室内 DOOR_CLEARANCE 深、门宽（含少量余量）宽 */
-function doorZoneRect(room: ContainerNode, zone: DoorZoneInfo): InnerBounds {
-  const { length, width } = room.dimensions
+function doorZoneRect(room: RoomNode, zone: DoorZoneInfo): InnerBounds {
+  const b = footprintBounds(room.footprint)
   const halfW = DOOR_WIDTH / 2
   switch (zone.dir) {
     case 'north': {
-      const line = room.position.z + width / 2 - WALL_THICKNESS
+      const line = b.maxZ - WALL_THICKNESS
       return { minX: zone.along - halfW, maxX: zone.along + halfW, minZ: line - DOOR_CLEARANCE, maxZ: line }
     }
     case 'south': {
-      const line = room.position.z - width / 2 + WALL_THICKNESS
+      const line = b.minZ + WALL_THICKNESS
       return { minX: zone.along - halfW, maxX: zone.along + halfW, minZ: line, maxZ: line + DOOR_CLEARANCE }
     }
     case 'east': {
-      const line = room.position.x + length / 2 - WALL_THICKNESS
+      const line = b.maxX - WALL_THICKNESS
       return { minX: line - DOOR_CLEARANCE, maxX: line, minZ: zone.along - halfW, maxZ: zone.along + halfW }
     }
     case 'west': {
-      const line = room.position.x - length / 2 + WALL_THICKNESS
+      const line = b.minX + WALL_THICKNESS
       return { minX: line, maxX: line + DOOR_CLEARANCE, minZ: zone.along - halfW, maxZ: zone.along + halfW }
     }
   }
@@ -235,26 +235,21 @@ function placeWallAnchored(
   return { pos, swapDims: false }
 }
 
-/** 递归处理一个容器：先处理嵌套房间，再约束本房间内的家具（按 children 顺序逐个放置并互相避让） */
-function visitContainer(
-  node: ContainerNode,
+/** 递归处理一个房间：先处理嵌套房间，再约束本房间内的家具（按顺序逐个放置并互相避让） */
+function visitRoom(
+  node: RoomNode,
   doorZones: Map<string, DoorZoneInfo[]>,
-): ContainerNode {
+): RoomNode {
   const keepOuts: InnerBounds[] = []
-  const children = node.children.map((child) => {
-    if (isContainer(child)) {
-      keepOuts.push(keepOutRect(child))
-      return visitContainer(child, doorZones)
-    }
-    return child
+  const nestedRooms = node.nestedRooms.map((child) => {
+    keepOuts.push(keepOutRect(child))
+    return visitRoom(child, doorZones)
   })
-  if (node.type !== 'room') return { ...node, children }
 
   const bounds = innerBounds(node)
   const roomDoors = (doorZones.get(node.id) ?? []).map((z) => doorZoneRect(node, z))
   const placedBoxes: InnerBounds[] = []
-  const placed = children.map((child) => {
-    if (child.type !== 'furniture') return child
+  const furniture = node.furniture.map((child) => {
     const f = child
     const keep = [...placedBoxes, ...keepOuts, ...roomDoors]
     const { pos, swapDims } = isWallAnchored(f.name)
@@ -285,13 +280,24 @@ function visitContainer(
     if (pos.x === f.position.x && pos.z === f.position.z) return f
     return { ...f, position: { ...f.position, x: pos.x, z: pos.z } }
   })
-  return { ...node, children: placed }
+  return { ...node, furniture, nestedRooms }
 }
 
 /** 对整个场景应用家具常理摆放（不可变，仅调整家具位置/朝向） */
 export function applyFurnitureConventions(scene: SceneModel): SceneModel {
-  const rooms = scene.root.children.filter((c): c is ContainerNode => c.type === 'room')
+  const level = scene.root.levels[0]
+  if (!level) return scene
+  const rooms = level.rooms
   // 与渲染同源的门口位置：避免家具堵住房间门（含入户门）
-  const doorZones = computeDoorZones(rooms, { entrance: 'south', entranceRoomId: scene.root.entranceRoomId })
-  return { ...scene, root: visitContainer(scene.root, doorZones) }
+  const doorZones = computeDoorZones(rooms, {
+    entrance: 'south',
+    entranceRoomId: scene.root.entranceRoomId,
+  })
+  return {
+    ...scene,
+    root: {
+      ...scene.root,
+      levels: [{ ...level, rooms: rooms.map((r) => visitRoom(r, doorZones)) }],
+    },
+  }
 }

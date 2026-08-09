@@ -12,6 +12,8 @@ import { useT } from '../i18n'
 import { ChatGenerationError, generateModelFromChat } from '../lib/chat'
 import { encodeShareCode } from '../lib/compression'
 import { clearDebug, useDebugEntries, type DebugEntry } from '../lib/debugLog'
+import { nodeDims, nodePosition } from '../lib/footprint'
+import { migrateModel } from '../lib/migration'
 import { countNodes, getPathToNode, isContainer } from '../lib/modelTree'
 import { createSampleModel } from '../lib/sampleModel'
 import { withWatermark } from '../lib/watermark'
@@ -20,10 +22,16 @@ import { useModelStore } from '../store/useModelStore'
 import { useProjectStore } from '../store/useProjectStore'
 import { useShareStore } from '../store/useShareStore'
 import { getActiveApiConfig, useSettingsStore } from '../store/useSettingsStore'
-import type { ModelNode, SceneModel } from '../types/model'
+import type { HouseNode, ModelNode, RoomNode, SceneModel } from '../types/model'
 
 /** 方向键平移视角的位移量（屏幕像素等效） */
 const PAN_STEP = 15
+
+/** 容器子节点数（房间 = 家具 + 嵌套房间；整屋 = 顶层房间数） */
+function childCount(node: HouseNode | RoomNode): number {
+  if (node.type === 'house') return node.levels[0]?.rooms.length ?? 0
+  return node.furniture.length + node.nestedRooms.length
+}
 
 /** 将调试日志导出为可复制的纯文本 */
 function copyDebug(entries: DebugEntry[]): void {
@@ -285,18 +293,20 @@ export function HomePage() {
     if (!confirmDiscardUnsaved(true)) return
     const rec = await getProject(id)
     if (!rec) return
-    let parsed: SceneModel
+    let parsed: unknown
     try {
-      parsed = JSON.parse(rec.data) as SceneModel
+      parsed = JSON.parse(rec.data)
     } catch {
       window.alert(t('home.alertCorrupt'))
       return
     }
-    if (!parsed || parsed.version !== 1 || !parsed.root || parsed.root.type !== 'house') {
+    // 读取时迁移：旧项目（v1 盒子模型）自动升为 v3 足迹模型（design.md §3.4）
+    const model = migrateModel(parsed)
+    if (!model) {
       window.alert(t('home.alertInvalid'))
       return
     }
-    setScene(parsed)
+    setScene(model)
     lastSavedJsonRef.current = JSON.stringify(useModelStore.getState().scene)
     useProjectStore.getState().setProject(id, name)
     useChatStore.getState().clearGenerationHistory()
@@ -610,17 +620,23 @@ export function HomePage() {
 
         <span className="dim-info">
           {selected ? (
-            <>
-              {t('home.selectedInfo', {
-                name: selected.name,
-                l: selected.dimensions.length,
-                w: selected.dimensions.width,
-                h: selected.dimensions.height,
-                x: selected.position.x.toFixed(2),
-                z: selected.position.z.toFixed(2),
-              })}
-              {isContainer(selected) ? t('home.selectedChildren', { count: selected.children.length }) : ''}
-            </>
+            (() => {
+              const dims = nodeDims(selected)
+              const pos = nodePosition(selected)
+              return (
+                <>
+                  {t('home.selectedInfo', {
+                    name: selected.name,
+                    l: dims.length,
+                    w: dims.width,
+                    h: dims.height,
+                    x: pos.x.toFixed(2),
+                    z: pos.z.toFixed(2),
+                  })}
+                  {isContainer(selected) ? t('home.selectedChildren', { count: childCount(selected) }) : ''}
+                </>
+              )
+            })()
           ) : focusId ? (
             t('home.focusedHint')
           ) : (

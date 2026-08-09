@@ -39,14 +39,14 @@
 | Code compression | **lz-string** | Efficient JSON compression |
 | HTTP | **Axios** | API requests with interceptors and error handling |
 | Build | **Vite** | Fast dev/build tooling |
-| Testing | **Vitest + Testing Library** | Unit and component tests (190 cases) |
+| Testing | **Vitest + Testing Library** | Unit and component tests (214 cases) |
 
 ## Project Docs
 
 | Doc | Content |
 |-----|---------|
-| [docs/design.md](docs/design.md) | Current design plan: v3 architecture (operation contract + footprint geometry + bidirectional sync + free editing) |
-| [docs/architecture.md](docs/architecture.md) | Technical architecture of the current implementation (v2 semantic contract) |
+| [docs/design.md](docs/design.md) | Current design plan: v3 architecture (operation contract + footprint geometry + bidirectional sync + free editing, P1 implemented) |
+| [docs/architecture.md](docs/architecture.md) | Technical architecture of the current implementation (v3 footprint model + v2 semantic contract) |
 | [docs/history.md](docs/history.md) | Key decisions across three generations of the architecture |
 | [docs/notes.md](docs/notes.md) | Dev notes and pitfalls — read before touching the code |
 
@@ -62,7 +62,7 @@ npm run build    # type check + build
 
 ## Roadmap
 
-- [ ] **v3 free design**: room footprints (L/U shapes), operation-contract generation (local edits + bidirectional sync), plan-view editing (draw walls / drag vertices / place doors & windows)
+- [ ] **v3 free design**: ~~P1 data model v3~~ (footprints + migration + window segments, ✅ done) → operation-contract generation (local edits + bidirectional sync) → plan-view editing (draw walls / drag vertices / place doors & windows)
 - [ ] Mobile adaptation
 - [ ] 2D plan enhancements (furniture footprints / door symbols / dimension labels)
 - [ ] More furniture kinds, performance tuning

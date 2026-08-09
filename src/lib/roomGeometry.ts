@@ -1,4 +1,5 @@
-import type { ContainerNode, Position } from '../types/model'
+import type { RoomNode } from '../types/model'
+import { footprintCenter } from './footprint'
 
 export type DoorDirection = 'north' | 'south' | 'east' | 'west'
 
@@ -47,9 +48,10 @@ export function bathroomOwner(name: string): string | null {
  * 兜底计算房间门的朝向：指向整屋中心（整屋中心约定为原点）。
  * 仅用于没有任何相邻房间的房间。
  */
-export function doorDirection(room: { position: Position }): DoorDirection {
-  const vx = -room.position.x
-  const vz = -room.position.z
+export function doorDirection(room: RoomNode): DoorDirection {
+  const c = footprintCenter(room.footprint)
+  const vx = -c.x
+  const vz = -c.z
   const absX = Math.abs(vx)
   const absZ = Math.abs(vz)
   if (absX < 0.5 && absZ < 0.5) return 'north'
@@ -58,13 +60,13 @@ export function doorDirection(room: { position: Position }): DoorDirection {
 }
 
 // ---------------------------------------------------------------------------
-// 墙段模型：每面墙按相邻关系切成若干段，段类型决定渲染方式
+// 墙段模型：沿足迹边切分墙段，段类型决定渲染方式
 // ---------------------------------------------------------------------------
 
-export type WallSegmentKind = 'wall' | 'door' | 'open'
+export type WallSegmentKind = 'wall' | 'door' | 'open' | 'window'
 
 export interface WallSegment {
-  /** 沿墙方向的区间（局部坐标，墙中心为 0，单位米） */
+  /** 沿边方向的区间（局部坐标，边起点为 0，单位米） */
   from: number
   to: number
   kind: WallSegmentKind
@@ -72,60 +74,111 @@ export interface WallSegment {
   entrance?: boolean
 }
 
-export interface WallFace {
-  /** 该墙是否与相邻房间共用（影响地板外扩） */
+/**
+ * 一条足迹边的墙体信息：沿边方向（局部 +轴）展开的墙段列表。
+ * - 轴对齐正交边：axis 'x' 水平（局部方向 +x）、'z' 垂直（局部方向 +z）；
+ * - line 为垂直方向的固定世界坐标，start 为沿边方向起点的世界坐标；
+ * - 渲染局部方向与边方向统一（axis 'x' 旋转 0、'z' 旋转 -90°），避免镜像错位（坑 1）。
+ */
+export interface WallEdge {
+  axis: 'x' | 'z'
+  line: number
+  start: number
+  length: number
+  /** 外向法线方向 */
+  dir: DoorDirection
+  /** 该边是否与相邻房间共用（影响地板外扩） */
   shared: boolean
-  /** 本房间在该墙上渲染的墙段（'open' 表示留空） */
   segments: WallSegment[]
+  /** 所属房间 id（computeWallPlan 构造时写入，供邻居查询） */
+  roomId?: string
 }
 
 export interface WallPlan {
-  north: WallFace
-  south: WallFace
-  east: WallFace
-  west: WallFace
+  /** 与 RoomNode.footprint 顶点环一一对应（含退化边过滤）的边 */
+  edges: WallEdge[]
 }
 
-interface WallInfo {
-  axis: 'x' | 'z'
-  length: number
-  /** 墙所在的固定坐标（垂直方向） */
-  line: number
-  /** 沿墙方向的起始坐标 */
-  start: number
+/** 取指定方向（外向法线）的边；矩形房间每方向恰一条 */
+export function edgeOf(plan: WallPlan, dir: DoorDirection): WallEdge | undefined {
+  return plan.edges.find((e) => e.dir === dir)
 }
 
-function wallInfo(R: ContainerNode, dir: DoorDirection): WallInfo {
-  const L = R.dimensions.length
-  const W = R.dimensions.width
-  if (dir === 'north') return { axis: 'x', length: L, line: R.position.z + W / 2, start: R.position.x - L / 2 }
-  if (dir === 'south') return { axis: 'x', length: L, line: R.position.z - W / 2, start: R.position.x - L / 2 }
-  if (dir === 'east') return { axis: 'z', length: W, line: R.position.x + L / 2, start: R.position.z - W / 2 }
-  return { axis: 'z', length: W, line: R.position.x - L / 2, start: R.position.z - W / 2 }
-}
-
-interface NeighborAlongWall {
-  room: ContainerNode
-  /** 墙局部坐标（中心为 0） */
-  from: number
-  to: number
-}
-
-/** 找出沿某面墙相邻（对侧墙同线且有重叠）的所有房间及其重叠区间 */
-function neighborsAlongWall(R: ContainerNode, dir: DoorDirection, rooms: ContainerNode[]): NeighborAlongWall[] {
-  const info = wallInfo(R, dir)
-  const result: NeighborAlongWall[] = []
-  for (const N of rooms) {
-    if (N.id === R.id) continue
-    const nInfo = wallInfo(N, OPPOSITE[dir])
-    if (Math.abs(info.line - nInfo.line) > ADJACENCY_GAP) continue
-    const worldFrom = Math.max(info.start, nInfo.start)
-    const worldTo = Math.min(info.start + info.length, nInfo.start + nInfo.length)
-    if (worldTo - worldFrom < 1e-6) continue
-    const half = info.length / 2
-    result.push({ room: N, from: worldFrom - info.start - half, to: worldTo - info.start - half })
+/** 由房间足迹构造各边墙段（基座：整段实心墙，暂不开洞；段局部坐标以边起点为 0） */
+export function footprintEdges(room: RoomNode): WallEdge[] {
+  const fp = room.footprint
+  const center = footprintCenter(fp)
+  const edges: WallEdge[] = []
+  const n = fp.length
+  for (let i = 0; i < n; i++) {
+    const a = fp[i]
+    const b = fp[(i + 1) % n]
+    const EPS = 1e-6
+    let axis: 'x' | 'z'
+    let line: number
+    let start: number
+    let length: number
+    let dir: DoorDirection
+    if (Math.abs(a.z - b.z) < EPS) {
+      // 水平边（沿 x）
+      axis = 'x'
+      line = a.z
+      start = Math.min(a.x, b.x)
+      length = Math.abs(b.x - a.x)
+      dir = line > center.z + EPS ? 'north' : 'south'
+    } else {
+      // 垂直边（沿 z）
+      axis = 'z'
+      line = a.x
+      start = Math.min(a.z, b.z)
+      length = Math.abs(b.z - a.z)
+      dir = line > center.x + EPS ? 'east' : 'west'
+    }
+    if (length < EPS) continue
+    edges.push({
+      axis,
+      line,
+      start,
+      length,
+      dir,
+      shared: false,
+      segments: [{ from: 0, to: length, kind: 'wall' }],
+    })
   }
-  return result
+  return edges
+}
+
+/** 在墙段 [from,to] 范围内靠近中心的位置开一扇门（选择最近的实体墙段） */
+function addDoorOnFace(edge: WallEdge, from: number, to: number, markEntrance = false): void {
+  const center = (from + to) / 2
+  let best: { s: WallSegment; a: number; b: number } | null = null
+  let bestDist = Infinity
+  for (const s of edge.segments) {
+    if (s.kind !== 'wall') continue
+    const a = Math.max(s.from, from)
+    const b = Math.min(s.to, to)
+    if (b - a < 1e-6) continue
+    const d = Math.abs((a + b) / 2 - center)
+    if (d < bestDist) {
+      bestDist = d
+      best = { s, a, b }
+    }
+  }
+  if (!best) return
+  const segLen = best.b - best.a
+  const doorW = Math.min(DOOR_WIDTH, segLen)
+  const mid = (best.a + best.b) / 2
+  const d0 = mid - doorW / 2
+  const d1 = mid + doorW / 2
+  edge.segments = splitSegments(edge.segments, d0, d1, 'door')
+  if (markEntrance) {
+    // 标记刚创建的入户门段
+    edge.segments = edge.segments.map((s) =>
+      s.kind === 'door' && Math.abs(s.from - d0) < 1e-6 && Math.abs(s.to - d1) < 1e-6
+        ? { ...s, entrance: true }
+        : s,
+    )
+  }
 }
 
 /** 在 [from,to] 区间上应用指定类型，切分并覆盖既有墙段 */
@@ -143,76 +196,35 @@ function splitSegments(segs: WallSegment[], from: number, to: number, kind: Wall
   return out
 }
 
-/** 在墙段 [from,to] 范围内靠近中心的位置开一扇门（选择最近的实体墙段） */
-function addDoorOnFace(face: WallFace, from: number, to: number, markEntrance = false): void {
-  const center = (from + to) / 2
-  let best: { s: WallSegment; a: number; b: number } | null = null
-  let bestDist = Infinity
-  for (const s of face.segments) {
-    if (s.kind !== 'wall') continue
-    const a = Math.max(s.from, from)
-    const b = Math.min(s.to, to)
-    if (b - a < 1e-6) continue
-    const d = Math.abs((a + b) / 2 - center)
-    if (d < bestDist) {
-      bestDist = d
-      best = { s, a, b }
-    }
-  }
-  if (!best) return
-  const segLen = best.b - best.a
-  const doorW = Math.min(DOOR_WIDTH, segLen)
-  const mid = (best.a + best.b) / 2
-  const d0 = mid - doorW / 2
-  const d1 = mid + doorW / 2
-  face.segments = splitSegments(face.segments, d0, d1, 'door')
-  if (markEntrance) {
-    // 标记刚创建的入户门段
-    face.segments = face.segments.map((s) =>
-      s.kind === 'door' && Math.abs(s.from - d0) < 1e-6 && Math.abs(s.to - d1) < 1e-6
-        ? { ...s, entrance: true }
-        : s,
-    )
-  }
-}
-
 function hasAnyDoor(p: WallPlan): boolean {
-  return WALL_DIRECTIONS.some((d) => p[d].segments.some((s) => s.kind === 'door'))
+  return p.edges.some((e) => e.segments.some((s) => s.kind === 'door'))
 }
 
 /** 共享墙持有方：非走廊优先；同为走廊/房间时取 id 较小者（确定性） */
-function ownerIsA(a: ContainerNode, b: ContainerNode): boolean {
+function ownerIsA(a: RoomNode, b: RoomNode): boolean {
   const aC = isCorridorName(a.name)
   const bC = isCorridorName(b.name)
   return aC !== bC ? !aC : a.id < b.id
 }
 
-/** 四面实体墙 + 指定方向开一扇门 */
-export function wallPlanWithDoor(room: ContainerNode, dir: DoorDirection): WallPlan {
-  const makeFace = (d: DoorDirection): WallFace => {
-    const half = wallInfo(room, d).length / 2
-    return { shared: false, segments: [{ from: -half, to: half, kind: 'wall' }] }
-  }
-  const plan: WallPlan = {
-    north: makeFace('north'),
-    south: makeFace('south'),
-    east: makeFace('east'),
-    west: makeFace('west'),
-  }
-  const info = wallInfo(room, dir)
-  addDoorOnFace(plan[dir], -info.length / 2, info.length / 2)
+/** 四面实体墙 + 指定方向开一扇门（嵌套房间 / 无相邻信息兜底用） */
+export function wallPlanWithDoor(room: RoomNode, dir: DoorDirection): WallPlan {
+  const plan: WallPlan = { edges: footprintEdges(room) }
+  const target = plan.edges.find((e) => e.dir === dir)
+  if (target) addDoorOnFace(target, 0, target.length)
   return plan
 }
 
 /** 无相邻信息时的兜底方案：四面墙实体，朝整屋中心的墙开门 */
-export function defaultWallPlan(room: ContainerNode): WallPlan {
+export function defaultWallPlan(room: RoomNode): WallPlan {
   return wallPlanWithDoor(room, doorDirection(room))
 }
 
 /** 嵌套房间的门朝向：指向父房间中心（从父房间进嵌套房间） */
-export function nestedDoorDirection(node: ContainerNode, parentCenter: Position): DoorDirection {
-  const dx = parentCenter.x - node.position.x
-  const dz = parentCenter.z - node.position.z
+export function nestedDoorDirection(node: RoomNode, parentCenter: { x: number; z: number }): DoorDirection {
+  const c = footprintCenter(node.footprint)
+  const dx = parentCenter.x - c.x
+  const dz = parentCenter.z - c.z
   return Math.abs(dx) >= Math.abs(dz) ? (dx > 0 ? 'east' : 'west') : (dz > 0 ? 'north' : 'south')
 }
 
@@ -223,69 +235,79 @@ export interface WallPlanOptions {
   entranceRoomId?: string
 }
 
-/** 在入口房间（或入口侧边界房间）的外墙居中开入户门 */
-function addEntranceDoor(
-  plan: Map<string, WallPlan>,
-  rooms: ContainerNode[],
-  options: WallPlanOptions,
-): void {
-  const { entrance, entranceRoomId } = options
-  if (!entrance || rooms.length === 0) return
+interface NeighborAlongEdge {
+  room: RoomNode
+  /** 墙局部坐标（边起点为 0） */
+  from: number
+  to: number
+}
 
-  let target: ContainerNode | undefined
-  if (entranceRoomId) {
-    target = rooms.find((r) => r.id === entranceRoomId)
+// ---------------------------------------------------------------------------
+// 显式开洞覆盖层：RoomNode.doors / windows 覆盖推导结果（设计 §3.2）
+// ---------------------------------------------------------------------------
+
+/**
+ * 应用显式开洞：只覆盖实心墙段（open 开放连通处不重复开洞）。
+ * from/to 为开洞在边上的局部区间，超出边范围自动截断；无效开洞静默跳过。
+ */
+export function applyOpenings(plan: Map<string, WallPlan>, rooms: RoomNode[]): void {
+  for (const room of rooms) {
+    const p = plan.get(room.id)
+    if (!p) continue
+    for (const kind of ['doors', 'windows'] as const) {
+      for (const op of room[kind]) {
+        const edge = p.edges[op.edgeIndex]
+        if (!edge) continue
+        const from = Math.min(Math.max(op.from, 0), edge.length)
+        const to = Math.min(Math.max(op.to, from), edge.length)
+        if (to - from < 1e-6) continue
+        const out: WallSegment[] = []
+        for (const s of edge.segments) {
+          if (s.kind !== 'wall' || to <= s.from || from >= s.to) {
+            out.push(s)
+            continue
+          }
+          if (s.from < from) out.push({ ...s, to: from })
+          out.push({ from: Math.max(s.from, from), to: Math.min(s.to, to), kind: kind === 'doors' ? 'door' : 'window' })
+          if (s.to > to) out.push({ ...s, from: to })
+        }
+        edge.segments = out
+      }
+    }
   }
-  if (!target) {
-    const coord = (r: ContainerNode) => wallInfo(r, entrance).line
-    const boundary =
-      entrance === 'south' || entrance === 'west'
-        ? Math.min(...rooms.map(coord))
-        : Math.max(...rooms.map(coord))
-    const candidates = rooms.filter((r) => Math.abs(coord(r) - boundary) < 1e-6)
-    target =
-      candidates.find((r) => isCorridorName(r.name)) ??
-      candidates.find((r) => isOpenRoom(r.name)) ??
-      candidates[0]
-  }
-  if (!target) return
-  const info = wallInfo(target, entrance)
-  addDoorOnFace(plan.get(target.id)![entrance], -info.length / 2, info.length / 2, true)
 }
 
 /**
  * 计算所有房间的分段墙体方案：
- * - 每面墙按相邻房间切分成段：实体 / 门 / 留空（开放）。
+ * - 每面墙（足迹边）按相邻房间切分成段：实体 / 门 / 留空（开放）/ 窗（显式开洞）。
  * - 相邻共用墙只由一方渲染（非走廊优先）；两侧都是开放空间则不设墙。
  * - 部分被相邻房间占用的墙，其余部分按外墙渲染（保证不向外部开口）。
  * - 私密房间（卧室/书房）之间不直接开门，经走廊/卫生间连通。
  * - 外墙始终保留；入口侧外墙居中开入户门。
+ * - 显式开洞（RoomNode.doors / windows）覆盖推导结果。
  */
 export function computeWallPlan(
-  rooms: ContainerNode[],
+  rooms: RoomNode[],
   options: WallPlanOptions = {},
 ): Map<string, WallPlan> {
   const plan = new Map<string, WallPlan>()
+  const edgesByRoom = new Map<string, WallEdge[]>()
   for (const R of rooms) {
-    const makeFace = (dir: DoorDirection): WallFace => {
-      const half = wallInfo(R, dir).length / 2
-      return { shared: false, segments: [{ from: -half, to: half, kind: 'wall' }] }
-    }
+    const edges = footprintEdges(R)
+    edgesByRoom.set(R.id, edges)
     plan.set(R.id, {
-      north: makeFace('north'),
-      south: makeFace('south'),
-      east: makeFace('east'),
-      west: makeFace('west'),
+      edges: edges.map((e) => ({ ...e, roomId: R.id })),
     })
   }
 
   for (const R of rooms) {
-    for (const dir of WALL_DIRECTIONS) {
-      const face = plan.get(R.id)![dir]
-      const neighbors = neighborsAlongWall(R, dir, rooms)
+    const p = plan.get(R.id)!
+    for (let i = 0; i < p.edges.length; i++) {
+      const edge = p.edges[i]
+      const neighbors = neighborsAlongEdge(edge, rooms, edgesByRoom)
       if (neighbors.length === 0) continue
-      face.shared = true
-      let segs = face.segments
+      edge.shared = true
+      let segs = edge.segments
       for (const nb of neighbors) {
         const N = nb.room
         if (isOpenRoom(R.name) && isOpenRoom(N.name)) {
@@ -327,23 +349,65 @@ export function computeWallPlan(
           segs = splitSegments(segs, nb.from, nb.to, 'open')
         }
       }
-      face.segments = segs
+      edge.segments = segs
     }
   }
+
+  // 显式开洞覆盖层（含窗段；门段同样影响兜底判定）
+  applyOpenings(plan, rooms)
 
   // 完全没有相邻房间的房间：朝整屋中心的墙兜底开门
   // （避免在私密房间相邻且不开门时，又被兜底强制开一扇门）
   for (const R of rooms) {
     const p = plan.get(R.id)!
-    const hasShared = WALL_DIRECTIONS.some((d) => p[d].shared)
+    const hasShared = p.edges.some((e) => e.shared)
     if (!hasShared && !hasAnyDoor(p)) {
-      const info = wallInfo(R, doorDirection(R))
-      addDoorOnFace(p[doorDirection(R)], -info.length / 2, info.length / 2)
+      const dir = doorDirection(R)
+      const edge = p.edges.find((e) => e.dir === dir)
+      if (edge) addDoorOnFace(edge, 0, edge.length)
     }
   }
 
   addEntranceDoor(plan, rooms, options)
   return plan
+}
+
+/** 在入口房间（或入口侧边界房间）的外墙居中开入户门 */
+function addEntranceDoor(
+  plan: Map<string, WallPlan>,
+  rooms: RoomNode[],
+  options: WallPlanOptions,
+): void {
+  const { entrance, entranceRoomId } = options
+  if (!entrance || rooms.length === 0) return
+
+  const lineOf = (r: RoomNode): number | null => {
+    const e = edgeOf(plan.get(r.id)!, entrance)
+    return e ? e.line : null
+  }
+
+  let target: RoomNode | undefined
+  if (entranceRoomId) {
+    target = rooms.find((r) => r.id === entranceRoomId)
+  }
+  if (!target) {
+    const lines = rooms.map(lineOf).filter((l): l is number => l !== null)
+    if (lines.length === 0) return
+    const boundary =
+      entrance === 'south' || entrance === 'west' ? Math.min(...lines) : Math.max(...lines)
+    const candidates = rooms.filter((r) => {
+      const l = lineOf(r)
+      return l !== null && Math.abs(l - boundary) < 1e-6
+    })
+    target =
+      candidates.find((r) => isCorridorName(r.name)) ??
+      candidates.find((r) => isOpenRoom(r.name)) ??
+      candidates[0]
+  }
+  if (!target) return
+  const edge = edgeOf(plan.get(target.id)!, entrance)
+  if (!edge) return
+  addDoorOnFace(edge, 0, edge.length, true)
 }
 
 /**
@@ -374,40 +438,30 @@ function cleanSegments(segs: WallSegment[]): WallSegment[] {
 }
 
 export function nestedWallPlan(
-  node: ContainerNode,
-  parent: ContainerNode,
+  node: RoomNode,
+  parent: RoomNode,
   plan: Map<string, WallPlan>,
-  roomById: Map<string, ContainerNode>,
+  roomById: Map<string, RoomNode>,
 ): WallPlan {
   // 基座：四面整段实心墙（暂不开门）
-  const makeFace = (dir: DoorDirection): WallFace => {
-    const half = wallInfo(node, dir).length / 2
-    return { shared: false, segments: [{ from: -half, to: half, kind: 'wall' }] }
-  }
   const result: WallPlan = {
-    north: makeFace('north'),
-    south: makeFace('south'),
-    east: makeFace('east'),
-    west: makeFace('west'),
+    edges: footprintEdges(node),
   }
 
   // 每面：把被同线墙覆盖的世界区间切为 'open'（跳过渲染，由外层墙围护）
-  for (const dir of WALL_DIRECTIONS) {
-    const info = wallInfo(node, dir)
+  for (const edge of result.edges) {
     const covered: { from: number; to: number }[] = []
     for (const [, r] of roomById) {
       const rPlan = plan.get(r.id)
       if (!rPlan) continue
-      for (const dd of WALL_DIRECTIONS) {
-        const rInfo = wallInfo(r, dd)
-        if (rInfo.axis !== info.axis) continue
+      for (const rEdge of rPlan.edges) {
+        if (rEdge.axis !== edge.axis) continue
         // 用 WALL_THICKNESS + ε 容忍浮点贴边（平铺/平移会引入 ~1e-13 噪声）
-        if (Math.abs(rInfo.line - info.line) > WALL_THICKNESS + 1e-6) continue
-        const rHalf = rInfo.length / 2
-        for (const seg of rPlan[dd].segments) {
+        if (Math.abs(rEdge.line - edge.line) > WALL_THICKNESS + 1e-6) continue
+        for (const seg of rEdge.segments) {
           if (seg.kind === 'open') continue
-          const overFrom = Math.max(rInfo.start + rHalf + seg.from, info.start)
-          const overTo = Math.min(rInfo.start + rHalf + seg.to, info.start + info.length)
+          const overFrom = Math.max(rEdge.start + seg.from, edge.start)
+          const overTo = Math.min(rEdge.start + seg.to, edge.start + edge.length)
           if (overTo - overFrom >= 1e-6) covered.push({ from: overFrom, to: overTo })
         }
       }
@@ -420,36 +474,33 @@ export function nestedWallPlan(
       if (last && c.from <= last.to) last.to = Math.max(last.to, c.to)
       else merged.push({ ...c })
     }
-    let segs = result[dir].segments
-    const half = info.length / 2
+    let segs = edge.segments
     for (const c of merged) {
-      segs = splitSegments(segs, c.from - info.start - half, c.to - info.start - half, 'open')
+      segs = splitSegments(segs, c.from - edge.start, c.to - edge.start, 'open')
     }
     segs = cleanSegments(segs)
     // 整面被覆盖 → 单段 open 且 shared:true（地板不再外扩，贴外墙内侧）
     const fullyOpen = segs.length === 1 && segs[0].kind === 'open'
-    result[dir] = { shared: fullyOpen, segments: segs }
+    edge.shared = fullyOpen
+    edge.segments = segs
   }
 
   // 开门：优先朝父中心的面；该面无实体墙（被全覆盖）时改到最近含 wall 的面；
   // 四面都无 wall（嵌套房间≈父房间的退化情形）则不开门，不 crash。
-  const preferred = nestedDoorDirection(node, parent.position)
-  const hasWall = (f: WallFace) => f.segments.some((s) => s.kind === 'wall')
+  const preferred = nestedDoorDirection(node, footprintCenter(parent.footprint))
+  const hasWall = (e: WallEdge) => e.segments.some((s) => s.kind === 'wall')
   const order: DoorDirection[] = ['north', 'east', 'south', 'west']
   const pIdx = order.indexOf(preferred)
   const dist = (d: DoorDirection) => {
     const diff = Math.abs(order.indexOf(d) - pIdx)
     return Math.min(diff, 4 - diff)
   }
-  let doorDir: DoorDirection | null = hasWall(result[preferred]) ? preferred : null
-  if (!doorDir) {
-    const candidates = WALL_DIRECTIONS.filter((d) => hasWall(result[d])).sort((a, b) => dist(a) - dist(b))
-    doorDir = candidates[0] ?? null
+  let doorEdge: WallEdge | null = result.edges.find((e) => e.dir === preferred && hasWall(e)) ?? null
+  if (!doorEdge) {
+    const candidates = result.edges.filter(hasWall).sort((a, b) => dist(a.dir) - dist(b.dir))
+    doorEdge = candidates[0] ?? null
   }
-  if (doorDir) {
-    const info = wallInfo(node, doorDir)
-    addDoorOnFace(result[doorDir], -info.length / 2, info.length / 2)
-  }
+  if (doorEdge) addDoorOnFace(doorEdge, 0, doorEdge.length)
 
   return result
 }
@@ -460,22 +511,18 @@ export function nestedWallPlan(
  * 渲染层现有 wallPlan.get(id) 主路径即可命中嵌套房间。
  */
 export function computeAllWallPlans(
-  rooms: ContainerNode[],
+  rooms: RoomNode[],
   options: WallPlanOptions = {},
 ): Map<string, WallPlan> {
   const plan = computeWallPlan(rooms, options)
-  const roomById = new Map<string, ContainerNode>()
-  const collect = (r: ContainerNode): void => {
+  const roomById = new Map<string, RoomNode>()
+  const collect = (r: RoomNode): void => {
     roomById.set(r.id, r)
-    for (const c of r.children) {
-      if (c.type === 'room') collect(c as ContainerNode)
-    }
+    for (const c of r.nestedRooms) collect(c)
   }
   for (const r of rooms) collect(r)
-  const applyNested = (r: ContainerNode): void => {
-    for (const c of r.children) {
-      if (c.type !== 'room') continue
-      const nested = c as ContainerNode
+  const applyNested = (r: RoomNode): void => {
+    for (const nested of r.nestedRooms) {
       plan.set(nested.id, nestedWallPlan(nested, r, plan, roomById))
       applyNested(nested)
     }
@@ -500,21 +547,42 @@ export interface DoorZoneInfo {
  * 与渲染用 computeWallPlan 同源，保证与渲染门洞一致。
  */
 export function computeDoorZones(
-  rooms: ContainerNode[],
+  rooms: RoomNode[],
   options: WallPlanOptions = {},
 ): Map<string, DoorZoneInfo[]> {
   const plan = computeWallPlan(rooms, options)
   const result = new Map<string, DoorZoneInfo[]>()
   for (const R of rooms) {
     const zones: DoorZoneInfo[] = []
-    for (const dir of WALL_DIRECTIONS) {
-      const info = wallInfo(R, dir)
-      for (const seg of plan.get(R.id)![dir].segments) {
+    const p = plan.get(R.id)!
+    for (const edge of p.edges) {
+      for (const seg of edge.segments) {
         if (seg.kind !== 'door') continue
-        zones.push({ dir, along: info.start + info.length / 2 + (seg.from + seg.to) / 2 })
+        zones.push({ dir: edge.dir, along: edge.start + (seg.from + seg.to) / 2 })
       }
     }
     result.set(R.id, zones)
+  }
+  return result
+}
+
+/** 沿某边与对侧房间求邻居（内部辅助：供 computeWallPlan 使用） */
+function neighborsAlongEdge(
+  edge: WallEdge,
+  rooms: RoomNode[],
+  edgesByRoom: Map<string, WallEdge[]>,
+): NeighborAlongEdge[] {
+  const result: NeighborAlongEdge[] = []
+  for (const N of rooms) {
+    if (N.id === edge.roomId) continue
+    for (const nEdge of edgesByRoom.get(N.id) ?? []) {
+      if (nEdge.dir !== OPPOSITE[edge.dir]) continue
+      if (Math.abs(edge.line - nEdge.line) > ADJACENCY_GAP) continue
+      const worldFrom = Math.max(edge.start, nEdge.start)
+      const worldTo = Math.min(edge.start + edge.length, nEdge.start + nEdge.length)
+      if (worldTo - worldFrom < 1e-6) continue
+      result.push({ room: N, from: worldFrom - edge.start, to: worldTo - edge.start })
+    }
   }
   return result
 }

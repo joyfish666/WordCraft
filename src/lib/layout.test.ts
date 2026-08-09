@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { houseLevelsBounds, roomCenter } from './footprint'
 import { findNodeById, isContainer, walk } from './modelTree'
 import { resolveLayout } from './layout'
-import { computeAllWallPlans, computeWallPlan } from './roomGeometry'
-import type { ContainerNode, RoomNodeV2, SceneModelV2 } from '../types/model'
+import { computeAllWallPlans, computeWallPlan, edgeOf } from './roomGeometry'
+import type { FurnitureNode, RoomNode, RoomNodeV2, SceneModelV2 } from '../types/model'
 
 function roomV2(
   id: string,
@@ -43,6 +44,11 @@ function scene(root: Partial<SceneModelV2['root']> & { children: RoomNodeV2[] })
   }
 }
 
+/** 顶层房间列表 */
+function topRooms(model: ReturnType<typeof resolveLayout>): RoomNode[] {
+  return model.root.levels[0].rooms
+}
+
 describe('resolveLayout - corridor 走廊型', () => {
   it('房间分布在走廊两侧，客厅（入口）强制置于南侧并排最前', () => {
     const model = resolveLayout(
@@ -60,18 +66,20 @@ describe('resolveLayout - corridor 走廊型', () => {
       }),
     )
     // 整屋居中于原点，含走廊，入口房间已标记
-    expect(model.root.position).toEqual({ x: 0, y: 0, z: 0 })
-    expect(model.root.children.some((c) => c.name === '走廊')).toBe(true)
+    const bounds = houseLevelsBounds(model.root)!
+    expect((bounds.minX + bounds.maxX) / 2).toBeCloseTo(0, 5)
+    expect((bounds.minZ + bounds.maxZ) / 2).toBeCloseTo(0, 5)
+    expect(topRooms(model).some((c) => c.name === '走廊')).toBe(true)
     expect(model.root.entranceRoomId).toBe('living')
     const master = findNodeById(model.root, 'master')!
     const living = findNodeById(model.root, 'living')!
     const bed2 = findNodeById(model.root, 'bed2')!
     // 入口客厅强制在南侧（z<0），主卧也在南侧，次卧在北侧
-    expect(living.position.z).toBeLessThan(0)
-    expect(master.position.z).toBeLessThan(0)
-    expect(bed2.position.z).toBeGreaterThan(0)
+    expect(roomCenter(living as RoomNode).z).toBeLessThan(0)
+    expect(roomCenter(master as RoomNode).z).toBeLessThan(0)
+    expect(roomCenter(bed2 as RoomNode).z).toBeGreaterThan(0)
     // 入口排最前（同一侧沿走廊 x 最小）
-    expect(living.position.x).toBeLessThan(master.position.x)
+    expect(roomCenter(living as RoomNode).x).toBeLessThan(roomCenter(master as RoomNode).x)
   })
 
   it('单房间时无需走廊，房间居中', () => {
@@ -81,9 +89,9 @@ describe('resolveLayout - corridor 走廊型', () => {
         children: [roomV2('studio', '工作室', 4, 3)],
       }),
     )
-    expect(model.root.children.some((c) => c.name === '走廊')).toBe(false)
+    expect(topRooms(model).some((c) => c.name === '走廊')).toBe(false)
     const studio = findNodeById(model.root, 'studio')!
-    expect(studio.position.z).toBeCloseTo(0)
+    expect(roomCenter(studio as RoomNode).z).toBeCloseTo(0)
   })
 
   it('未指定 side 的房间自动分配到走廊两侧（避免全挤一侧）', () => {
@@ -98,12 +106,12 @@ describe('resolveLayout - corridor 走廊型', () => {
         ],
       }),
     )
-    const rooms = model.root.children.filter((c): c is ContainerNode => c.type === 'room')
+    const rooms = topRooms(model)
     const unassigned = rooms.filter((c) => c.id !== 'living')
     // 入口客厅在南侧；未指定 side 的房间被分到两侧（不全挤一侧）
-    expect(rooms.find((c) => c.id === 'living')!.position.z).toBeLessThan(0)
-    expect(unassigned.some((c) => c.position.z > 0)).toBe(true)
-    expect(unassigned.some((c) => c.position.z < 0)).toBe(true)
+    expect(roomCenter(rooms.find((c) => c.id === 'living')!).z).toBeLessThan(0)
+    expect(unassigned.some((c) => roomCenter(c).z > 0)).toBe(true)
+    expect(unassigned.some((c) => roomCenter(c).z < 0)).toBe(true)
   })
 
   it('入口房间名字含「走廊」（如"入口走廊"）也保留为真实房间，大门开在其南墙', () => {
@@ -119,11 +127,11 @@ describe('resolveLayout - corridor 走廊型', () => {
     )
     const entrance = findNodeById(model.root, 'corridor_entrance')
     expect(entrance).toBeDefined() // 未被 isCorridorName 过滤掉
-    const rooms = model.root.children.filter((c): c is ContainerNode => c.type === 'room')
+    const rooms = topRooms(model)
     const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'corridor_entrance' })
     // 入户门开在入口房间南墙；客厅南墙无入户门
-    expect(plan.get('corridor_entrance')!.south.segments.some((s) => s.kind === 'door' && s.entrance)).toBe(true)
-    expect(plan.get('living')!.south.segments.some((s) => s.entrance)).toBe(false)
+    expect(edgeOf(plan.get('corridor_entrance')!, 'south')!.segments.some((s) => s.kind === 'door' && s.entrance)).toBe(true)
+    expect(edgeOf(plan.get('living')!, 'south')!.segments.some((s) => s.entrance)).toBe(false)
   })
 })
 
@@ -145,11 +153,13 @@ describe('resolveLayout - living 客厅居中型', () => {
     const kitchen = findNodeById(model.root, 'kitchen')!
     const bed2 = findNodeById(model.root, 'bed2')!
     // 整屋居中于原点
-    expect(model.root.position).toEqual({ x: 0, y: 0, z: 0 })
+    const bounds = houseLevelsBounds(model.root)!
+    expect((bounds.minX + bounds.maxX) / 2).toBeCloseTo(0, 5)
+    expect((bounds.minZ + bounds.maxZ) / 2).toBeCloseTo(0, 5)
     // 相对关系：主卧在客厅北侧、次卧在南侧、厨房在东侧
-    expect(master.position.z).toBeGreaterThan(living.position.z)
-    expect(bed2.position.z).toBeLessThan(living.position.z)
-    expect(kitchen.position.x).toBeGreaterThan(living.position.x)
+    expect(roomCenter(master as RoomNode).z).toBeGreaterThan(roomCenter(living as RoomNode).z)
+    expect(roomCenter(bed2 as RoomNode).z).toBeLessThan(roomCenter(living as RoomNode).z)
+    expect(roomCenter(kitchen as RoomNode).x).toBeGreaterThan(roomCenter(living as RoomNode).x)
   })
 
   it('未给 side 的房间自动轮转到最少的一侧', () => {
@@ -166,8 +176,9 @@ describe('resolveLayout - living 客厅居中型', () => {
       }),
     )
     // 四边各分到一个房间
-    const z = model.root.children.filter((c) => isContainer(c) && c.id !== 'living').map((c) => c.position.z)
-    const x = model.root.children.filter((c) => isContainer(c) && c.id !== 'living').map((c) => c.position.x)
+    const rooms = topRooms(model).filter((c) => c.id !== 'living')
+    const z = rooms.map((c) => roomCenter(c).z)
+    const x = rooms.map((c) => roomCenter(c).x)
     expect(z.some((v) => v > 0)).toBe(true)
     expect(z.some((v) => v < 0)).toBe(true)
     expect(x.some((v) => v > 0)).toBe(true)
@@ -186,8 +197,8 @@ describe('resolveLayout - custom 自由型', () => {
       }),
     )
     const room = findNodeById(model.root, 'r1')!
-    if (!isContainer(room)) throw new Error('expect room')
-    const table = room.children.find((c) => c.id === '茶几')
+    if (!isContainer(room) || room.type !== 'room') throw new Error('expect room')
+    const table = room.furniture.find((c) => c.id === '茶几')
     // 房间在自定义坐标（未提供 → 原点），家具 = 房间中心 + 相对偏移
     expect(table?.position.x).toBeCloseTo(0.5)
     expect(table?.position.z).toBeCloseTo(-0.3)
@@ -204,8 +215,8 @@ describe('resolveLayout - custom 自由型', () => {
     )
     const a = findNodeById(model.root, 'a')!
     // 单个房间整体平移到原点
-    expect(a.position.x).toBeCloseTo(0)
-    expect(a.position.z).toBeCloseTo(0)
+    expect(roomCenter(a as RoomNode).x).toBeCloseTo(0)
+    expect(roomCenter(a as RoomNode).z).toBeCloseTo(0)
   })
 })
 
@@ -220,21 +231,34 @@ describe('resolveLayout - 整屋包围盒', () => {
         ],
       }),
     )
-    expect(model.root.position).toEqual({ x: 0, y: 0, z: 0 })
-    expect(model.root.dimensions.length).toBeGreaterThan(0)
-    expect(model.root.dimensions.width).toBeGreaterThan(0)
+    const bounds = houseLevelsBounds(model.root)!
+    expect((bounds.minX + bounds.maxX) / 2).toBeCloseTo(0, 5)
+    expect(bounds.maxX - bounds.minX).toBeGreaterThan(0)
+    expect(bounds.maxZ - bounds.minZ).toBeGreaterThan(0)
     // 所有房间在整屋范围内
-    for (const c of model.root.children) {
-      if (!isContainer(c)) continue
-      const halfL = c.dimensions.length / 2
-      const halfW = c.dimensions.width / 2
-      expect(c.position.x - halfL).toBeGreaterThanOrEqual(-model.root.dimensions.length / 2)
-      expect(c.position.x + halfL).toBeLessThanOrEqual(model.root.dimensions.length / 2)
-      expect(c.position.z - halfW).toBeGreaterThanOrEqual(-model.root.dimensions.width / 2)
-      expect(c.position.z + halfW).toBeLessThanOrEqual(model.root.dimensions.width / 2)
+    for (const c of topRooms(model)) {
+      const cb = roomBoundsOf(c)
+      expect(cb.minX).toBeGreaterThanOrEqual(bounds.minX - 1e-6)
+      expect(cb.maxX).toBeLessThanOrEqual(bounds.maxX + 1e-6)
+      expect(cb.minZ).toBeGreaterThanOrEqual(bounds.minZ - 1e-6)
+      expect(cb.maxZ).toBeLessThanOrEqual(bounds.maxZ + 1e-6)
     }
   })
 })
+
+function roomBoundsOf(r: RoomNode): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  for (const p of r.footprint) {
+    minX = Math.min(minX, p.x)
+    maxX = Math.max(maxX, p.x)
+    minZ = Math.min(minZ, p.z)
+    maxZ = Math.max(maxZ, p.z)
+  }
+  return { minX, maxX, minZ, maxZ }
+}
 
 describe('resolveLayout - 两卫生间布局', () => {
   function twoBathScene(): SceneModelV2 {
@@ -268,18 +292,18 @@ describe('resolveLayout - 两卫生间布局', () => {
 
   it('主卧卫生间只与主卧开门，不连次卧', () => {
     const model = resolveLayout(twoBathScene())
-    const rooms: ContainerNode[] = []
+    const rooms: RoomNode[] = []
     walk(model.root, (n) => {
-      if (n.type === 'room') rooms.push(n as ContainerNode)
+      if (n.type === 'room') rooms.push(n as RoomNode)
     })
     const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'living_room' })
     const b1 = plan.get('bedroom1')!
     const b2 = plan.get('bedroom2')!
     // 主卧卫生间与主卧之间：墙开门（由主卧侧持有渲染）
-    expect(b1.east.segments.some((s) => s.kind === 'door')).toBe(true)
+    expect(edgeOf(b1, 'east')!.segments.some((s) => s.kind === 'door')).toBe(true)
     // 主卧卫生间与次卧一之间的墙为实心（不开门）——由次卧一侧渲染
-    expect(b2.west.segments.some((s) => s.kind === 'wall')).toBe(true)
-    expect(b2.west.segments.some((s) => s.kind === 'door')).toBe(false)
+    expect(edgeOf(b2, 'west')!.segments.some((s) => s.kind === 'wall')).toBe(true)
+    expect(edgeOf(b2, 'west')!.segments.some((s) => s.kind === 'door')).toBe(false)
   })
 
   it('嵌套在卧室内的卫生间保留在卧室内部', () => {
@@ -321,20 +345,22 @@ describe('resolveLayout - 两卫生间布局', () => {
     const bedroom = findNodeById(model.root, 'bedroom1')
     expect(bedroom).not.toBeNull()
     // 卫生间是主卧的子节点（在卧室内部），不是顶层房间
-    if (bedroom && isContainer(bedroom)) {
-      expect(bedroom.children.some((c) => c.id === 'bathroom1')).toBe(true)
+    if (bedroom && isContainer(bedroom) && bedroom.type === 'room') {
+      expect(bedroom.nestedRooms.some((c) => c.id === 'bathroom1')).toBe(true)
     }
-    expect(model.root.children.some((c) => c.name === '主卧卫生间')).toBe(false)
+    expect(topRooms(model).some((c) => c.name === '主卧卫生间')).toBe(false)
     // 主卧的家具仍在主卧内
     expect(findNodeById(model.root, 'bed')).not.toBeNull()
     // 卫生间位于卧室内部
     const bath = findNodeById(model.root, 'bathroom1')
     expect(bath).not.toBeNull()
     if (bedroom && bath && isContainer(bedroom) && isContainer(bath)) {
-      expect(bath.position.x).toBeGreaterThanOrEqual(bedroom.position.x - bedroom.dimensions.length / 2)
-      expect(bath.position.x).toBeLessThanOrEqual(bedroom.position.x + bedroom.dimensions.length / 2)
-      expect(bath.position.z).toBeGreaterThanOrEqual(bedroom.position.z - bedroom.dimensions.width / 2)
-      expect(bath.position.z).toBeLessThanOrEqual(bedroom.position.z + bedroom.dimensions.width / 2)
+      const bb = roomBoundsOf(bedroom as RoomNode)
+      const bc = roomCenter(bath as RoomNode)
+      expect(bc.x).toBeGreaterThanOrEqual(bb.minX)
+      expect(bc.x).toBeLessThanOrEqual(bb.maxX)
+      expect(bc.z).toBeGreaterThanOrEqual(bb.minZ)
+      expect(bc.z).toBeLessThanOrEqual(bb.maxZ)
     }
   })
 
@@ -368,11 +394,12 @@ describe('resolveLayout - 两卫生间布局', () => {
     const bath = findNodeById(model.root, 'bathroom1')
     if (bedroom && bath && isContainer(bedroom) && isContainer(bath)) {
       // side:north → 靠西北角（z 偏北、x 偏西），贴两面墙而非居中贴单边
-      expect(bath.position.z).toBeGreaterThan(bedroom.position.z)
-      expect(bath.position.x).toBeLessThan(bedroom.position.x)
+      expect(roomCenter(bath as RoomNode).z).toBeGreaterThan(roomCenter(bedroom as RoomNode).z)
+      expect(roomCenter(bath as RoomNode).x).toBeLessThan(roomCenter(bedroom as RoomNode).x)
       // 仍在卧室范围内
-      expect(bath.position.z).toBeLessThan(bedroom.position.z + bedroom.dimensions.width / 2)
-      expect(bath.position.x).toBeGreaterThanOrEqual(bedroom.position.x - bedroom.dimensions.length / 2)
+      const bb = roomBoundsOf(bedroom as RoomNode)
+      expect(roomCenter(bath as RoomNode).z).toBeLessThan(bb.maxZ)
+      expect(roomCenter(bath as RoomNode).x).toBeGreaterThanOrEqual(bb.minX)
     }
   })
 
@@ -394,9 +421,7 @@ describe('resolveLayout - 两卫生间布局', () => {
             name: '主卧',
             dimensions: { length: 4, width: 3.5, height: 2.8 },
             side: 'right',
-            children: [
-              { id: 'bathroom1', type: 'room', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 }, children: [] },
-            ],
+            children: [{ id: 'bathroom1', type: 'room', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 }, children: [] }],
           },
         ],
       },
@@ -406,8 +431,12 @@ describe('resolveLayout - 两卫生间布局', () => {
     const bath = findNodeById(model.root, 'bathroom1')
     if (bedroom && bath && isContainer(bedroom) && isContainer(bath)) {
       // 不位于中心：x 或 z 至少偏离一半自身尺寸
-      expect(Math.abs(bath.position.x - bedroom.position.x)).toBeGreaterThan(bath.dimensions.length / 4)
-      expect(Math.abs(bath.position.z - bedroom.position.z)).toBeGreaterThan(bath.dimensions.width / 4)
+      expect(
+        Math.abs(roomCenter(bath as RoomNode).x - roomCenter(bedroom as RoomNode).x),
+      ).toBeGreaterThan(footprintHalfX(bath as RoomNode) / 2)
+      expect(
+        Math.abs(roomCenter(bath as RoomNode).z - roomCenter(bedroom as RoomNode).z),
+      ).toBeGreaterThan(footprintHalfZ(bath as RoomNode) / 2)
     }
   })
 
@@ -435,41 +464,55 @@ describe('resolveLayout - 两卫生间布局', () => {
       },
     }
     const model = resolveLayout(v2)
-    const rooms: ContainerNode[] = model.root.children.filter((c): c is ContainerNode => c.type === 'room')
+    const rooms = topRooms(model)
     const plan = computeAllWallPlans(rooms, { entrance: 'south', entranceRoomId: 'living_room' })
     const bath = plan.get('bathroom1')
     expect(bath).toBeDefined()
     if (!bath) return
     // 角落嵌套：贴父墙的两面 open（由外层墙围护），另两面为内部分隔墙
-    const wallFaces = [bath.north, bath.south, bath.east, bath.west].filter((f) =>
-      f.segments.some((s) => s.kind === 'wall'),
-    )
-    const openFaces = [bath.north, bath.south, bath.east, bath.west].filter((f) =>
-      f.segments.some((s) => s.kind === 'open'),
-    )
+    const wallFaces = bath.edges.filter((e) => e.segments.some((s) => s.kind === 'wall'))
+    const openFaces = bath.edges.filter((e) => e.segments.some((s) => s.kind === 'open'))
     expect(wallFaces.length).toBe(2)
     expect(openFaces.length).toBe(2)
     // 恰一面有门（朝父房间中心）
-    const doorFaces = [bath.north, bath.south, bath.east, bath.west].filter((f) =>
-      f.segments.some((s) => s.kind === 'door'),
-    )
+    const doorFaces = bath.edges.filter((e) => e.segments.some((s) => s.kind === 'door'))
     expect(doorFaces.length).toBe(1)
   })
 
   it('走廊卫生间只与走廊开门，不连厨房', () => {
     const model = resolveLayout(twoBathScene())
-    const rooms: ContainerNode[] = []
+    const rooms: RoomNode[] = []
     walk(model.root, (n) => {
-      if (n.type === 'room') rooms.push(n as ContainerNode)
+      if (n.type === 'room') rooms.push(n as RoomNode)
     })
     const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'living_room' })
     const cb = plan.get('corridor_bathroom')!
     // 与走廊相连（北墙开门）
-    expect(cb.north.segments.some((s) => s.kind === 'door')).toBe(true)
+    expect(edgeOf(cb, 'north')!.segments.some((s) => s.kind === 'door')).toBe(true)
     // 与厨房之间不开门（实心墙）
-    expect(cb.west.segments.some((s) => s.kind === 'door')).toBe(false)
+    expect(edgeOf(cb, 'west')!.segments.some((s) => s.kind === 'door')).toBe(false)
   })
 })
+
+function footprintHalfX(r: RoomNode): number {
+  let minX = Infinity
+  let maxX = -Infinity
+  for (const p of r.footprint) {
+    minX = Math.min(minX, p.x)
+    maxX = Math.max(maxX, p.x)
+  }
+  return (maxX - minX) / 2
+}
+
+function footprintHalfZ(r: RoomNode): number {
+  let minZ = Infinity
+  let maxZ = -Infinity
+  for (const p of r.footprint) {
+    minZ = Math.min(minZ, p.z)
+    maxZ = Math.max(maxZ, p.z)
+  }
+  return (maxZ - minZ) / 2
+}
 
 describe('resolveLayout - 家具常理摆放（贴墙 + 避让嵌套卫生间 + 避让门口）', () => {
   it('主卧双人床贴墙、不重叠内嵌卫生间、不堵门口', () => {
@@ -499,46 +542,48 @@ describe('resolveLayout - 家具常理摆放（贴墙 + 避让嵌套卫生间 + 
       },
     }
     const model = resolveLayout(v2)
-    const bedroom = findNodeById(model.root, 'bedroom1') as ContainerNode
-    const bed = findNodeById(model.root, 'bed')!
-    const bath = findNodeById(model.root, 'bathroom1') as ContainerNode
-
-    const hx = bed.dimensions.length / 2
-    const hz = bed.dimensions.width / 2
-    const innerMinX = bedroom.position.x - bedroom.dimensions.length / 2 + 0.15
-    const innerMaxX = bedroom.position.x + bedroom.dimensions.length / 2 - 0.15
-    const innerMinZ = bedroom.position.z - bedroom.dimensions.width / 2 + 0.15
-    const innerMaxZ = bedroom.position.z + bedroom.dimensions.width / 2 - 0.15
+    const bedroom = findNodeById(model.root, 'bedroom1') as RoomNode
+    const bed = findNodeById(model.root, 'bed') as FurnitureNode
+    const bath = findNodeById(model.root, 'bathroom1') as RoomNode
+    const bb = roomBoundsOf(bedroom)
+    const bc = bed.position
+    const bhx = bed.dimensions.length / 2
+    const bhz = bed.dimensions.width / 2
+    const innerMinX = bb.minX + 0.15
+    const innerMaxX = bb.maxX - 0.15
+    const innerMinZ = bb.minZ + 0.15
+    const innerMaxZ = bb.maxZ - 0.15
 
     // 床贴某面墙内壁（不悬空在中间）
     const flushWall =
-      Math.abs(bed.position.x - (innerMinX + hx)) < 1e-6 ||
-      Math.abs(bed.position.x - (innerMaxX - hx)) < 1e-6 ||
-      Math.abs(bed.position.z - (innerMinZ + hz)) < 1e-6 ||
-      Math.abs(bed.position.z - (innerMaxZ - hz)) < 1e-6
+      Math.abs(bc.x - (innerMinX + bhx)) < 1e-6 ||
+      Math.abs(bc.x - (innerMaxX - bhx)) < 1e-6 ||
+      Math.abs(bc.z - (innerMinZ + bhz)) < 1e-6 ||
+      Math.abs(bc.z - (innerMaxZ - bhz)) < 1e-6
     expect(flushWall).toBe(true)
 
     // 不与卫生间禁区（足迹 + 墙厚外扩）重叠；允许贴边（共享墙）的浮点误差
     const EPS = 1e-6
-    const kMinX = bath.position.x - bath.dimensions.length / 2 - 0.15
-    const kMaxX = bath.position.x + bath.dimensions.length / 2 + 0.15
-    const kMinZ = bath.position.z - bath.dimensions.width / 2 - 0.15
-    const kMaxZ = bath.position.z + bath.dimensions.width / 2 + 0.15
+    const kb = roomBoundsOf(bath)
+    const kMinX = kb.minX - 0.15
+    const kMaxX = kb.maxX + 0.15
+    const kMinZ = kb.minZ - 0.15
+    const kMaxZ = kb.maxZ + 0.15
     const bathOverlap =
-      bed.position.x + hx > kMinX + EPS &&
-      bed.position.x - hx < kMaxX - EPS &&
-      bed.position.z + hz > kMinZ + EPS &&
-      bed.position.z - hz < kMaxZ - EPS
+      bc.x + bhx > kMinX + EPS &&
+      bc.x - bhx < kMaxX - EPS &&
+      bc.z + bhz > kMinZ + EPS &&
+      bc.z - bhz < kMaxZ - EPS
     expect(bathOverlap).toBe(false)
 
     // 不堵门口：主卧南墙（贴走廊）居中开门，门宽 0.9 → 禁区 x ∈ [门中心±0.45]，z 从南墙内壁向室内 1.0
-    const doorMinX = bedroom.position.x - 0.45
-    const doorMaxX = bedroom.position.x + 0.45
+    const doorMinX = roomCenter(bedroom).x - 0.45
+    const doorMaxX = roomCenter(bedroom).x + 0.45
     const doorOverlap =
-      bed.position.x + hx > doorMinX + EPS &&
-      bed.position.x - hx < doorMaxX - EPS &&
-      bed.position.z + hz > innerMinZ + EPS &&
-      bed.position.z - hz < innerMinZ + 1.0 - EPS
+      bc.x + bhx > doorMinX + EPS &&
+      bc.x - bhx < doorMaxX - EPS &&
+      bc.z + bhz > innerMinZ + EPS &&
+      bc.z - bhz < innerMinZ + 1.0 - EPS
     expect(doorOverlap).toBe(false)
   })
 })

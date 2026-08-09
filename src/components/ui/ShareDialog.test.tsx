@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { encodeShareCode } from '../../lib/compression'
+import { compressObject, encodeShareCode } from '../../lib/compression'
 import { createSampleModel } from '../../lib/sampleModel'
 import { useShareStore } from '../../store/useShareStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
@@ -73,6 +73,34 @@ describe('ShareDialog（分享与口令）', () => {
     fireEvent.click(screen.getByRole('button', { name: '还原' }))
     expect(onRestore).toHaveBeenCalledTimes(1)
     expect(onRestore.mock.calls[0][0].root.name).toBe('示例小屋')
+    expect(screen.getByText(/模型已还原/)).toBeInTheDocument()
+  })
+
+  it('旧版 v1 口令还原时自动迁移为 v3 足迹模型（旧数据可打开）', () => {
+    // 无前缀口令（旧版格式），内容为 v1 盒子模型
+    const v1 = {
+      version: 1,
+      root: {
+        id: 'h1',
+        type: 'house',
+        name: '旧房子',
+        dimensions: { length: 4, width: 3, height: 2.8 },
+        position: { x: 0, y: 0, z: 0 },
+        children: [
+          { id: 'r1', type: 'room', name: '客厅', dimensions: { length: 3, width: 3, height: 2.8 }, position: { x: 0, y: 1.4, z: 0 }, children: [] },
+        ],
+      },
+    }
+    const legacyCode = compressObject(v1)
+    renderDialog({ code: legacyCode })
+    const input = screen.getByPlaceholderText(/粘贴分享口令/)
+    fireEvent.change(input, { target: { value: legacyCode } })
+    fireEvent.click(screen.getByRole('button', { name: '还原' }))
+    expect(onRestore).toHaveBeenCalledTimes(1)
+    const restored = onRestore.mock.calls[0][0] as { version: number; root: { name: string; levels: { rooms: unknown[] }[] } }
+    expect(restored.version).toBe(3)
+    expect(restored.root.name).toBe('旧房子')
+    expect(restored.root.levels[0].rooms).toHaveLength(1)
     expect(screen.getByText(/模型已还原/)).toBeInTheDocument()
   })
 

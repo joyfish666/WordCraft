@@ -1,5 +1,7 @@
 import { translate, type Lang } from '../i18n/translations'
-import type { ContainerNode, Dimensions, SceneModel } from '../types/model'
+import { footprintBounds, houseLevelsBounds } from './footprint'
+import { WALL_THICKNESS } from './roomGeometry'
+import type { Dimensions, HouseNode, RoomNode, SceneModel } from '../types/model'
 
 /**
  * 2D 俯视平面图所需的纯几何函数：整屋包围盒、房间遍历、尺寸线与正交相机取景。
@@ -20,21 +22,28 @@ export interface Bounds2D {
   height: number
 }
 
-/** 整屋包围盒：直接取整屋节点尺寸（布局引擎保证 house.dimensions = 所有房间的包围盒） */
+/**
+ * 整屋包围盒：所有顶层房间足迹的并集包围盒外扩一个墙厚（兼容旧 house.dimensions 语义）。
+ * 空场景回退到 4×3 的取景盒。
+ */
 export function houseBounds(scene: SceneModel): Bounds2D {
-  const root = scene.root
-  const { length, width } = root.dimensions
-  const cx = root.position.x
-  const cz = root.position.z
+  const bounds = houseLevelsBounds(scene.root)
+  if (!bounds) {
+    return { minX: -2, maxX: 2, minZ: -1.5, maxZ: 1.5, centerX: 0, centerZ: 0, width: 4, height: 3 }
+  }
+  const minX = bounds.minX - WALL_THICKNESS
+  const maxX = bounds.maxX + WALL_THICKNESS
+  const minZ = bounds.minZ - WALL_THICKNESS
+  const maxZ = bounds.maxZ + WALL_THICKNESS
   return {
-    minX: cx - length / 2,
-    maxX: cx + length / 2,
-    minZ: cz - width / 2,
-    maxZ: cz + width / 2,
-    centerX: cx,
-    centerZ: cz,
-    width: length,
-    height: width,
+    minX,
+    maxX,
+    minZ,
+    maxZ,
+    centerX: (minX + maxX) / 2,
+    centerZ: (minZ + maxZ) / 2,
+    width: maxX - minX,
+    height: maxZ - minZ,
   }
 }
 
@@ -49,25 +58,29 @@ export function roomLabelText(name: string, dims: Dimensions): string {
 }
 
 export interface RoomPlanInfo {
-  node: ContainerNode
-  /** 该房间在其父容器 children 中的下标（与 3D 配色映射一致） */
+  node: RoomNode
+  /** 该房间在其父容器同级（含家具）中的下标，与 3D 配色映射一致 */
   siblingIndex: number
   /** 层级深度：顶层房间 = 1，嵌套子房间（如卧内卫生间）= 2 */
   depth: number
 }
 
 /** 递归收集所有房间（含嵌套），用于绘制标签与颜色映射 */
-export function walkRooms(root: ContainerNode): RoomPlanInfo[] {
+export function walkRooms(root: HouseNode): RoomPlanInfo[] {
   const result: RoomPlanInfo[] = []
-  const visit = (node: ContainerNode, depth: number) => {
-    node.children.forEach((child, i) => {
-      if (child.type === 'room') {
-        result.push({ node: child, siblingIndex: i, depth })
-        visit(child, depth + 1)
-      }
+  const level = root.levels[0]
+  if (!level) return result
+  // 嵌套房间在其父容器同级（家具 + 嵌套房间）中的下标 = 家具数 + 嵌套下标，与 3D 配色一致
+  const visit = (node: RoomNode, depth: number) => {
+    node.nestedRooms.forEach((child, i) => {
+      result.push({ node: child, siblingIndex: node.furniture.length + i, depth })
+      visit(child, depth + 1)
     })
   }
-  visit(root, 1)
+  level.rooms.forEach((child, i) => {
+    result.push({ node: child, siblingIndex: i, depth: 1 })
+    visit(child, 2)
+  })
   return result
 }
 
@@ -136,5 +149,36 @@ export function computePlanCamera(
     zoom,
     near,
     far,
+  }
+}
+
+/** 便捷：整屋包围盒（含墙厚外扩），供渲染层（房屋线框盒）使用 */
+export function houseBoundsFromRooms(rooms: RoomNode[]): Bounds2D {
+  const union = (() => {
+    if (rooms.length === 0) return null
+    const list = rooms.map((r) => footprintBounds(r.footprint))
+    return {
+      minX: Math.min(...list.map((b) => b.minX)),
+      maxX: Math.max(...list.map((b) => b.maxX)),
+      minZ: Math.min(...list.map((b) => b.minZ)),
+      maxZ: Math.max(...list.map((b) => b.maxZ)),
+    }
+  })()
+  if (!union) {
+    return { minX: -2, maxX: 2, minZ: -1.5, maxZ: 1.5, centerX: 0, centerZ: 0, width: 4, height: 3 }
+  }
+  const minX = union.minX - WALL_THICKNESS
+  const maxX = union.maxX + WALL_THICKNESS
+  const minZ = union.minZ - WALL_THICKNESS
+  const maxZ = union.maxZ + WALL_THICKNESS
+  return {
+    minX,
+    maxX,
+    minZ,
+    maxZ,
+    centerX: (minX + maxX) / 2,
+    centerZ: (minZ + maxZ) / 2,
+    width: maxX - minX,
+    height: maxZ - minZ,
   }
 }

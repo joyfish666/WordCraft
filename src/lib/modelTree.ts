@@ -1,4 +1,5 @@
-import type { ContainerNode, Dimensions, ModelNode, Position, SceneModel } from '../types/model'
+import type { Dimensions, FurnitureNode, HouseNode, ModelNode, Position, RoomNode, SceneModel } from '../types/model'
+import { footprintBounds, footprintCenter, resizeFootprint, translateFootprint } from './footprint'
 import { WALL_THICKNESS } from './roomGeometry'
 
 /**
@@ -8,14 +9,25 @@ import { WALL_THICKNESS } from './roomGeometry'
 export function walk(node: ModelNode, visit: (n: ModelNode) => void): void {
   visit(node)
   if (isContainer(node)) {
-    for (const child of node.children) {
-      walk(child, visit)
+    if (node.type === 'house') {
+      for (const level of node.levels) {
+        for (const room of level.rooms) {
+          walk(room, visit)
+        }
+      }
+    } else {
+      for (const child of node.furniture) {
+        walk(child, visit)
+      }
+      for (const child of node.nestedRooms) {
+        walk(child, visit)
+      }
     }
   }
 }
 
 /** 是否为容器节点（房间 / 整屋） */
-export function isContainer(node: ModelNode): node is Extract<ModelNode, { children: ModelNode[] }> {
+export function isContainer(node: ModelNode): node is HouseNode | RoomNode {
   return node.type === 'room' || node.type === 'house'
 }
 
@@ -35,7 +47,11 @@ export function getPathToNode(root: ModelNode, id: string): ModelNode[] {
     path.push(node)
     if (node.id === id) return true
     if (isContainer(node)) {
-      for (const child of node.children) {
+      const children: ModelNode[] =
+        node.type === 'house'
+          ? node.levels.flatMap((l) => l.rooms)
+          : [...node.furniture, ...node.nestedRooms]
+      for (const child of children) {
         if (dfs(child)) return true
       }
     }
@@ -55,13 +71,46 @@ export function countNodes(root: ModelNode): number {
   return count
 }
 
-/** 不可变更新：将指定节点的 position 替换为新值，返回新的树 */
+/** 不可变更新：将指定节点的 position 替换为新值（房间 → 平移足迹），返回新的树 */
 export function updateNodePosition(root: ModelNode, id: string, position: Position): ModelNode {
-  if (root.id === id) return { ...root, position }
+  if (root.id === id) {
+    if (root.type === 'room') {
+      const c = footprintCenter(root.footprint)
+      return { ...root, footprint: translateFootprint(root.footprint, position.x - c.x, position.z - c.z) }
+    }
+    if (root.type === 'house') return root // 整屋无 position 字段
+    return { ...root, position }
+  }
   if (isContainer(root)) {
-    return { ...root, children: root.children.map((c) => updateNodePosition(c, id, position)) }
+    const children: ModelNode[] =
+      root.type === 'house'
+        ? root.levels.flatMap((l) => l.rooms)
+        : [...root.furniture, ...root.nestedRooms]
+    let changed = false
+    const mapped = children.map((c) => {
+      const next = updateNodePosition(c, id, position)
+      if (next !== c) changed = true
+      return next
+    })
+    if (!changed) return root
+    return rebuildContainer(root, mapped)
   }
   return root
+}
+
+/** 按新的子节点列表重建容器（楼层/房间），子节点结构不变时引用不变 */
+function rebuildContainer(root: HouseNode | RoomNode, children: ModelNode[]): ModelNode {
+  if (root.type === 'house') {
+    const rooms = children as RoomNode[]
+    const level = root.levels[0]
+    if (level.rooms.length === rooms.length) {
+      return { ...root, levels: [{ ...level, rooms }] }
+    }
+    return root
+  }
+  const furniture = children.filter((c): c is FurnitureNode => c.type === 'furniture')
+  const nestedRooms = children.filter((c): c is RoomNode => c.type === 'room')
+  return { ...root, furniture, nestedRooms }
 }
 
 /** 节点字段补丁：名称 / 尺寸（部分） / 位置（部分），未提供的字段保持原值 */
@@ -73,28 +122,67 @@ export interface NodeFieldsPatch {
 
 /**
  * 不可变更新：将指定节点的 name / dimensions / position 按补丁合并替换。
+ * - 家具：直接写字段；房间：dimensions → 缩放足迹（height → 层高）、position → 平移足迹；
+ * - 整屋：仅 name 有效。
  * 未命中节点或补丁为空时返回原树（引用不变），便于调用方短路跳过。
  */
 export function updateNodeFields(root: ModelNode, id: string, patch: NodeFieldsPatch): ModelNode {
   if (root.id === id) {
     if (!patch.name && !patch.dimensions && !patch.position) return root
-    const next: ModelNode = { ...root }
+    if (root.type === 'house') {
+      if (!patch.name) return root
+      return { ...root, name: patch.name }
+    }
+    if (root.type === 'room') {
+      const next: RoomNode = { ...root }
+      if (patch.name !== undefined) next.name = patch.name
+      if (patch.dimensions) {
+        const d = patch.dimensions
+        if (d.length !== undefined || d.width !== undefined) {
+          const cur = roomDimsRect(root)
+          next.footprint = resizeFootprint(
+            root.footprint,
+            d.length ?? cur.length,
+            d.width ?? cur.width,
+          )
+        }
+        if (d.height !== undefined) next.height = d.height
+      }
+      if (patch.position) {
+        const c = footprintCenter(root.footprint)
+        const dx = (patch.position.x ?? c.x) - c.x
+        const dz = (patch.position.z ?? c.z) - c.z
+        if (dx !== 0 || dz !== 0) next.footprint = translateFootprint(root.footprint, dx, dz)
+      }
+      return next
+    }
+    const next: FurnitureNode = { ...root }
     if (patch.name !== undefined) next.name = patch.name
     if (patch.dimensions) next.dimensions = { ...root.dimensions, ...patch.dimensions }
     if (patch.position) next.position = { ...root.position, ...patch.position }
     return next
   }
   if (isContainer(root)) {
+    const children: ModelNode[] =
+      root.type === 'house'
+        ? root.levels.flatMap((l) => l.rooms)
+        : [...root.furniture, ...root.nestedRooms]
     let changed = false
-    const children = root.children.map((c) => {
+    const mapped = children.map((c) => {
       const next = updateNodeFields(c, id, patch)
       if (next !== c) changed = true
       return next
     })
     if (!changed) return root
-    return { ...root, children }
+    return rebuildContainer(root, mapped)
   }
   return root
+}
+
+/** 房间足迹包围盒尺寸（局部辅助） */
+function roomDimsRect(room: RoomNode): { length: number; width: number } {
+  const b = footprintBounds(room.footprint)
+  return { length: b.maxX - b.minX, width: b.maxZ - b.minZ }
 }
 
 /** 将数值限制到 [min,max]；区间非法（min>max，容器过小）时返回中点 */
@@ -116,15 +204,14 @@ interface Rect {
   maxZ: number
 }
 
-/** 嵌套房间的禁止进入区：足迹 + 墙厚外扩 */
-function nestedKeepOut(room: ContainerNode): Rect {
-  const hx = room.dimensions.length / 2 + WALL_THICKNESS
-  const hz = room.dimensions.width / 2 + WALL_THICKNESS
+/** 嵌套房间的禁止进入区：足迹包围盒 + 墙厚外扩 */
+function nestedKeepOut(room: RoomNode): Rect {
+  const b = footprintBounds(room.footprint)
   return {
-    minX: room.position.x - hx,
-    maxX: room.position.x + hx,
-    minZ: room.position.z - hz,
-    maxZ: room.position.z + hz,
+    minX: b.minX - WALL_THICKNESS,
+    maxX: b.maxX + WALL_THICKNESS,
+    minZ: b.minZ - WALL_THICKNESS,
+    maxZ: b.maxZ + WALL_THICKNESS,
   }
 }
 
@@ -164,43 +251,34 @@ function pushOutOfRects(
 /**
  * 将每个容器内的家具约束在墙体之内，避免家具与墙/门重叠；
  * 父房间内若有嵌套子房间，家具还要被推出其占地（真·内嵌：父房间可用空间减去嵌套占地）。
- * 容器边界按墙体厚度内缩；家具保持自身半宽/半深余量。
+ * 容器边界按墙体厚度内缩（沿足迹包围盒）；家具保持自身半宽/半深余量。
  */
 export function normalizeContainment(scene: SceneModel): SceneModel {
-  return { ...scene, root: containChildren(scene.root) }
+  return { ...scene, root: containChildren(scene.root) as SceneModel['root'] }
 }
 
-function containChildren(container: ContainerNode): ContainerNode {
-  const minX = container.position.x - container.dimensions.length / 2 + WALL_THICKNESS
-  const maxX = container.position.x + container.dimensions.length / 2 - WALL_THICKNESS
-  const minZ = container.position.z - container.dimensions.width / 2 + WALL_THICKNESS
-  const maxZ = container.position.z + container.dimensions.width / 2 - WALL_THICKNESS
+function containChildren(container: HouseNode | RoomNode): HouseNode | RoomNode {
+  if (container.type === 'house') {
+    return {
+      ...container,
+      levels: container.levels.map((level) => ({ ...level, rooms: level.rooms.map(containRoom) })),
+    }
+  }
+  return containRoom(container)
+}
+
+function containRoom(room: RoomNode): RoomNode {
+  const b = footprintBounds(room.footprint)
+  const minX = b.minX + WALL_THICKNESS
+  const maxX = b.maxX - WALL_THICKNESS
+  const minZ = b.minZ + WALL_THICKNESS
+  const maxZ = b.maxZ - WALL_THICKNESS
   const bounds: Rect = { minX, maxX, minZ, maxZ }
 
-  // 父房间内嵌套子房间的禁止进入区：父房间家具须避开（仅父是房间时生效；顶层房间父是整屋不处理）
-  const nestedKeepOuts: Rect[] =
-    container.type === 'room'
-      ? container.children.filter((c): c is ContainerNode => c.type === 'room').map(nestedKeepOut)
-      : []
+  // 嵌套子房间的禁止进入区：父房间家具须避开
+  const nestedKeepOuts: Rect[] = room.nestedRooms.map(nestedKeepOut)
 
-  const children = container.children.map((child) => {
-    if (isContainer(child)) {
-      // 嵌套房间（如卧室内卫生间，父节点是房间）：整体约束进父房间内部，再递归约束其家具。
-      // 顶层房间（父节点是整屋）由布局引擎放置，不约束位置。
-      if (container.type === 'room') {
-        const hx = child.dimensions.length / 2
-        const hz = child.dimensions.width / 2
-        return containChildren({
-          ...child,
-          position: {
-            x: clampTo(child.position.x, minX + hx, maxX - hx),
-            y: child.position.y,
-            z: clampTo(child.position.z, minZ + hz, maxZ - hz),
-          },
-        })
-      }
-      return containChildren(child)
-    }
+  const furniture = room.furniture.map((child) => {
     const hx = child.dimensions.length / 2
     const hz = child.dimensions.width / 2
     let x = clampTo(child.position.x, minX + hx, maxX - hx)
@@ -213,5 +291,25 @@ function containChildren(container: ContainerNode): ContainerNode {
     }
     return { ...child, position: { ...child.position, x, z } }
   })
-  return { ...container, children }
+
+  // 嵌套房间：整体约束进父房间内部（平移足迹），再递归约束其家具
+  const nestedRooms = room.nestedRooms.map((child) => {
+    const c = footprintCenter(child.footprint)
+    const cb = footprintBounds(child.footprint)
+    const hx = (cb.maxX - cb.minX) / 2
+    const hz = (cb.maxZ - cb.minZ) / 2
+    const moved = containRoom(child)
+    const nc = footprintCenter(moved.footprint)
+    const targetX = clampTo(nc.x, minX + hx, maxX - hx)
+    const targetZ = clampTo(nc.z, minZ + hz, maxZ - hz)
+    const dx = targetX - c.x
+    const dz = targetZ - c.z
+    if (dx === 0 && dz === 0) return moved
+    return containRoom({
+      ...moved,
+      footprint: translateFootprint(moved.footprint, dx, dz),
+    })
+  })
+
+  return { ...room, furniture, nestedRooms }
 }
