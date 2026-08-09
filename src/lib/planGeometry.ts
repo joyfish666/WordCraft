@@ -1,7 +1,7 @@
 import { translate, type Lang } from '../i18n/translations'
 import { footprintBounds, houseLevelsBounds } from './footprint'
-import { WALL_THICKNESS } from './roomGeometry'
-import type { Dimensions, HouseNode, RoomNode, SceneModel } from '../types/model'
+import { WALL_THICKNESS, type WallEdge, type WallSegment } from './roomGeometry'
+import type { HouseNode, RoomNode, SceneModel } from '../types/model'
 
 /**
  * 2D 俯视平面图所需的纯几何函数：整屋包围盒、房间遍历、尺寸线与正交相机取景。
@@ -50,11 +50,6 @@ export function houseBounds(scene: SceneModel): Bounds2D {
 /** 数值展示：去尾零，最多 2 位小数 */
 export function fmt(n: number): string {
   return String(parseFloat(n.toFixed(2)))
-}
-
-/** 房间标签文案："主卧 3×3" */
-export function roomLabelText(name: string, dims: Dimensions): string {
-  return `${name} ${fmt(dims.length)}×${fmt(dims.width)}`
 }
 
 export interface RoomPlanInfo {
@@ -181,4 +176,131 @@ export function houseBoundsFromRooms(rooms: RoomNode[]): Bounds2D {
     width: maxX - minX,
     height: maxZ - minZ,
   }
+}
+
+// ---------------------------------------------------------------------------
+// 2D 平面图门窗符号与房间尺寸标注（平面图增强，纯函数供 PlanEnhancements 消费）
+// ---------------------------------------------------------------------------
+
+/** 墙段起点/终点的世界坐标（段局部坐标以边起点为 0，坑 37：世界 = start + local） */
+function segmentPoint(edge: WallEdge, local: number, y: number): [number, number, number] {
+  const along = edge.start + local
+  return edge.axis === 'x' ? [along, y, edge.line] : [edge.line, y, along]
+}
+
+/** 边的内向偏移方向（房间内部 = 外向法线的反向） */
+function inwardOffset(edge: WallEdge): { dx: number; dz: number } {
+  switch (edge.dir) {
+    case 'north':
+      return { dx: 0, dz: -1 }
+    case 'south':
+      return { dx: 0, dz: 1 }
+    case 'east':
+      return { dx: -1, dz: 0 }
+    case 'west':
+      return { dx: 1, dz: 0 }
+  }
+}
+
+/**
+ * 门扇线：从铰链端（段起点一侧的门框角）垂直进入房间，长度 = 门洞宽。
+ * 与经典制图符号一致：门扇画在房间内部，朝向房间内。
+ */
+export function doorLeafLine(
+  edge: WallEdge,
+  seg: WallSegment,
+  y: number,
+): [[number, number, number], [number, number, number]] {
+  const a = segmentPoint(edge, seg.from, y)
+  const dir = inwardOffset(edge)
+  const width = seg.to - seg.from
+  return [a, [a[0] + dir.dx * width, y, a[2] + dir.dz * width]]
+}
+
+/**
+ * 门扇开启弧线：以铰链端为圆心、门洞宽为半径，从门扇端点扫到洞口另一端。
+ * 两射线垂直 → 唯一 90° 短弧（atan2 差值恒为 ±π/2），弧线自然落在房间内、
+ * 且沿墙方向不越出洞口区间（与 3D 渲染的墙段同源）。
+ * 首尾点精确取门扇端点与洞口另一端，避免浮点缝隙。
+ */
+export function doorArcPoints(
+  edge: WallEdge,
+  seg: WallSegment,
+  y: number,
+  steps = 10,
+): [number, number, number][] {
+  const a = segmentPoint(edge, seg.from, y)
+  const b = segmentPoint(edge, seg.to, y)
+  const dir = inwardOffset(edge)
+  const width = seg.to - seg.from
+  const angE = Math.atan2(dir.dz, dir.dx)
+  const angB = Math.atan2(b[2] - a[2], b[0] - a[0])
+  const d = angB - angE
+  const pts: [number, number, number][] = []
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
+    if (t === 0) {
+      pts.push([a[0] + dir.dx * width, y, a[2] + dir.dz * width])
+      continue
+    }
+    if (t === 1) {
+      pts.push(b)
+      continue
+    }
+    const ang = angE + d * t
+    pts.push([a[0] + Math.cos(ang) * width, y, a[2] + Math.sin(ang) * width])
+  }
+  return pts
+}
+
+/**
+ * 窗洞符号：两条与墙平行的短线，向内偏移 0.1 / 0.22 米（经典双线示意），
+ * 跨度 = 窗洞宽。颜色由渲染层指定（浅蓝，与 3D 窗玻璃/门窗工具标记一致）。
+ */
+export function windowHatchLines(
+  edge: WallEdge,
+  seg: WallSegment,
+  y: number,
+): Array<[[number, number, number], [number, number, number]]> {
+  const a = segmentPoint(edge, seg.from, y)
+  const b = segmentPoint(edge, seg.to, y)
+  const dir = inwardOffset(edge)
+  return [0.1, 0.22].map((o) => [
+    [a[0] + dir.dx * o, y, a[2] + dir.dz * o],
+    [b[0] + dir.dx * o, y, b[2] + dir.dz * o],
+  ])
+}
+
+/** 房间尺寸线的最小边长（小于此值的房间不画内部尺寸线，避免小房间标注拥挤） */
+export const MIN_DIM_SIDE = 2
+
+/**
+ * 房间内部尺寸线：南侧（水平）标长度、西侧（竖直）标宽度，
+ * 向内偏移 offset（应大于墙厚），端部刻度与文案由渲染层绘制。
+ * 尺寸过小的边（< MIN_DIM_SIDE）跳过。
+ */
+export function roomDimLines(
+  room: RoomNode,
+  opts: { y: number; offset?: number },
+): DimLine[] {
+  const { y, offset = 0.4 } = opts
+  const b = footprintBounds(room.footprint)
+  const len = b.maxX - b.minX
+  const wid = b.maxZ - b.minZ
+  const lines: DimLine[] = []
+  if (len >= MIN_DIM_SIDE) {
+    lines.push({
+      from: [b.minX + offset, y, b.minZ + offset],
+      to: [b.maxX - offset, y, b.minZ + offset],
+      label: fmt(len),
+    })
+  }
+  if (wid >= MIN_DIM_SIDE) {
+    lines.push({
+      from: [b.minX + offset, y, b.minZ + offset],
+      to: [b.minX + offset, y, b.maxZ - offset],
+      label: fmt(wid),
+    })
+  }
+  return lines
 }

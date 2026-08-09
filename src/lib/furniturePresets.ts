@@ -54,6 +54,13 @@ export type FurnitureKind =
   | 'roundTable'
   | 'bookcase'
   | 'washer'
+  | 'bathtub'
+  | 'nightstand'
+  | 'dressingTable'
+  | 'shoeCabinet'
+  | 'stove'
+  | 'oven'
+  | 'microwave'
   | 'generic'
 
 /** 家具背侧贴靠的墙（renderer 由家具位置与父房间包围盒算出） */
@@ -69,15 +76,18 @@ function yFromFloor(h: number, H: number): number {
   return -H / 2 + h
 }
 
-/** 含这些词的家具先归为通用整盒，避免误套大件造型（如床头柜含「床」会误套床造型） */
-const GENERIC_GUARD_RE = /床头柜|床尾凳|床幔|梳妆台|化妆台/
+/** 含这些词的家具先归为通用整盒，避免误套大件造型（如床尾凳含「床」会误套床造型） */
+const GENERIC_GUARD_RE = /床尾凳|床幔/
 
 /**
  * 分类词表，按顺序匹配（先易误判词/具体词，后宽松词）。
  * 词表为中文主词表——生成数据由大模型按中文提示词产出，英文名不参与分类（见交接文档坑 27）。
+ * 顺序注意：床头柜/床边柜须在「床」之前（含「床」）；电视柜须在「电视」之前（含「电视」）。
  */
 const KIND_RE: Array<[FurnitureKind, RegExp]> = [
   ['sofa', /沙发/],
+  ['nightstand', /床头柜|床边柜|床头几/],
+  ['dressingTable', /梳妆台|化妆台|妆台/],
   ['bed', /床/],
   ['roundTable', /圆桌|圆形茶几|圆几/],
   ['wardrobe', /衣柜|衣橱|衣帽间|壁柜|储物柜/],
@@ -88,6 +98,11 @@ const KIND_RE: Array<[FurnitureKind, RegExp]> = [
   ['chair', /椅|凳/],
   ['toilet', /马桶|座便器/],
   ['sink', /洗手池|洗手盆|洗脸盆|洗漱台|水槽/],
+  ['bathtub', /浴缸|浴盆|泡澡桶/],
+  ['shoeCabinet', /鞋柜|玄关柜|门厅柜|鞋橱/],
+  ['stove', /灶台|燃气灶|炉灶|灶具/],
+  ['oven', /烤箱/],
+  ['microwave', /微波炉|微波/],
   ['fridge', /冰箱/],
   ['washer', /洗衣机/],
 ]
@@ -103,11 +118,12 @@ export function furnitureKind(name: string): FurnitureKind {
 
 /**
  * 每类家具背侧的局部方向（规范朝向下背侧贴墙的那一侧，north=+z、east=+x…）。
- * - 柜/冰箱/洗衣机/书架：门朝前（+z），背侧 -z（south）；
- * - 沙发/椅子/马桶/洗手池：靠背/水箱/盆朝墙（+z）；
- * - 床不在此表（单独处理，床头在长轴端）。
+ * - 柜/冰箱/洗衣机/书架/鞋柜/烤箱/微波炉/床头柜：门朝前（+z），背侧 -z（south）；
+ * - 沙发/椅子/马桶/洗手池/梳妆台：靠背/水箱/盆/镜面朝墙（+z）；
+ * - 灶台：操作台面朝使用者（-z），背侧 +z（north），同书桌；
+ * - 床与浴缸不在此表（单独处理，背侧沿长轴）。
  */
-const BACK_DIR: Record<Exclude<FurnitureKind, 'bed' | 'generic'>, FacingDir> = {
+const BACK_DIR: Record<Exclude<FurnitureKind, 'bed' | 'bathtub' | 'generic'>, FacingDir> = {
   wardrobe: 'south',
   desk: 'north',
   sofa: 'north',
@@ -120,11 +136,17 @@ const BACK_DIR: Record<Exclude<FurnitureKind, 'bed' | 'generic'>, FacingDir> = {
   roundTable: 'north',
   bookcase: 'south',
   washer: 'south',
+  nightstand: 'south',
+  dressingTable: 'north',
+  shoeCabinet: 'south',
+  stove: 'north',
+  oven: 'south',
+  microwave: 'south',
 }
 
 /**
  * 每类家具背侧沿哪条轴贴墙：
- * - long（床）：床头在长轴端、跨短边，朝向由**长轴**方向上最近的墙决定；
+ * - long（床/浴缸）：床头在长轴端/浴缸长边贴墙，朝向由**长轴**方向上最近的墙决定；
  * - short（柜/沙发等）：背侧沿进深（短轴），朝向由**短轴**上最近的墙决定。
  */
 export const BACK_AXIS: Record<FurnitureKind, 'long' | 'short'> = {
@@ -141,6 +163,13 @@ export const BACK_AXIS: Record<FurnitureKind, 'long' | 'short'> = {
   roundTable: 'short',
   bookcase: 'short',
   washer: 'short',
+  bathtub: 'long',
+  nightstand: 'short',
+  dressingTable: 'short',
+  shoeCabinet: 'short',
+  stove: 'short',
+  oven: 'short',
+  microwave: 'short',
   generic: 'short',
 }
 
@@ -508,7 +537,188 @@ function washerParts(L: number, H: number, W: number): FurniturePart[] {
   ]
 }
 
-const BUILDERS: Record<Exclude<FurnitureKind, 'bed' | 'generic'>, (L: number, H: number, W: number) => FurniturePart[]> = {
+/** 浴缸：缸体外壳（主色）+ 内胆（深色，顶部内嵌）+ 端头水龙头（副色）。背侧沿长轴贴墙（同床处理）。 */
+function buildBathtubParts(L: number, H: number, W: number, facing: FacingDir): FurniturePart[] {
+  const tubH = clamp(H * 0.55, 0.35, 0.6)
+  const tubY = yFromFloor(tubH / 2, H)
+  const innerH = clamp(H * 0.14, 0.05, 0.12)
+  const innerY = yFromFloor(tubH - innerH / 2, H)
+  const longIsX = L >= W
+  const long = Math.max(L, W)
+  const short = Math.min(L, W)
+  const innerSize: [number, number, number] = longIsX
+    ? [long - 0.12, innerH, short - 0.18]
+    : [short - 0.18, innerH, long - 0.12]
+  // 水龙头在长轴端（背侧端头，同床头方向），跨短边居中
+  const faucetAlongX = longIsX ? (facing === 'east' ? 1 : -1) : 0
+  const faucetAlongZ = longIsX ? 0 : facing === 'north' ? 1 : -1
+  const inset = 0.06
+  const faucetX = faucetAlongX !== 0 ? faucetAlongX * (long / 2 - inset) : 0
+  const faucetZ = faucetAlongZ !== 0 ? faucetAlongZ * (long / 2 - inset) : 0
+  const faucetH = clamp(H * 0.8, 0.3, 0.6)
+  const faucetY = yFromFloor(faucetH / 2, H)
+  const faucetSize: [number, number, number] = longIsX
+    ? [0.06, faucetH, short * 0.35]
+    : [short * 0.35, faucetH, 0.06]
+  return [
+    { center: [0, tubY, 0], size: [L, tubH, W], shade: 'base' },
+    { center: [0, innerY, 0], size: innerSize, shade: 'dark' },
+    { center: [faucetX, faucetY, faucetZ], size: faucetSize, shade: 'secondary' },
+  ]
+}
+
+/** 床头柜：柜体（主色，前脸后缩）+ 抽屉面（深色，凸出贴前脸）+ 顶板（副色） */
+function nightstandParts(L: number, H: number, W: number): FurniturePart[] {
+  const bodyH = H * 0.92
+  const bodyY = yFromFloor(bodyH / 2, H)
+  const drawerTh = clamp(W * 0.12, 0.02, 0.04)
+  const bodyRecess = drawerTh + 0.02
+  const bodyZ = W - bodyRecess
+  const bodyCenterZ = -bodyRecess / 2
+  const drawerH = clamp(H * 0.34, 0.08, 0.18)
+  const drawerY = yFromFloor(H * 0.42, H)
+  const drawerZ = W / 2 - drawerTh / 2
+  const topTh = clamp(H * 0.08, 0.02, 0.04)
+  const topY = yFromFloor(H - topTh / 2, H)
+  return [
+    { center: [0, bodyY, bodyCenterZ], size: [L, bodyH, bodyZ], shade: 'base' },
+    { center: [0, drawerY, drawerZ], size: [L * 0.9, drawerH, drawerTh], shade: 'dark' },
+    { center: [0, topY, 0], size: [L, topTh, W], shade: 'secondary' },
+  ]
+}
+
+/** 梳妆台：桌面（主色）+ 四条桌腿（副色）+ 镜面（深色，贴后墙、顶部允许向上悬挑） */
+function dressingTableParts(L: number, H: number, W: number): FurniturePart[] {
+  const topTh = clamp(H * 0.08, 0.03, 0.05)
+  const topY = yFromFloor(H - topTh / 2, H)
+  const legTh = clamp(Math.min(L, W) * 0.07, 0.03, 0.05)
+  const legH = H - topTh
+  const legY = yFromFloor(legH / 2, H)
+  const legX = L / 2 - legTh / 2 - 0.02
+  const legZ = W / 2 - legTh / 2 - 0.02
+  const mirrorH = clamp(H * 1.1, 0.4, 0.7)
+  const mirrorY = yFromFloor(H - topTh + mirrorH / 2, H)
+  const mirrorTh = clamp(W * 0.06, 0.02, 0.04)
+  const mirrorZ = W / 2 - mirrorTh / 2
+  const mirrorW = Math.min(clamp(L * 0.8, 0.4, 0.9), L)
+  return [
+    { center: [0, topY, 0], size: [L, topTh, W], shade: 'base' },
+    { center: [legX, legY, legZ], size: [legTh, legH, legTh], shade: 'secondary' },
+    { center: [-legX, legY, legZ], size: [legTh, legH, legTh], shade: 'secondary' },
+    { center: [legX, legY, -legZ], size: [legTh, legH, legTh], shade: 'secondary' },
+    { center: [-legX, legY, -legZ], size: [legTh, legH, legTh], shade: 'secondary' },
+    { center: [0, mirrorY, mirrorZ], size: [mirrorW, mirrorH, mirrorTh], shade: 'dark' },
+  ]
+}
+
+/** 鞋柜：柜体（主色，前脸后缩）+ 上下两扇门（深色，中缝明显） */
+function shoeCabinetParts(L: number, H: number, W: number): FurniturePart[] {
+  const bodyH = H * 0.97
+  const bodyY = yFromFloor(bodyH / 2, H)
+  const doorTh = clamp(W * 0.12, 0.03, 0.06)
+  const bodyRecess = doorTh + 0.02
+  const bodyZ = W - bodyRecess
+  const bodyCenterZ = -bodyRecess / 2
+  const doorZ = W / 2 - doorTh / 2
+  const gap = clamp(H * 0.03, 0.01, 0.04)
+  const topDoorH = clamp(H * 0.45, 0.18, 0.35)
+  const topDoorY = yFromFloor(H - gap - topDoorH / 2, H)
+  const bottomDoorH = H - topDoorH - gap
+  const bottomDoorY = yFromFloor(bottomDoorH / 2, H)
+  const doorW = L * 0.9
+  return [
+    { center: [0, bodyY, bodyCenterZ], size: [L, bodyH, bodyZ], shade: 'base' },
+    { center: [0, topDoorY, doorZ], size: [doorW, topDoorH, doorTh], shade: 'dark' },
+    { center: [0, bottomDoorY, doorZ], size: [doorW, bottomDoorH, doorTh], shade: 'dark' },
+  ]
+}
+
+/** 灶台：柜体（主色）+ 台面（副色）+ 四个炉头（深色圆柱）+ 前缘控制条（深色，贴前脸） */
+function stoveParts(L: number, H: number, W: number): FurniturePart[] {
+  const bodyH = H * 0.85
+  const bodyY = yFromFloor(bodyH / 2, H)
+  const topTh = clamp(H * 0.07, 0.03, 0.05)
+  const topY = yFromFloor(H - topTh / 2, H)
+  const burnerR = clamp(Math.min(L, W) * 0.12, 0.04, 0.08)
+  const burnerY = yFromFloor(H - topTh - 0.005, H)
+  const qx = L / 4
+  const qz = W / 4
+  const burners: FurniturePart[] = (
+    [
+      [qx, qz],
+      [-qx, qz],
+      [qx, -qz],
+      [-qx, -qz],
+    ] as const
+  ).map(([bx, bz]) => ({
+    center: [bx, burnerY, bz],
+    size: [burnerR, 0.02, burnerR],
+    shape: 'cylinder',
+    shade: 'dark',
+  }))
+  const ctrlH = clamp(H * 0.12, 0.04, 0.08)
+  const ctrlY = yFromFloor(bodyH - ctrlH / 2, H)
+  const ctrlTh = clamp(W * 0.08, 0.03, 0.05)
+  const ctrlZ = -W / 2 + ctrlTh / 2
+  const ctrlW = Math.min(clamp(L * 0.7, 0.3, 0.8), L)
+  return [
+    { center: [0, bodyY, 0], size: [L, bodyH, W], shade: 'base' },
+    { center: [0, topY, 0], size: [L, topTh, W], shade: 'secondary' },
+    ...burners,
+    { center: [0, ctrlY, ctrlZ], size: [ctrlW, ctrlH, ctrlTh], shade: 'dark' },
+  ]
+}
+
+/** 烤箱：柜体（主色，前脸后缩）+ 深色玻璃门（凸出贴前脸）+ 内嵌把手条（副色） */
+function ovenParts(L: number, H: number, W: number): FurniturePart[] {
+  const bodyH = H * 0.98
+  const bodyY = yFromFloor(bodyH / 2, H)
+  const doorTh = clamp(W * 0.1, 0.04, 0.07)
+  const bodyRecess = doorTh + 0.02
+  const bodyZ = W - bodyRecess
+  const bodyCenterZ = -bodyRecess / 2
+  const doorZ = W / 2 - doorTh / 2
+  const doorH = clamp(H * 0.8, 0.3, 0.55)
+  const doorY = yFromFloor((H - doorH) / 2 + doorH / 2, H)
+  // 把手条内嵌于门面（不凸出前脸，避免越足迹），深色门上浅色横条示意
+  const handleTh = clamp(W * 0.04, 0.01, 0.02)
+  const handleH = clamp(H * 0.03, 0.01, 0.02)
+  const handleY = yFromFloor(H - handleH / 2 - clamp(H * 0.05, 0.02, 0.06), H)
+  const handleZ = doorZ - doorTh / 2 + handleTh / 2
+  return [
+    { center: [0, bodyY, bodyCenterZ], size: [L, bodyH, bodyZ], shade: 'base' },
+    { center: [0, doorY, doorZ], size: [L * 0.86, doorH, doorTh], shade: 'dark' },
+    { center: [0, handleY, handleZ], size: [L * 0.5, handleH, handleTh], shade: 'secondary' },
+  ]
+}
+
+/** 微波炉：柜体（主色，前脸后缩）+ 深色门（凸出贴前脸）+ 右侧控制面板（副色） */
+function microwaveParts(L: number, H: number, W: number): FurniturePart[] {
+  const bodyH = H * 0.98
+  const bodyY = yFromFloor(bodyH / 2, H)
+  const doorTh = clamp(W * 0.12, 0.04, 0.08)
+  const bodyRecess = doorTh + 0.02
+  const bodyZ = W - bodyRecess
+  const bodyCenterZ = -bodyRecess / 2
+  const doorZ = W / 2 - doorTh / 2
+  const doorH = clamp(H * 0.7, 0.2, 0.3)
+  const doorY = yFromFloor((H - doorH) / 2 + doorH / 2, H)
+  const doorW = Math.min(clamp(L * 0.7, 0.25, 0.45), L - 0.05)
+  const gap = 0.05
+  const panelW = Math.max(0, L - doorW - gap)
+  // 门左缘与柜体左缘对齐（x 最左侧），面板居右侧，总宽 = L
+  const doorCenterX = -L / 2 + doorW / 2
+  const panelCenterX = doorCenterX + doorW / 2 + gap + panelW / 2
+  const panelH = clamp(H * 0.5, 0.12, 0.2)
+  const panelY = yFromFloor(H * 0.55, H)
+  return [
+    { center: [0, bodyY, bodyCenterZ], size: [L, bodyH, bodyZ], shade: 'base' },
+    { center: [doorCenterX, doorY, doorZ], size: [doorW, doorH, doorTh], shade: 'dark' },
+    { center: [panelCenterX, panelY, doorZ], size: [panelW, panelH, doorTh], shade: 'secondary' },
+  ]
+}
+
+const BUILDERS: Record<Exclude<FurnitureKind, 'bed' | 'bathtub' | 'generic'>, (L: number, H: number, W: number) => FurniturePart[]> = {
   wardrobe: wardrobeParts,
   desk: deskParts,
   sofa: sofaParts,
@@ -521,6 +731,12 @@ const BUILDERS: Record<Exclude<FurnitureKind, 'bed' | 'generic'>, (L: number, H:
   roundTable: roundTableParts,
   bookcase: bookcaseParts,
   washer: washerParts,
+  nightstand: nightstandParts,
+  dressingTable: dressingTableParts,
+  shoeCabinet: shoeCabinetParts,
+  stove: stoveParts,
+  oven: ovenParts,
+  microwave: microwaveParts,
 }
 
 /**
@@ -537,6 +753,7 @@ export function buildFurnitureParts(
   facing: FacingDir = 'north',
 ): FurniturePart[] {
   if (kind === 'bed') return buildBedParts(L, H, W, facing)
+  if (kind === 'bathtub') return buildBathtubParts(L, H, W, facing)
   if (kind === 'generic') {
     return [{ center: [0, 0, 0], size: [L, H, W], shade: 'base' }]
   }

@@ -23,6 +23,8 @@ beforeEach(() => {
     stepSize: 0.5,
     gizmoMode: 'translate',
     planTool: 'select',
+    openingKind: 'door',
+    showPlanDims: true,
     screenshotMode: false,
     initialPositions: {},
     past: [],
@@ -314,6 +316,15 @@ describe('useModelStore 平面图编辑（P4）', () => {
     expect(useModelStore.getState().planTool).toBe('vertex')
     useModelStore.getState().setScene(createSampleModel())
     expect(useModelStore.getState().planTool).toBe('select')
+  })
+
+  it('showPlanDims 会话内可切换（默认显示，关闭后不随 setScene 复位）', () => {
+    expect(useModelStore.getState().showPlanDims).toBe(true)
+    useModelStore.getState().setShowPlanDims(false)
+    expect(useModelStore.getState().showPlanDims).toBe(false)
+    // 视图偏好与场景无关：载入新场景保持用户选择
+    useModelStore.getState().setScene(createSampleModel())
+    expect(useModelStore.getState().showPlanDims).toBe(false)
   })
 
   it('previewFootprint 实时替换房间足迹（不记历史、不记录编辑日志）', () => {

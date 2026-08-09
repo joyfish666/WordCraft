@@ -7,6 +7,7 @@ import {
   getPathToNode,
   normalizeContainment,
   updateNodeFields,
+  updateNodeFootprint,
   updateNodePosition,
 } from './modelTree'
 import type { FurnitureNode, RoomNode, SceneModel } from '../types/model'
@@ -49,6 +50,65 @@ describe('modelTree', () => {
     expect(roomCenterOf(moved).z).toBeCloseTo(oldCenter.z)
     // 足迹尺寸不变
     expect(footprintSizeOf(moved)).toEqual(footprintSizeOf(master))
+  })
+
+  it('updateNodePosition 移动房间带动家具与嵌套房间（整体平移，相对关系不变）', () => {
+    const bedBefore = (findNodeById(scene.root, 'bed-master') as FurnitureNode).position
+    const bathBefore = footprintCenter((findNodeById(scene.root, 'bath-master') as RoomNode).footprint)
+    const toiletBefore = (findNodeById(scene.root, 'toilet-master') as FurnitureNode).position
+    const master = findNodeById(scene.root, 'room-master') as RoomNode
+    const c = roomCenterOf(master)
+    const dx = 1.5
+    const dz = -0.75
+    const next = updateNodePosition(scene.root, 'room-master', { x: c.x + dx, y: 1.4, z: c.z + dz })
+    const bed = findNodeById(next, 'bed-master') as FurnitureNode
+    const bath = findNodeById(next, 'bath-master') as RoomNode
+    const toilet = findNodeById(next, 'toilet-master') as FurnitureNode
+    // 家具与嵌套房间（含其家具）随房间平移同量位移
+    expect(bed.position.x).toBeCloseTo(bedBefore.x + dx, 5)
+    expect(bed.position.z).toBeCloseTo(bedBefore.z + dz, 5)
+    expect(footprintCenter(bath.footprint).x).toBeCloseTo(bathBefore.x + dx, 5)
+    expect(footprintCenter(bath.footprint).z).toBeCloseTo(bathBefore.z + dz, 5)
+    expect(toilet.position.x).toBeCloseTo(toiletBefore.x + dx, 5)
+    expect(toilet.position.z).toBeCloseTo(toiletBefore.z + dz, 5)
+    // 嵌套房间仍被约束在父房间内部（相对关系不变）
+    const mb = footprintBounds((findNodeById(next, 'room-master') as RoomNode).footprint)
+    const bb = footprintBounds(bath.footprint)
+    expect(bb.minX).toBeGreaterThanOrEqual(mb.minX - 1e-6)
+    expect(bb.maxX).toBeLessThanOrEqual(mb.maxX + 1e-6)
+  })
+
+  it('updateNodeFields position 补丁移动房间同样带动家具', () => {
+    const master = findNodeById(scene.root, 'room-master') as RoomNode
+    const c = footprintCenter(master.footprint)
+    const bedBefore = (findNodeById(scene.root, 'bed-master') as FurnitureNode).position
+    const next = updateNodeFields(scene.root, 'room-master', { position: { x: c.x + 1, z: c.z } })
+    const bed = findNodeById(next, 'bed-master') as FurnitureNode
+    expect(bed.position.x).toBeCloseTo(bedBefore.x + 1, 5)
+    expect(bed.position.z).toBeCloseTo(bedBefore.z, 5)
+  })
+
+  it('updateNodeFootprint 纯平移时带动家具，改形状时家具保持原位', () => {
+    const master = findNodeById(scene.root, 'room-master') as RoomNode
+    const bedBefore = (findNodeById(scene.root, 'bed-master') as FurnitureNode).position
+    // 纯平移：所有顶点同量位移 → 家具随动
+    const moved = updateNodeFootprint(
+      scene.root,
+      'room-master',
+      master.footprint.map((p) => ({ x: p.x + 2, z: p.z + 1 })),
+    )
+    const bedMoved = findNodeById(moved, 'bed-master') as FurnitureNode
+    expect(bedMoved.position.x).toBeCloseTo(bedBefore.x + 2, 5)
+    expect(bedMoved.position.z).toBeCloseTo(bedBefore.z + 1, 5)
+    // 改形状（仅北边外扩）：家具保持原位，等待 normalizeContainment 处理
+    const resized = updateNodeFootprint(
+      scene.root,
+      'room-master',
+      master.footprint.map((p, i) => (i === 2 ? { x: p.x, z: p.z + 1 } : p)),
+    )
+    const bedResized = findNodeById(resized, 'bed-master') as FurnitureNode
+    expect(bedResized.position.x).toBeCloseTo(bedBefore.x, 5)
+    expect(bedResized.position.z).toBeCloseTo(bedBefore.z, 5)
   })
 
   it('updateNodeFields 部分补丁合并更新（名称/尺寸/位置）', () => {

@@ -80,15 +80,45 @@ export function countNodes(root: ModelNode): number {
   return count
 }
 
+/**
+ * 平移房间（足迹 + 家具 + 嵌套房间，递归），保持内部相对关系。
+ * 房间位移必须整体携带内容：家具保持相对房间中心的位置、嵌套房间及其家具同步平移，
+ * 否则 normalizeContainment 只会把家具钳制进（移动后的）房间边界，破坏相对布局。
+ */
+export function translateRoomContents(room: RoomNode, dx: number, dz: number): RoomNode {
+  return {
+    ...room,
+    footprint: translateFootprint(room.footprint, dx, dz),
+    furniture: room.furniture.map((f) => ({
+      ...f,
+      position: { ...f.position, x: f.position.x + dx, z: f.position.z + dz },
+    })),
+    nestedRooms: room.nestedRooms.map((n) => translateRoomContents(n, dx, dz)),
+  }
+}
+
+/** 判断新足迹是否为旧足迹的纯平移（每顶点位移一致）；非纯平移（改形状/缩放）返回 null */
+function footprintTranslation(
+  before: Point2D[],
+  after: Point2D[],
+): { dx: number; dz: number } | null {
+  if (before.length !== after.length || before.length === 0) return null
+  const dx = after[0].x - before[0].x
+  const dz = after[0].z - before[0].z
+  if (dx === 0 && dz === 0) return null
+  for (let i = 1; i < before.length; i++) {
+    if (Math.abs(after[i].x - before[i].x - dx) > 1e-9) return null
+    if (Math.abs(after[i].z - before[i].z - dz) > 1e-9) return null
+  }
+  return { dx, dz }
+}
+
 /** 不可变更新：将指定节点的 position 替换为新值（房间 → 平移足迹），返回新的树 */
 export function updateNodePosition(root: ModelNode, id: string, position: Position): ModelNode {
   if (root.id === id) {
     if (root.type === 'room') {
       const c = footprintCenter(root.footprint)
-      return {
-        ...root,
-        footprint: translateFootprint(root.footprint, position.x - c.x, position.z - c.z),
-      }
+      return translateRoomContents(root, position.x - c.x, position.z - c.z)
     }
     if (root.type === 'house') return root // 整屋无 position 字段
     return { ...root, position }
@@ -114,6 +144,10 @@ export function updateNodePosition(root: ModelNode, id: string, position: Positi
 export function updateNodeFootprint(root: ModelNode, id: string, footprint: Point2D[]): ModelNode {
   if (root.id === id) {
     if (root.type !== 'room') return root // 仅房间有足迹
+    // 足迹变化是纯平移时（如编辑日志回放 updateRoom.patch.footprint 的房间移动），
+    // 家具与嵌套房间须同步平移，与 updateNodePosition/updateNodeFields 行为一致
+    const t = footprintTranslation(root.footprint, footprint)
+    if (t) return translateRoomContents(root, t.dx, t.dz)
     return { ...root, footprint }
   }
   if (isContainer(root)) {
@@ -221,7 +255,7 @@ export function updateNodeFields(root: ModelNode, id: string, patch: NodeFieldsP
       return { ...root, name: patch.name }
     }
     if (root.type === 'room') {
-      const next: RoomNode = { ...root }
+      let next: RoomNode = { ...root }
       if (patch.name !== undefined) next.name = patch.name
       if (patch.dimensions) {
         const d = patch.dimensions
@@ -239,7 +273,7 @@ export function updateNodeFields(root: ModelNode, id: string, patch: NodeFieldsP
         const c = footprintCenter(root.footprint)
         const dx = (patch.position.x ?? c.x) - c.x
         const dz = (patch.position.z ?? c.z) - c.z
-        if (dx !== 0 || dz !== 0) next.footprint = translateFootprint(root.footprint, dx, dz)
+        if (dx !== 0 || dz !== 0) next = translateRoomContents(next, dx, dz)
       }
       return next
     }

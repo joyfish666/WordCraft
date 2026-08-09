@@ -1,15 +1,16 @@
 import { Html } from '@react-three/drei'
 import { useMemo } from 'react'
-import { houseDims, roomCenter, roomDims } from '../../lib/footprint'
+import { houseDims, roomCenter } from '../../lib/footprint'
 import { roomFaceColor } from '../../lib/palette'
-import { dimensionLines, houseBounds, roomLabelText, walkRooms } from '../../lib/planGeometry'
+import { dimensionLines, houseBounds, walkRooms } from '../../lib/planGeometry'
 import { useModelStore } from '../../store/useModelStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
 import type { Lang } from '../../i18n/translations'
 
 /**
  * 2D 俯视平面图的标注层（仅 planMode 渲染）：
- * - 每个房间中心显示「名称 长×宽」标签，颜色与 3D 一致（roomFaceColor）；
+ * - 每个房间中心显示「名称」标签（尺寸已由 PlanEnhancements 尺寸线/足迹呈现，标签不重复尺寸），
+ *   颜色与 3D 一致（roomFaceColor）；
  * - 整屋外廓显示尺寸线（总长/总宽），绘制在包围盒外、墙顶之上。
  */
 export function PlanAnnotations() {
@@ -51,7 +52,7 @@ export function PlanAnnotations() {
               }`}
             >
               <span className="plan-label__chip" style={{ background: color }} />
-              <span>{roomLabelText(node.name, roomDims(node))}</span>
+              <span>{node.name}</span>
             </div>
           </Html>
         )

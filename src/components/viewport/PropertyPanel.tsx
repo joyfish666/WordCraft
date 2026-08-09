@@ -215,17 +215,17 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
           <button type="button" className="prop-nudge__btn" title={t('property.nudgeEast')} onClick={() => translateSelected(stepSize, 0, 0)}>
             {t('property.east')}
           </button>
-          <button type="button" className="prop-nudge__btn" title={t('property.nudgeSouth')} onClick={() => translateSelected(0, 0, -stepSize)}>
-            {t('property.south')}
+          <button type="button" className="prop-nudge__btn" title={t('property.nudgeNorth')} onClick={() => translateSelected(0, 0, stepSize)}>
+            {t('property.north')}
           </button>
           <button type="button" className="prop-nudge__btn" title={t('property.nudgeUp')} onClick={() => translateSelected(0, stepSize, 0)}>
             {t('property.up')}
           </button>
-          <button type="button" className="prop-nudge__btn" title={t('property.nudgeNorth')} onClick={() => translateSelected(0, 0, stepSize)}>
-            {t('property.north')}
-          </button>
           <button type="button" className="prop-nudge__btn" title={t('property.nudgeWest')} onClick={() => translateSelected(-stepSize, 0, 0)}>
             {t('property.west')}
+          </button>
+          <button type="button" className="prop-nudge__btn" title={t('property.nudgeSouth')} onClick={() => translateSelected(0, 0, -stepSize)}>
+            {t('property.south')}
           </button>
           <button type="button" className="prop-nudge__btn" title={t('property.nudgeDown')} onClick={() => translateSelected(0, -stepSize, 0)}>
             {t('property.down')}

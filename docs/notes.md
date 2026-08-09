@@ -90,7 +90,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 24. **相机切换必须用 drei 相机组件**：R3F 核心**不处理** `makeDefault`，只有 drei 的 `OrthographicCamera`/`PerspectiveCamera` 封装才切换 `state.camera` 并在卸载时恢复。`SceneViewer` 用 `{planMode && <OrthographicCamera makeDefault .../>}` + `<OrbitControls key={planMode?'ortho':'persp'} .../>`（key 强制重挂载绑定新相机）+ `enableRotate={!planMode}`。
 25. **正交相机 pan 公式**：`SceneViewer.pan` 对正交相机 scale = `1/zoom`（drei ortho frustum 恒等于像素尺寸）；透视分支保持 `2*distance*tan(fov/2)/clientHeight`。别把透视公式套到正交上。正北朝上靠 `camera.up.set(0,0,1)` + `lookAt(整屋中心)`。
 26. **方向约定（务必读）：世界 +x=东、+z=北，罗盘/地图/属性面板全部一致，渲染整体沿 X 镜像**。注意：**+x=东、+z=北 是左手系**（右手系在 x=东、y=上 时 z 必为南，如 Minecraft 的 +z=南），因此不镜像时 3D 渲染相对"人站在场景中"天然左右镜像。现行做法：**3D 与 2D 平面图内容都放在 `scale=[-1,1,1]` 的镜像组里**（`SceneViewer`），呈现标准地图方向——**上北下南、左西右东**；默认相机在南侧（`[0,9,-10]` 朝北看，正对入户门），镜像后东在屏幕右侧，与平面图一致。配套三处镜像补偿（改其中任何一处都要同步检查）：
-   ① 世界锚定罗盘（`WorldCompass`）在镜像组内渲染，锚点自动随内容镜像，无需额外处理；
+   ① 世界锚定罗盘（`WorldCompass`）在镜像组内渲染，锚点自动随内容镜像，无需额外处理；**但标签定位要按各方向自己的半宽/半深 + 边距（2026-08-10）**：旧实现用 `max(半宽,半深)` 从中心算距离，宽度 > 深度时东/西标签比南/北更贴近房屋，东字会盖住东侧「总宽」尺寸标签（用户反馈）；且 DOM 标签世界宽度随缩放变化（12px 文字 + 内边距约 0.6~1.9m），边距需 2.8m 才够让开（尺寸线标签中心在房沿外 1.1m、文字可伸到 ~1.9m）；
    ② 右上角覆盖层罗盘（`CornerCompassSensor`）在组外（DOM），按相机矩阵投影世界方向——**必须把方向 x 取反再投影**（内容镜像了，世界方向也要镜像，否则 E/W 标签指反）；
    ③ **Gizmo（TransformControls）必须渲染在镜像组之外**，代理坐标取节点镜像位置（`-x, y, z`），读写处对称还原（`GizmoControls` 的 sync/readback 各有一处取反）——放在组内会因「手柄渲染镜像 + 拖拽沿世界轴」导致拖拽方向视觉反转（坑 55）。
    属性面板微调按钮 东=+x、西=-x，与镜像后的视觉（东在右）一致。**改罗盘/平面图/Gizmo/相机时别再按旧镜像约定改回去**。
@@ -108,9 +108,9 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 ### 3.7 家具部件模型
 
-32. **家具部件模型（v1.4.0，13 类）**：
-   ① `furnitureKind` 分类器必须**先排除易误判词**再宽松匹配（`床头柜` 含「床」会误套床造型 → `GENERIC_GUARD_RE` 先归 generic）；
-   ② **水平（x/z）必须钳制在 L×W 足迹内、底面贴地**——测试硬性断言覆盖 13 类 × 小/大尺寸 × 四朝向；**竖直顶部允许向上悬挑**（电视柜上的电视屏高于盒顶），别把 y 上界当硬约束；
+32. **家具部件模型（v1.4.0，20 类）**：
+   ① `furnitureKind` 分类器必须**先排除易误判词**再宽松匹配（`床尾凳` 含「床」会误套床造型 → `GENERIC_GUARD_RE` 先归 generic；**词表顺序敏感**：`床头柜/床边柜` 必须排在 `床` 之前、`电视柜` 排在 `电视` 之前，含子串的宽松词后置）；
+   ② **水平（x/z）必须钳制在 L×W 足迹内、底面贴地**——测试硬性断言覆盖 20 类 × 小/大尺寸 × 四朝向；**竖直顶部允许向上悬挑**（电视柜上的电视屏/梳妆台镜面高于盒顶），别把 y 上界当硬约束；
    ③ **朝向用 `facingFromRoom(node, room, BACK_AXIS[kind])`**（不是最近墙）：柜/沙发等背侧沿**短轴**——朝短轴上最近的墙；**床单独处理**：床头在**长轴端**（短边中间），朝长轴上最近的墙。用「最近墙」会出错：转角衣柜 tie 到相邻墙后柜门开到小面。`parentRoom` 由 `ModelNodeView` 房间分支下传，改代码别漏；
    ④ 渲染用 `<group onClick>` + 各部件 mesh（点击任一部分选中整件），**选中轮廓是并集包围盒的隐形 box + Edges，须 `raycast={() => null}`**（同坑 4）；
    ⑤ 配色三档：主色 / 副色 / 深色强调（标准与色盲模式均可辨）；
@@ -137,7 +137,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 - **手动编辑不触发重排**：改房间尺寸/位置不会重跑布局引擎（见坑 22）。
 - **家具-家具避让是"贪心顺序"**：生成时常理按 children 顺序逐个放置并避让已放置家具，非全局最优。
 - **属性面板/Gizmo 编辑不避让门口**：`normalizeContainment` 只约束进父房间外边界与推出嵌套占地。
-- **房间移动不带动家具**：移动房间（属性面板/Gizmo/平面图移动工具）只平移足迹，家具保持绝对坐标再被 `normalizeContainment` 约束进新房间内（与 Gizmo 既有行为一致；v2 语义下 LLM 看到的仍是 footprint op）。
+- ~~**房间移动不带动家具**~~（**已修复**：移动房间（属性面板微调/复位、X/Z 数值框、Gizmo 拖拽、平面图移动工具、LLM `moveRoom`）整体平移足迹 + 家具 + 嵌套房间，相对关系不变——`modelTree.translateRoomContents`；`updateNodeFootprint` 对纯平移足迹同样带动家具（保证编辑日志 `updateRoom.patch.footprint` 回放行为一致）。改形状/缩放仍只约束进墙内）。
 - **LLM 输出质量依赖提示词**（当前 DeepSeek v4-flash）。多轮修改、家具常理摆放等依赖 LLM 遵循度。
 - **拆分仅支持矩形房间**：`splitRoom` 只接受 4 点矩形足迹（L 形等需先拖顶点/或用 addRoom 重建）；合并要求并集为合法矩形（面积守恒）。
 - **无楼梯/无楼层**：`LevelNode` 已在模型中预留单层，楼层/楼梯属 Phase 5。
@@ -191,6 +191,16 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 54. **拆房切线的确定性**：splitRoom 的 position 是世界坐标（不是局部区间），矩形判定用 `footprintIsRect`（4 点轴对齐环）；切线两侧必须各 ≥ `MIN_ROOM_SIDE`(1m)（房间过小/切线太靠边直接拒绝，UI alert 提示）；开洞重映射按「边方向（几何判定，不依赖环起点）+ 沿边世界区间」归属 A/B，跨切线丢弃。
 55. **Gizmo 必须在镜像组之外渲染，代理坐标 x 取反**（坑 26 的③，2026-08-09 落实）：3D 内容整体沿 X 镜像（左手系补偿）后，TransformControls 若仍在镜像组内——手柄网格随组镜像（+x 手柄显示在左），但拖拽位移仍沿世界 +x 应用（对象往右移动）→ **手柄方向与拖拽效果视觉反转**。修法：`GizmoControls` 移到镜像组外，代理 `position.x` 取反与节点的视觉位置对齐（节点世界 (x,y,z) → 代理 (-x,y,z)），`handleObjectChange` 提交时 `x: -g.position.x` 还原；scale 模式不受影响（缩放对镜像对称）。
 
+### 3.12 平面图增强（README 路线图「2D 平面图增强」，2026-08-10 落地实录）
+
+> 不属于 design.md 的 P5（P5 = 约束图/楼层/风格）。平面图模式下 3D 家具网格改由 `PlanEnhancements` 的 2D 足迹呈现（`ModelNodeView` 透传 `planMode` 跳过渲染），门窗符号与墙体方案同源（`computeAllWallPlans`），房间尺寸线为顶层房间内标注。
+
+56. **尺寸信息会盖在房间上——必须提供开关**（2026-08-10 用户反馈）：房间内部尺寸线（`roomDimLines`）叠加在房间上会遮挡内容。方案：`useModelStore.showPlanDims`（会话内，默认开、不随 setScene 复位——视图偏好与场景无关）控制渲染，工具栏「尺寸」开关独立一行（第二行，不挤占工具行）。⚠️ 尺寸线「仅选择工具时显示」（编辑工具下让位），开关 ≠ 工具联动。
+57. **房间标签不要重复尺寸**（2026-08-10 用户反馈）：尺寸线已标注长宽后，房间标签再显示「厨房 3.5×3」是重复信息。方案：**标签恒只显示名称**（`PlanAnnotations` 不再调 `roomLabelText`，该函数已随死代码删除）——比"开关联动"更简单且不会因开关/工具状态变化导致标签闪烁。
+58. **空文案提示条会露出黑底空胶囊**（2026-08-10 用户反馈"火腿肠"）：`.plan-toolbar__hint` 是黑底圆角胶囊（`rgba(20,22,27,0.72)` + border-radius），选择工具下文案为空仍渲染出空胶囊。方案：HomePage 里 `planTool !== 'select'` 时才渲染提示条（不要再加空内容 div）。
+59. **平面图增强的三层高度与编辑层交互平面不冲突**：足迹 0.14 / 门窗符号 0.25 / 尺寸线 0.35，全部低于 `PlanEditLayer` 交互平面 0.5——编辑工具下平面先命中（相机俯视按距离排序），足迹/符号不会拦截指针；选择工具下无交互平面，足迹（`onClick` + stopPropagation）可选中家具。改高度时别抬到 0.5 以上。
+60. **门扇符号弧线：atan2 差值恒为 ±π/2，天然是 90° 短弧且落在房间内**：铰链端（段起点门框角）→ 门扇线垂直入房间；弧线从门扇端点扫到洞口另一端，首尾点取精确坐标（浮点缝隙会导致线与墙之间出现断点）。窗洞符号 = 向内偏移 0.1/0.22 的双线（经典双线示意）。
+
 ## 6. 快速文件地图
 
 | 需求 | 改哪里 |
@@ -216,6 +226,8 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | 家具部件模型（分类/拼装/包围盒） | `lib/furniturePresets.ts` + `ModelNodeView.tsx`（`FurnitureMesh`） |
 | 项目库 UI/保存/守卫 | `ProjectLibraryDialog.tsx` + `HomePage.tsx` + `db/database.ts` + `store/useProjectStore.ts` |
 | 2D 平面图（取景/标注） | `lib/planGeometry.ts`（足迹推导包围盒）、`PlanRig.tsx`、`PlanAnnotations.tsx`、`SceneViewer.tsx` |
+| 平面图增强（家具足迹/门窗符号/尺寸线 + 尺寸开关）【2026-08-10】 | `PlanEnhancements.tsx` + `lib/planGeometry.ts`（`doorLeafLine`/`doorArcPoints`/`windowHatchLines`/`roomDimLines`）+ `useModelStore.showPlanDims` + `ModelNodeView`（planMode 跳过 3D 家具）+ HomePage 工具栏第二行 |
+| 移动房间带动家具【2026-08-10】 | `lib/modelTree.ts`（`translateRoomContents`：足迹 + 家具 + 嵌套递归同量平移；`updateNodePosition`/`updateNodeFields`/`updateNodeFootprint` 纯平移检测） |
 | 平面图自由编辑交互层【P4】 | `PlanEditLayer.tsx`（工具手势/命中/拖拽）+ `useModelStore`（`planTool`/`openingKind`/`previewFootprint`/`commitPlanEdit`/`applyPlanOps`）+ HomePage 工具栏 |
 | 共享配色（2D/3D 一致） | `lib/palette.ts` |
 | Gizmo 编辑 | `GizmoControls.tsx` + `SceneViewer.tsx` + `PropertyPanel.tsx` + `useModelStore.ts` |

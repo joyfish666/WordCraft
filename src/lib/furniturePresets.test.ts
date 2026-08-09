@@ -22,6 +22,13 @@ const ALL_KINDS: FurnitureKind[] = [
   'roundTable',
   'bookcase',
   'washer',
+  'bathtub',
+  'nightstand',
+  'dressingTable',
+  'shoeCabinet',
+  'stove',
+  'oven',
+  'microwave',
 ]
 
 describe('furnitureKind', () => {
@@ -50,10 +57,25 @@ describe('furnitureKind', () => {
     expect(furnitureKind('洗衣机')).toBe('washer')
   })
 
+  it('识别新增种类：浴缸/床头柜/梳妆台/鞋柜/灶台/烤箱/微波炉', () => {
+    expect(furnitureKind('浴缸')).toBe('bathtub')
+    expect(furnitureKind('浴盆')).toBe('bathtub')
+    expect(furnitureKind('床头柜')).toBe('nightstand')
+    expect(furnitureKind('床边柜')).toBe('nightstand')
+    expect(furnitureKind('梳妆台')).toBe('dressingTable')
+    expect(furnitureKind('化妆台')).toBe('dressingTable')
+    expect(furnitureKind('鞋柜')).toBe('shoeCabinet')
+    expect(furnitureKind('玄关柜')).toBe('shoeCabinet')
+    expect(furnitureKind('灶台')).toBe('stove')
+    expect(furnitureKind('燃气灶')).toBe('stove')
+    expect(furnitureKind('烤箱')).toBe('oven')
+    expect(furnitureKind('微波炉')).toBe('microwave')
+    expect(furnitureKind('微波')).toBe('microwave')
+  })
+
   it('含床字的小件不误套床造型；未识别家具回退 generic', () => {
-    expect(furnitureKind('床头柜')).toBe('generic')
     expect(furnitureKind('床尾凳')).toBe('generic')
-    expect(furnitureKind('梳妆台')).toBe('generic')
+    expect(furnitureKind('床幔')).toBe('generic')
     expect(furnitureKind('未知物品')).toBe('generic')
   })
 })
@@ -82,6 +104,13 @@ describe('buildFurnitureParts', () => {
       roundTable: 3,
       bookcase: 6,
       washer: 3,
+      bathtub: 3, // 外壳 + 内胆 + 水龙头
+      nightstand: 3, // 柜体 + 抽屉面 + 顶板
+      dressingTable: 6, // 桌面 + 四条桌腿 + 镜面
+      shoeCabinet: 3, // 柜体 + 上下两扇门
+      stove: 7, // 柜体 + 台面 + 4 炉头 + 控制条
+      oven: 3, // 柜体 + 玻璃门 + 把手条
+      microwave: 3, // 柜体 + 门 + 控制面板
       generic: 1,
     }
     for (const kind of ALL_KINDS) {
@@ -126,6 +155,21 @@ describe('包围盒约束（四朝向）', () => {
     ['大书架', 'bookcase', 1.5, 2.0, 0.4],
     ['小洗衣机', 'washer', 0.5, 0.7, 0.5],
     ['大洗衣机', 'washer', 0.65, 0.9, 0.65],
+    ['小浴缸', 'bathtub', 1.2, 0.5, 0.7],
+    ['大浴缸', 'bathtub', 1.8, 0.7, 0.9],
+    ['竖浴缸', 'bathtub', 0.7, 0.6, 1.6], // 长轴沿 z
+    ['小床头柜', 'nightstand', 0.4, 0.4, 0.4],
+    ['大床头柜', 'nightstand', 0.6, 0.6, 0.6],
+    ['小梳妆台', 'dressingTable', 0.6, 0.5, 0.4],
+    ['大梳妆台', 'dressingTable', 1.2, 0.75, 0.5],
+    ['小鞋柜', 'shoeCabinet', 0.6, 0.8, 0.3],
+    ['大鞋柜', 'shoeCabinet', 1.2, 1.1, 0.4],
+    ['小灶台', 'stove', 0.6, 0.8, 0.5],
+    ['大灶台', 'stove', 0.9, 0.85, 0.6],
+    ['小烤箱', 'oven', 0.5, 0.5, 0.5],
+    ['大烤箱', 'oven', 0.6, 0.6, 0.55],
+    ['小微波炉', 'microwave', 0.45, 0.28, 0.3],
+    ['大微波炉', 'microwave', 0.65, 0.32, 0.4],
   ]
 
   it.each(SIZES)('%s：四朝向部件水平均在足迹内、底面贴地、顶部允许向上悬挑', (_label, kind, L, H, W) => {
