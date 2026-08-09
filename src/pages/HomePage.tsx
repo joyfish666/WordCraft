@@ -102,8 +102,10 @@ export function HomePage() {
   const planMode = viewMode === 'plan'
   const planTool = useModelStore((s) => s.planTool)
   const openingKind = useModelStore((s) => s.openingKind)
+  const showPlanDims = useModelStore((s) => s.showPlanDims)
   const setPlanTool = useModelStore((s) => s.setPlanTool)
   const setOpeningKind = useModelStore((s) => s.setOpeningKind)
+  const setShowPlanDims = useModelStore((s) => s.setShowPlanDims)
   const logRef = useRef<HTMLDivElement>(null)
   const debugRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<SceneViewerHandle>(null)
@@ -566,21 +568,35 @@ export function HomePage() {
                   </div>
                 )}
               </div>
-              <div className="plan-toolbar__hint">
-                {planTool === 'move'
-                  ? t('plan.hintMove')
-                  : planTool === 'vertex'
-                    ? t('plan.hintVertex')
-                    : planTool === 'opening'
-                      ? t('plan.hintOpening', {
-                          kind: openingKind === 'door' ? t('plan.kindDoor') : t('plan.kindWindow'),
-                        })
-                      : planTool === 'split'
-                        ? t('plan.hintSplit')
-                        : planTool === 'merge'
-                          ? t('plan.hintMerge')
-                          : ''}
+              {/* 视图选项行：尺寸标注开关（不挤占工具行；房间内部尺寸线会覆盖在房间上，可关闭让平面图更清爽） */}
+              <div className="plan-toolbar__row">
+                <button
+                  type="button"
+                  className={`plan-toolbar__dims segmented__btn ${showPlanDims ? 'segmented__btn--active' : ''}`}
+                  onClick={() => setShowPlanDims(!showPlanDims)}
+                  title={t('plan.toggleDimsTitle')}
+                >
+                  {t('plan.toggleDims')}
+                </button>
               </div>
+              {/* 操作提示条：仅当前工具存在提示时渲染（空文案渲染会露出黑底空胶囊） */}
+              {planTool !== 'select' && (
+                <div className="plan-toolbar__hint">
+                  {planTool === 'move'
+                    ? t('plan.hintMove')
+                    : planTool === 'vertex'
+                      ? t('plan.hintVertex')
+                      : planTool === 'opening'
+                        ? t('plan.hintOpening', {
+                            kind: openingKind === 'door' ? t('plan.kindDoor') : t('plan.kindWindow'),
+                          })
+                        : planTool === 'split'
+                          ? t('plan.hintSplit')
+                          : planTool === 'merge'
+                            ? t('plan.hintMerge')
+                            : ''}
+                </div>
+              )}
             </div>
           )}
           <SceneViewer ref={viewportRef} planMode={planMode} />

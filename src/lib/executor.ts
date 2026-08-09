@@ -1,4 +1,4 @@
-import { footprintBounds, footprintCenter, houseLevelsBounds, translateFootprint } from './footprint'
+import { footprintBounds, footprintCenter, houseLevelsBounds } from './footprint'
 import { applyFurnitureConventions, doorZoneRect } from './furniturePlacement'
 import { createId } from './id'
 import { makeRoom, resolveLayout } from './layout'
@@ -6,6 +6,7 @@ import {
   findNodeById,
   normalizeContainment,
   removeNode,
+  translateRoomContents,
   updateNodeFields,
   updateNodeFootprint,
   updateNodePosition,
@@ -341,19 +342,6 @@ const NEST_CORNER: Record<Dir | 'default', { x: number; z: number }> = {
   default: { x: 1, z: 1 },
 }
 
-/** 平移房间（足迹 + 家具 + 嵌套房间），保持相对关系 */
-function translateRoomNode(node: RoomNode, dx: number, dz: number): RoomNode {
-  return {
-    ...node,
-    footprint: translateFootprint(node.footprint, dx, dz),
-    furniture: node.furniture.map((f) => ({
-      ...f,
-      position: { ...f.position, x: f.position.x + dx, z: f.position.z + dz },
-    })),
-    nestedRooms: node.nestedRooms.map((n) => translateRoomNode(n, dx, dz)),
-  }
-}
-
 /** id 是否为 room 的嵌套后代（环检测用） */
 function isDescendantOf(room: RoomNode, id: string): boolean {
   return room.nestedRooms.some((n) => n.id === id || isDescendantOf(n, id))
@@ -418,7 +406,7 @@ function applyNestRoom(scene: SceneModel, op: Extract<Op, { op: 'nestRoom' }>): 
       break
     }
   }
-  const moved = translateRoomNode(
+  const moved = translateRoomContents(
     room,
     pc.x + corner.x * halfX - c.x,
     pc.z + corner.z * halfZ - c.z,

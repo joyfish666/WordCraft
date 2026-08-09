@@ -1141,6 +1141,15 @@ button {
   font-size: 12px;
 }
 
+/* 尺寸标注开关：与工具按钮同尺寸，右侧留间距与工具组区分 */
+.plan-toolbar__dims {
+  margin-left: 4px;
+  padding: 5px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
 .plan-toolbar__hint {
   padding: 4px 10px;
   border-radius: 6px;

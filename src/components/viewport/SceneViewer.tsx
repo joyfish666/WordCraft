@@ -11,6 +11,7 @@ import { CornerCompassRose, CornerCompassSensor, WorldCompass } from './Compass'
 import { GizmoControls } from './GizmoControls'
 import { PlanAnnotations } from './PlanAnnotations'
 import { PlanEditLayer } from './PlanEditLayer'
+import { PlanEnhancements } from './PlanEnhancements'
 import { PlanRig } from './PlanRig'
 import { Viewport3D } from './Viewport3D'
 
@@ -147,8 +148,10 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
             南视角正对入户门时东在右侧、北在远处上方。P4 编辑层在镜像组内渲染：
             指针世界坐标经 group.worldToLocal 还原为足迹坐标。 */}
         <group ref={planGroupRef} scale={[-1, 1, 1]}>
-          <Viewport3D />
+          <Viewport3D planMode={planMode} />
           {planMode && <PlanAnnotations />}
+          {/* 平面图增强：家具足迹 + 门窗符号 + 房间尺寸线 */}
+          {planMode && <PlanEnhancements />}
           {/* P4 平面图自由编辑交互层（选择/移动/顶点/门窗/拆房/合并） */}
           {planMode && <PlanEditLayer groupRef={planGroupRef} />}
           {/* 世界锚定罗盘（在镜像组内：任意视图方向均正确） */}

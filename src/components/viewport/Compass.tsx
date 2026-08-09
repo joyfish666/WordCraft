@@ -93,15 +93,20 @@ export function WorldCompass() {
   const bounds = scene ? houseBounds(scene) : null
   const cx = bounds ? (bounds.minX + bounds.maxX) / 2 : 0
   const cz = bounds ? (bounds.minZ + bounds.maxZ) / 2 : 0
-  const half = bounds ? Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ) / 2 : 2
-  const d = half + 1.4
+  const halfW = bounds ? (bounds.maxX - bounds.minX) / 2 : 2
+  const halfD = bounds ? (bounds.maxZ - bounds.minZ) / 2 : 1.5
+  // 距包围盒外沿的间距：需让开整屋尺寸线的标签（线外移 0.6 + 标签再外移 0.5，
+  // 标签自身含内边距约 0.6~1.9m 世界宽度，随缩放变化）——2.8m 保证各缩放档都不遮挡
+  // 按各方向自己的半宽/半深定位（旧实现用 max 半宽，宽度 > 深度时东/西标签比南/北
+  // 更贴近房屋，东字会盖住东侧「总宽」尺寸标签——坑：方向不对称）
+  const margin = 2.8
   const y = (scene?.root.levels[0]?.height ?? 2.8) + 0.3
 
   const labels: Array<{ key: string; x: number; z: number; text: string }> = [
-    { key: 'n', x: cx, z: cz + d, text: t('compass.north') },
-    { key: 'e', x: cx + d, z: cz, text: t('compass.east') },
-    { key: 's', x: cx, z: cz - d, text: t('compass.south') },
-    { key: 'w', x: cx - d, z: cz, text: t('compass.west') },
+    { key: 'n', x: cx, z: cz + halfD + margin, text: t('compass.north') },
+    { key: 'e', x: cx + halfW + margin, z: cz, text: t('compass.east') },
+    { key: 's', x: cx, z: cz - halfD - margin, text: t('compass.south') },
+    { key: 'w', x: cx - halfW - margin, z: cz, text: t('compass.west') },
   ]
 
   return (

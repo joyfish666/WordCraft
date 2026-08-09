@@ -272,6 +272,8 @@ interface ModelNodeViewProps {
   parentCenter?: Position
   /** 直接父房间（家具据此计算贴靠的墙来决定朝向） */
   parentRoom?: RoomNode
+  /** 2D 平面图模式：家具改由 PlanEnhancements 的 2D 足迹呈现，跳过 3D 网格 */
+  planMode?: boolean
 }
 
 /**
@@ -287,6 +289,7 @@ export function ModelNodeView({
   wallPlan,
   parentCenter,
   parentRoom,
+  planMode = false,
 }: ModelNodeViewProps) {
   const selectNode = useModelStore((s) => s.selectNode)
   const setFocus = useModelStore((s) => s.setFocus)
@@ -332,6 +335,7 @@ export function ModelNodeView({
               ancestors={childAncestors}
               wallPlan={wallPlan}
               parentCenter={{ x: 0, y: 0, z: 0 }}
+              planMode={planMode}
             />
           ))}
         </>
@@ -394,7 +398,13 @@ export function ModelNodeView({
           screenshotMode={screenshotMode}
         />
         {node.furniture.map((child) => (
-          <ModelNodeView key={child.id} node={child} ancestors={childAncestors} parentRoom={node} />
+          <ModelNodeView
+            key={child.id}
+            node={child}
+            ancestors={childAncestors}
+            parentRoom={node}
+            planMode={planMode}
+          />
         ))}
         {node.nestedRooms.map((child, i) => (
           <ModelNodeView
@@ -405,6 +415,7 @@ export function ModelNodeView({
             wallPlan={wallPlan}
             parentCenter={roomCenterPos}
             parentRoom={node}
+            planMode={planMode}
           />
         ))}
       </group>
@@ -414,6 +425,8 @@ export function ModelNodeView({
   // 家具：实体 vs 虚化两种状态（y 抬升一个地板厚度，使其立在地板顶面）
   // 按名称识别家具种类并拼装部件（床/衣柜/沙发…），未识别回退为单个整盒；
   // 朝向由家具在父房间内贴靠（或最近）的墙决定——床头板朝墙、柜门朝房间内
+  // 平面图模式：3D 家具网格不渲染（由 PlanEnhancements 以 2D 足迹呈现）
+  if (planMode) return null
   const fill = colorMode === 'colorblind' ? FURNITURE_COLORBLIND : FURNITURE_COLOR
   const kind = furnitureKind(node.name)
   const facing = parentRoom

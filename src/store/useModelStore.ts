@@ -58,6 +58,8 @@ interface ModelState {
   planTool: PlanTool
   /** 门窗工具的放置种类（会话内不持久化） */
   openingKind: 'door' | 'window'
+  /** 平面图是否显示房间内部尺寸标注（会话内不持久化；家具足迹/门窗符号不受影响） */
+  showPlanDims: boolean
   /** 截图瞬间隐藏辅助元素（网格/选中框/手柄/标注），会话内不持久化 */
   screenshotMode: boolean
   /** 场景加载时的各节点初始位置，用于「复位」 */
@@ -75,6 +77,7 @@ interface ModelState {
   setGizmoMode: (mode: 'translate' | 'scale') => void
   setPlanTool: (tool: PlanTool) => void
   setOpeningKind: (kind: 'door' | 'window') => void
+  setShowPlanDims: (v: boolean) => void
   setScreenshotMode: (v: boolean) => void
 
   /** 按增量移动选中模块（每次调用为一个可撤销步骤） */
@@ -109,6 +112,7 @@ export const useModelStore = create<ModelState>()(
       gizmoMode: 'translate',
       planTool: 'select',
       openingKind: 'door',
+      showPlanDims: true,
       screenshotMode: false,
       initialPositions: {},
       past: [],
@@ -137,6 +141,7 @@ export const useModelStore = create<ModelState>()(
       setGizmoMode: (mode) => set({ gizmoMode: mode }),
       setPlanTool: (tool) => set({ planTool: tool }),
       setOpeningKind: (kind) => set({ openingKind: kind }),
+      setShowPlanDims: (v) => set({ showPlanDims: v }),
       setScreenshotMode: (v) => set({ screenshotMode: v }),
 
       translateSelected: (dx, dy, dz) =>

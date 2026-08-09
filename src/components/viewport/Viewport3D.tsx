@@ -10,7 +10,7 @@ function entranceDirection(house: SceneModel['root']): 'north' | 'south' | 'east
 }
 
 /** 3D 场景内容：网格、坐标轴与当前模型（含共享墙去重、门洞计算与嵌套房间分隔墙） */
-export function Viewport3D() {
+export function Viewport3D({ planMode = false }: { planMode?: boolean }) {
   const scene = useModelStore((s) => s.scene)
   // 截图瞬间隐藏辅助元素（网格/坐标轴），只保留纯净模型
   const screenshotMode = useModelStore((s) => s.screenshotMode)
@@ -32,7 +32,7 @@ export function Viewport3D() {
       <color attach="background" args={['#14161b']} />
       {!screenshotMode && <gridHelper args={[20, 20, '#3a3f4b', '#272b34']} />}
       {!screenshotMode && <axesHelper args={[5]} />}
-      {scene && <ModelNodeView node={scene.root} wallPlan={wallPlan} />}
+      {scene && <ModelNodeView node={scene.root} wallPlan={wallPlan} planMode={planMode} />}
     </>
   )
 }
