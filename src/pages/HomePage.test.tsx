@@ -122,6 +122,29 @@ describe('HomePage 对话交互', () => {
     expect(viewer().getAttribute('data-planmode')).toBe('false')
   })
 
+  it('移动端紧凑视口：平面图工具栏为「工具」按钮 + 弹出面板，选工具即关闭', () => {
+    Object.defineProperty(window, 'innerWidth', { value: 904, configurable: true, writable: true })
+    Object.defineProperty(window, 'innerHeight', { value: 390, configurable: true, writable: true })
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '平面图' }))
+    // 常驻工具行不渲染，只有「工具」按钮
+    expect(screen.queryByRole('toolbar', { name: '平面图编辑工具' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /工具/ })).toBeInTheDocument()
+    // 点开面板：工具列表出现；选择「移动」后面板关闭且工具生效
+    fireEvent.click(screen.getByRole('button', { name: /工具/ }))
+    expect(screen.getByRole('toolbar', { name: '平面图编辑工具' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '移动' }))
+    expect(screen.queryByRole('toolbar', { name: '平面图编辑工具' })).not.toBeInTheDocument()
+    expect(useModelStore.getState().planTool).toBe('move')
+    // 恢复桌面视口
+    Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true, writable: true })
+    Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true, writable: true })
+  })
+
   it('撤销生成恢复生成前的场景', async () => {
     useSettingsStore.getState().addApiKey({ name: '测试', key: 'sk-test' })
     const prev = createSampleModel()

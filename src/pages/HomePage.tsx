@@ -33,6 +33,19 @@ function childCount(node: HouseNode | RoomNode): number {
   return node.furniture.length + node.nestedRooms.length
 }
 
+/** 移动端紧凑布局判定（与 OrientationGuard 的 wc-compact 同条件，供工具栏渲染分支使用） */
+function useMobileCompact(): boolean {
+  const [compact, setCompact] = useState(
+    () => window.innerWidth <= 760 || window.innerHeight <= 480,
+  )
+  useEffect(() => {
+    const apply = () => setCompact(window.innerWidth <= 760 || window.innerHeight <= 480)
+    window.addEventListener('resize', apply)
+    return () => window.removeEventListener('resize', apply)
+  }, [])
+  return compact
+}
+
 /** 将调试日志导出为可复制的纯文本 */
 function copyDebug(entries: DebugEntry[]): void {
   const text = entries
@@ -100,6 +113,8 @@ export function HomePage() {
   const [shareShot, setShareShot] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'3d' | 'plan'>('3d')
   const planMode = viewMode === 'plan'
+  const mobileCompact = useMobileCompact()
+  const [planToolsOpen, setPlanToolsOpen] = useState(false)
   const planTool = useModelStore((s) => s.planTool)
   const openingKind = useModelStore((s) => s.openingKind)
   const showPlanDims = useModelStore((s) => s.showPlanDims)
@@ -510,14 +525,20 @@ export function HomePage() {
             <button
               type="button"
               className={`segmented__btn ${!planMode ? 'segmented__btn--active' : ''}`}
-              onClick={() => setViewMode('3d')}
+              onClick={() => {
+                setPlanToolsOpen(false)
+                setViewMode('3d')
+              }}
             >
               3D
             </button>
             <button
               type="button"
               className={`segmented__btn ${planMode ? 'segmented__btn--active' : ''}`}
-              onClick={() => setViewMode('plan')}
+              onClick={() => {
+                setPlanToolsOpen(false)
+                setViewMode('plan')
+              }}
               title={t('home.viewPlanTitle')}
             >
               {t('home.viewPlan')}
@@ -525,77 +546,170 @@ export function HomePage() {
           </div>
           {planMode && (
             <div className="plan-toolbar">
-              <div className="plan-toolbar__row">
-                <div className="plan-toolbar__tools segmented" role="toolbar" aria-label={t('plan.toolAria')}>
-                  {(
-                    [
-                      ['select', t('plan.toolSelect'), t('plan.toolSelectTitle')],
-                      ['move', t('plan.toolMove'), t('plan.toolMoveTitle')],
-                      ['vertex', t('plan.toolVertex'), t('plan.toolVertexTitle')],
-                      ['opening', t('plan.toolOpening'), t('plan.toolOpeningTitle')],
-                      ['split', t('plan.toolSplit'), t('plan.toolSplitTitle')],
-                      ['merge', t('plan.toolMerge'), t('plan.toolMergeTitle')],
-                    ] as Array<[PlanTool, string, string]>
-                  ).map(([tool, label, title]) => (
-                    <button
-                      key={tool}
-                      type="button"
-                      className={`segmented__btn ${planTool === tool ? 'segmented__btn--active' : ''}`}
-                      onClick={() => setPlanTool(tool)}
-                      title={title}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                {planTool === 'opening' && (
-                  <div className="plan-toolbar__kind segmented" role="group" aria-label={t('plan.toolOpening')}>
-                    {(
-                      [
-                        ['door', t('plan.kindDoor')],
-                        ['window', t('plan.kindWindow')],
-                      ] as Array<['door' | 'window', string]>
-                    ).map(([kind, label]) => (
-                      <button
-                        key={kind}
-                        type="button"
-                        className={`segmented__btn ${openingKind === kind ? 'segmented__btn--active' : ''}`}
-                        onClick={() => setOpeningKind(kind)}
-                      >
-                        {label}
-                      </button>
-                    ))}
+              {mobileCompact ? (
+                /* 移动端：单个「工具」按钮 + 弹出面板（选择即关闭），不再常驻遮挡平面图 */
+                <>
+                  <button
+                    type="button"
+                    className={`plan-toolbar__menu-btn ${planToolsOpen ? 'plan-toolbar__menu-btn--active' : ''}`}
+                    onClick={() => setPlanToolsOpen((o) => !o)}
+                    title={t('plan.toolsTitle')}
+                  >
+                    {t('plan.tools')} {planToolsOpen ? '▴' : '▾'}
+                  </button>
+                  {planToolsOpen && (
+                    <>
+                      <div className="plan-toolbar__backdrop" onClick={() => setPlanToolsOpen(false)} />
+                      <div className="plan-toolbar__sheet">
+                        <div className="plan-toolbar__sheet-tools" role="toolbar" aria-label={t('plan.toolAria')}>
+                          {(
+                            [
+                              ['select', t('plan.toolSelect'), t('plan.toolSelectTitle')],
+                              ['move', t('plan.toolMove'), t('plan.toolMoveTitle')],
+                              ['vertex', t('plan.toolVertex'), t('plan.toolVertexTitle')],
+                              ['opening', t('plan.toolOpening'), t('plan.toolOpeningTitle')],
+                              ['split', t('plan.toolSplit'), t('plan.toolSplitTitle')],
+                              ['merge', t('plan.toolMerge'), t('plan.toolMergeTitle')],
+                            ] as Array<[PlanTool, string, string]>
+                          ).map(([tool, label, title]) => (
+                            <button
+                              key={tool}
+                              type="button"
+                              className={`plan-toolbar__sheet-btn ${planTool === tool ? 'plan-toolbar__sheet-btn--active' : ''}`}
+                              onClick={() => {
+                                setPlanTool(tool)
+                                setPlanToolsOpen(false)
+                              }}
+                              title={title}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {planTool === 'opening' && (
+                          <div className="plan-toolbar__kind segmented" role="group" aria-label={t('plan.toolOpening')}>
+                            {(
+                              [
+                                ['door', t('plan.kindDoor')],
+                                ['window', t('plan.kindWindow')],
+                              ] as Array<['door' | 'window', string]>
+                            ).map(([kind, label]) => (
+                              <button
+                                key={kind}
+                                type="button"
+                                className={`segmented__btn ${openingKind === kind ? 'segmented__btn--active' : ''}`}
+                                onClick={() => setOpeningKind(kind)}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          className={`plan-toolbar__dims ${showPlanDims ? 'segmented__btn--active' : ''}`}
+                          onClick={() => setShowPlanDims(!showPlanDims)}
+                          title={t('plan.toggleDimsTitle')}
+                        >
+                          {t('plan.toggleDims')}
+                        </button>
+                        {planTool !== 'select' && (
+                          <div className="plan-toolbar__hint">
+                            {planTool === 'move'
+                              ? t('plan.hintMove')
+                              : planTool === 'vertex'
+                                ? t('plan.hintVertex')
+                                : planTool === 'opening'
+                                  ? t('plan.hintOpening', {
+                                      kind: openingKind === 'door' ? t('plan.kindDoor') : t('plan.kindWindow'),
+                                    })
+                                  : planTool === 'split'
+                                    ? t('plan.hintSplit')
+                                    : planTool === 'merge'
+                                      ? t('plan.hintMerge')
+                                      : ''}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                /* 桌面端：常驻工具行（保持原样） */
+                <>
+                  <div className="plan-toolbar__row">
+                    <div className="plan-toolbar__tools segmented" role="toolbar" aria-label={t('plan.toolAria')}>
+                      {(
+                        [
+                          ['select', t('plan.toolSelect'), t('plan.toolSelectTitle')],
+                          ['move', t('plan.toolMove'), t('plan.toolMoveTitle')],
+                          ['vertex', t('plan.toolVertex'), t('plan.toolVertexTitle')],
+                          ['opening', t('plan.toolOpening'), t('plan.toolOpeningTitle')],
+                          ['split', t('plan.toolSplit'), t('plan.toolSplitTitle')],
+                          ['merge', t('plan.toolMerge'), t('plan.toolMergeTitle')],
+                        ] as Array<[PlanTool, string, string]>
+                      ).map(([tool, label, title]) => (
+                        <button
+                          key={tool}
+                          type="button"
+                          className={`segmented__btn ${planTool === tool ? 'segmented__btn--active' : ''}`}
+                          onClick={() => setPlanTool(tool)}
+                          title={title}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {planTool === 'opening' && (
+                      <div className="plan-toolbar__kind segmented" role="group" aria-label={t('plan.toolOpening')}>
+                        {(
+                          [
+                            ['door', t('plan.kindDoor')],
+                            ['window', t('plan.kindWindow')],
+                          ] as Array<['door' | 'window', string]>
+                        ).map(([kind, label]) => (
+                          <button
+                            key={kind}
+                            type="button"
+                            className={`segmented__btn ${openingKind === kind ? 'segmented__btn--active' : ''}`}
+                            onClick={() => setOpeningKind(kind)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              {/* 视图选项行：尺寸标注开关（不挤占工具行；房间内部尺寸线会覆盖在房间上，可关闭让平面图更清爽） */}
-              <div className="plan-toolbar__row">
-                <button
-                  type="button"
-                  className={`plan-toolbar__dims segmented__btn ${showPlanDims ? 'segmented__btn--active' : ''}`}
-                  onClick={() => setShowPlanDims(!showPlanDims)}
-                  title={t('plan.toggleDimsTitle')}
-                >
-                  {t('plan.toggleDims')}
-                </button>
-              </div>
-              {/* 操作提示条：仅当前工具存在提示时渲染（空文案渲染会露出黑底空胶囊） */}
-              {planTool !== 'select' && (
-                <div className="plan-toolbar__hint">
-                  {planTool === 'move'
-                    ? t('plan.hintMove')
-                    : planTool === 'vertex'
-                      ? t('plan.hintVertex')
-                      : planTool === 'opening'
-                        ? t('plan.hintOpening', {
-                            kind: openingKind === 'door' ? t('plan.kindDoor') : t('plan.kindWindow'),
-                          })
-                        : planTool === 'split'
-                          ? t('plan.hintSplit')
-                          : planTool === 'merge'
-                            ? t('plan.hintMerge')
-                            : ''}
-                </div>
+                  {/* 视图选项行：尺寸标注开关（不挤占工具行；房间内部尺寸线会覆盖在房间上，可关闭让平面图更清爽） */}
+                  <div className="plan-toolbar__row">
+                    <button
+                      type="button"
+                      className={`plan-toolbar__dims segmented__btn ${showPlanDims ? 'segmented__btn--active' : ''}`}
+                      onClick={() => setShowPlanDims(!showPlanDims)}
+                      title={t('plan.toggleDimsTitle')}
+                    >
+                      {t('plan.toggleDims')}
+                    </button>
+                  </div>
+                  {/* 操作提示条：仅当前工具存在提示时渲染（空文案渲染会露出黑底空胶囊） */}
+                  {planTool !== 'select' && (
+                    <div className="plan-toolbar__hint">
+                      {planTool === 'move'
+                        ? t('plan.hintMove')
+                        : planTool === 'vertex'
+                          ? t('plan.hintVertex')
+                          : planTool === 'opening'
+                            ? t('plan.hintOpening', {
+                                kind: openingKind === 'door' ? t('plan.kindDoor') : t('plan.kindWindow'),
+                              })
+                            : planTool === 'split'
+                              ? t('plan.hintSplit')
+                              : planTool === 'merge'
+                                ? t('plan.hintMerge')
+                                : ''}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
