@@ -17,6 +17,7 @@
 - 🧭 **Consistent directions**: world-anchored compass + corner compass; both 3D and the plan view share the same orientation — north up, west left, east right (standard map)
 - 🔧 **Precise editing**: a property panel (exact values) + Gizmo handles (direct dragging), with undo/redo; **free plan-view editing** (drag vertices to reshape / move rooms / click walls to place doors & windows / split & merge rooms — every action is undoable and flows back into the chat); **plan-view enhancements** (furniture footprints / door symbols / room dimension lines, with a one-click toggle for dimension annotations)
 - 🔒 **Privacy-first**: pure frontend, conversations / models / API keys all stay in the browser
+- 📱 **Mobile landscape support**: portrait screens are prompted to rotate; narrow landscape gets a compact layout (desktop untouched)
 - 📤 **Easy sharing**: one-click HD screenshot + a share code that fully restores the model
 - 🌐 **Open source**: MIT licensed, contributions welcome
 
@@ -41,7 +42,7 @@
 | Code compression | **lz-string** | Efficient JSON compression |
 | HTTP | **Axios** | API requests with interceptors and error handling |
 | Build | **Vite** | Fast dev/build tooling |
-| Testing | **Vitest + Testing Library** | Unit and component tests (370 cases) |
+| Testing | **Vitest + Testing Library** | Unit and component tests (374 cases) |
 
 ## Project Docs
 
@@ -65,10 +66,8 @@ npm run build    # type check + build
 ## Roadmap
 
 - [ ] **v3 free design**: ~~P1 data model v3~~ (footprints + migration + window segments, ✅ done) → ~~P2 operation-contract generation~~ (op sequence + executor + prompt rewrite, ✅ done) → ~~P3 bidirectional sync~~ (edits flow back into chat + slimmed context, ✅ done) → ~~P4 plan-view editing~~ (drag vertices / move rooms / place doors & windows / split walls / merge rooms, all undoable, ✅ done)
-- [ ] Mobile adaptation
+- [x] **Mobile base adaptation** (landscape-only; portrait screens are prompted to rotate, ✅ done)
 - [x] **2D plan enhancements** (furniture footprints / door symbols / dimension labels, ✅ done)
-- [ ] More furniture kinds (13 → 20 kinds done), performance tuning
-- [ ] Collaborative editing, more LLM providers
 
 ## Contributing
 

@@ -11,6 +11,8 @@
 > **P4 进度**（2026-08-09 完成）：§6 平面图自由编辑已落地——平面图编辑工具栏（选择/移动/顶点/门窗/拆房/合并）接入 `PlanEditLayer` 交互层：拖顶点改足迹（正交约束 + 网格吸附 + 自交拒绝，`planEdit.ts` 纯函数）、拖房间平移（Gizmo 同款预览/提交 + 贴墙吸附）、点墙放门窗（与渲染同源墙段命中，`setOpenings` 新增 `edgeIndex` 精确指边与 `remove` 删除，补齐 notes §4 已知边界）、画墙拆房间（新增 `splitRoom` op：矩形沿轴线切两半、家具/嵌套/开洞按中心归属、共墙自动开一扇门——门加在渲染侧）、合并房间（新增 `mergeRoom` op：并集为合法矩形才合并、共墙开洞丢弃、入口房间迁移）。全部产出同构 op 走统一执行器（`applyPlanOps`）+ 快照撤销栈 + 编辑日志回流对话。验收：343 用例全绿（新增 planEdit 21 + executor 新用例 + store 新用例）。
 >
 > **平面图增强**（2026-08-10 完成，README 路线图「2D 平面图增强」，非 §7 的 P5）：§6 之外的平面图**呈现**增强——**家具足迹**（平面图模式下 3D 家具网格改 2D 足迹：填充 + 轮廓 + 朝向标记，点击可选中）、**门窗符号**（门扇线 + 90° 开启弧线、窗洞双线，与墙体方案同源）、**房间尺寸线**（顶层房间内标长/宽，工具栏「尺寸」开关可一键关闭——尺寸信息覆盖房间的诉求）。房间标签恒只显示名称（不重复标注尺寸）；移动房间现已带动家具与嵌套房间（`modelTree.translateRoomContents`）。
+>
+> **移动端横屏支持**（2026-08-10 完成，README 路线图「移动端基础适配」）：**横屏限定**——`OrientationGuard` 在「窄屏 + 竖放」（阈值 A：`(max-width:767px) and (orientation:portrait)`）时全屏提示旋转，手机横屏/iPad/桌面零影响（应用层不卸载，旋转回来即时恢复）；≤760px 窄横屏紧凑布局（侧边栏/聊天栏收窄、工具栏横向滚动、状态栏换行、设置页表单单列）；Canvas `touch-action: none` 防浏览器手势劫持。桌面端无任何改动。
 
 本文档描述言筑下一代的完整设计方案：在不推翻"语义/几何分离"这一已验证核心的前提下，让用户能够**自由输入、自由布局、自由编辑**，真正设计出自己心中的房屋。
 
@@ -55,7 +57,7 @@
 ┌─────────────── 操作总线（统一） ───────────────┐
 │  对话：LLM(SSE) → ops 契约 → 逐条确定性执行      │
 │  编辑：平面图拖顶点/画墙/放门窗 → 同一套 op       │
-│  撤销/重做：同一套 op 栈（粒度=单条 op）          │
+│  撤销/重做：整场景快照栈（粒度=一次编辑）        │
 └───────────────┬────────────────────────────────┘
                 ▼
         v3 场景模型（footprint 几何 + 显式门窗）
@@ -157,15 +159,15 @@ type Op =
 > **P3 落地实录**（2026-08-09）：本节的编辑 op 日志与对话上下文改造均已实施。实施要点：
 >
 > - **手动编辑 → op**（§5.1）：`lib/editOps.ts` 的 `editDiffToOps(before, after, id)` 纯函数把一次手动编辑 diff 成单条 op——家具位移 → `updateFurniture.patch.position`（换算为相对所在房间中心，v2 语义）；房间位移/改尺寸 → `updateRoom.patch.footprint`（世界坐标顶点环，可精确回放）；改名/层高 → 对应 patch；无实际变化返回空数组（不记录）。
-> - **编辑日志**（§5.1）：`useChatStore.editOps`（上限 50 条，会话内不持久化），`useModelStore` 的 `translateSelected`/`resetSelectedPosition`/`updateSelected`/`commitDrag` 提交时各追加一条（Gizmo 拖拽整次记一条）；**撤销栈维持整场景快照不变**（用户行为不变，op 粒度化属后续优化）。
+> - **编辑日志**（§5.1）：`useChatStore.editOps`（上限 50 条，会话内不持久化），`useModelStore` 的 `translateSelected`/`resetSelectedPosition`/`updateSelected`/`commitDrag` 提交时各追加一条（Gizmo 拖拽整次记一条）；**撤销栈维持整场景快照不变**（用户行为不变；快照撤销为最终设计，不做 op 粒度化）。
 > - **上下文改造**（§5.2）：`generateModelFromChat` 新增 `editOps` 选项，消息顺序 = system + 历史 + 场景摘要 + 手动编辑日志 + 用户输入；`toChatHistory` 不再回传助手消息中的纯 JSON（上一轮 ops 原文由摘要替代，token 省 80%+），用户消息与文本助手消息保留（多轮意图不断裂）。
 > - **日志生命周期**：`setScene`/`resetScene`（生成成功/打开项目/加载示例/口令还原/撤销生成）与 `clearConversation` 时清空——旧日志描述的是已被替换的场景。
 > - **验收**：手动编辑后对话能看到改动（日志注入 + 摘要兜底），281 用例全绿（新增 editOps 12 + useModelStore 8 + useChatStore 6 + chat 2）；后续补强（坑 42-48）后最终 307 用例全绿。
 
 ### 5.1 手动编辑 → op 日志（✓ 已实施）
 
-- `useModelStore` 的撤销栈从"整场景快照"（`pushPast`）升级为"操作记录"：**每次编辑同时生成一条 op**，追加进 `useChatStore` 的编辑日志；
-- 撤销/重做行为不变，粒度从"整快照"降为"单 op"；
+- **每次编辑同时生成一条 op**：`useModelStore` 提交时（`translateSelected`/`resetSelectedPosition`/`updateSelected`/`commitDrag`）把「编辑前 → 编辑后」diff 成单条 op，追加进 `useChatStore` 的编辑日志（供对话回流，**不参与撤销**）；
+- **撤销/重做栈保持整场景快照（`pushPast`）不变**（设计决策，不做 op 粒度化）：op 逆操作（Gizmo 拖拽中间态 / `normalizeContainment` 约束 / splitRoom/mergeRoom 等）难以定义且回放后不保证还原，快照正确性最稳、对用户行为无感；
 - 日志上限（如 50 条），会话内不持久化。
 
 ### 5.2 对话上下文改造（✓ 已实施，`chat.ts` + `toChatHistory`）
