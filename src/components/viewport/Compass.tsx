@@ -37,6 +37,11 @@ export function CornerCompassSensor({
     if (!el) return
     rightVec.setFromMatrixColumn(camera.matrix, 0)
     upVec.setFromMatrixColumn(camera.matrix, 1)
+    // 标签沿圆周偏移量由罗盘实际尺寸推导（桌面 108px → 44px，与旧硬编码一致；
+    // 横屏手机缩小后（CSS 68px）自动跟随为 24px），避免标签越出圆盘
+    const size = el.clientWidth || el.offsetWidth
+    const radius = size / 2 - 10
+    if (radius < 24) return
     const labels = el.querySelectorAll<HTMLElement>('[data-dir]')
     for (const label of labels) {
       const d = DIR_VECTORS[label.dataset.dir ?? '']
@@ -46,7 +51,7 @@ export function CornerCompassSensor({
       const rx = dirVec.dot(rightVec)
       const ry = dirVec.dot(upVec)
       const angle = (Math.atan2(rx, ry) * 180) / Math.PI
-      label.style.transform = `translate(-50%, -50%) rotate(${angle}deg) translateY(-44px) rotate(${-angle}deg)`
+      label.style.transform = `translate(-50%, -50%) rotate(${angle}deg) translateY(${-radius}px) rotate(${-angle}deg)`
     }
   })
 
