@@ -17,6 +17,8 @@ import { useT } from '../../i18n'
 export function OrientationGuard({ children }: { children: ReactNode }) {
   const t = useT()
   const [blocked, setBlocked] = useState(false)
+  // 临时调试信息条（定位小米浏览器移动端样式问题用，定位完成后删除）
+  const [debug, setDebug] = useState('')
 
   useEffect(() => {
     const el = document.documentElement
@@ -25,10 +27,42 @@ export function OrientationGuard({ children }: { children: ReactNode }) {
       const h = window.innerHeight
       setBlocked(w < 768 && h > w)
       el.classList.toggle('wc-compact', w <= 760 || h <= 480)
+      // 临时调试日志（定位后删除）
+      console.log(
+        '[wc-debug]',
+        'viewport', `${w}x${h}`,
+        'dpr', window.devicePixelRatio,
+        'screen', `${window.screen.width}x${window.screen.height}`,
+        'compact', el.classList.contains('wc-compact'),
+        'blocked', w < 768 && h > w,
+      )
     }
     apply()
     window.addEventListener('resize', apply)
+    // 临时调试：每 500ms 刷新屏幕覆盖层信息（含平面图工具栏的计算样式），定位后删除
+    const timer = window.setInterval(() => {
+      const planbar = document.querySelector<HTMLElement>('.plan-toolbar')
+      const cs = planbar ? getComputedStyle(planbar) : null
+      let mmH480 = 'n/a'
+      try {
+        mmH480 = String(window.matchMedia('(max-height: 480px)').matches)
+      } catch {
+        // 无 matchMedia 环境忽略
+      }
+      setDebug(
+        [
+          'v3',
+          `w=${window.innerWidth} h=${window.innerHeight}`,
+          `dpr=${window.devicePixelRatio ?? 1}`,
+          `screen=${window.screen.width}x${window.screen.height}`,
+          `compact=${el.classList.contains('wc-compact')}`,
+          `mm480=${mmH480}`,
+          planbar ? `planbar dir=${cs?.flexDirection} top=${cs?.top}` : 'planbar=null',
+        ].join(' | '),
+      )
+    }, 500)
     return () => {
+      window.clearInterval(timer)
       window.removeEventListener('resize', apply)
       el.classList.remove('wc-compact')
     }
@@ -37,6 +71,9 @@ export function OrientationGuard({ children }: { children: ReactNode }) {
   return (
     <>
       {children}
+      <div className="wc-debug" aria-hidden="true">
+        {debug}
+      </div>
       {blocked && (
         <div className="orientation-guard" role="alert" aria-label={t('orientation.title')}>
           <div className="orientation-guard__phone" aria-hidden="true" />
