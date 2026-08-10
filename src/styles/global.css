@@ -363,6 +363,8 @@ button {
 .scene-canvas {
   width: 100%;
   height: 100%;
+  /* 触屏拖拽/双指缩放交给 OrbitControls 与平面图编辑层处理，阻止浏览器手势劫持（桌面端无影响） */
+  touch-action: none;
 }
 
 .home__statusbar {
@@ -1227,4 +1229,102 @@ button {
 
 .lang-toggle-btn:hover {
   border-color: var(--accent);
+}
+
+/* ---------- 竖屏横屏引导（移动端横屏限定） ---------- */
+
+.orientation-guard {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+  text-align: center;
+}
+
+.orientation-guard__phone {
+  position: relative;
+  width: 52px;
+  height: 96px;
+  border: 3px solid var(--text);
+  border-radius: 12px;
+  animation: orientation-swing 1.6s ease-in-out infinite;
+}
+
+.orientation-guard__phone::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 16px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--text-dim);
+  transform: translateX(-50%);
+}
+
+.orientation-guard__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.orientation-guard__subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+@keyframes orientation-swing {
+  0%,
+  100% {
+    transform: rotate(90deg);
+  }
+  50% {
+    transform: rotate(0deg);
+  }
+}
+
+/* ---------- 窄屏适配（横屏手机 ≤760px；桌面端不受影响） ---------- */
+
+@media (max-width: 760px) {
+  .sidebar {
+    width: 160px;
+  }
+
+  .sidebar__brand-text span {
+    display: none;
+  }
+
+  .home__chat {
+    width: 280px;
+  }
+
+  .home__toolbar {
+    overflow-x: auto;
+  }
+
+  .home__toolbar-left,
+  .home__toolbar-right {
+    flex-shrink: 0;
+  }
+
+  .home__statusbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .prop-panel {
+    width: 240px;
+  }
+
+  .api-form {
+    grid-template-columns: 1fr;
+  }
 }

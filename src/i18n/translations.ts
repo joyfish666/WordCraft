@@ -255,6 +255,10 @@ export const zh = {
   'share.deleteConfirm': '删除这条历史口令吗？',
   'share.close': '关闭',
 
+  // ---------- 竖屏横屏引导 ----------
+  'orientation.title': '请旋转屏幕至横屏使用',
+  'orientation.subtitle': '横屏模式提供最佳设计体验',
+
   // ---------- 错误消息 ----------
   'error.httpRequestFailed': '模型请求失败：{detail}。可在设置页点「检测连通性」定位问题。',
   'error.noJson': '模型返回内容中未找到 JSON，请重试',
@@ -523,8 +527,14 @@ export const en: Record<TKey, string> = {
   'share.empty': 'No saved codes yet. Codes are recorded after you share a model.',
   'share.unnamed': 'Unnamed model',
   'share.delete': 'Delete',
-  'share.deleteConfirm': 'Delete this saved code?',
+  'share.deleteConfirm': 'Delete this share record?',
   'share.close': 'Close',
+
+  // ---------- Portrait orientation guard ----------
+  'orientation.title': 'Please rotate your device to landscape',
+  'orientation.subtitle': 'Landscape mode offers the best experience',
+
+  // ---------- Error messages ----------
 
   // ---------- Errors ----------
   'error.httpRequestFailed':

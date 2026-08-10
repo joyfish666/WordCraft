@@ -143,7 +143,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 - **无楼梯/无楼层**：`LevelNode` 已在模型中预留单层，楼层/楼梯属 Phase 5。
 - **footprint 编辑仍是矩形语义**：P1 布局引擎只产矩形足迹；属性面板改房间尺寸 = 足迹按包围盒缩放（L 形多边形会被拉伸，属已知边界，P4 拖顶点编辑后建议改用顶点工具改形状）。
 - **P2 ops 已知边界**：① `updateRoom.patch.side` 对已平铺房间无几何意义（接受并忽略）；② ~~`setOpenings` 无删除开洞~~（**P4 已补齐**：`remove: true` + 可选 `from/to` 只删重叠者；`edgeIndex` 精确指边）；③ `relativeTo` 仅支持贴靠单个房间，多房间约束推理（"客厅北接阳台"）属 Phase 5；④ `addRoom` 无 `relativeTo` 时排东侧，可能不贴已有房间。
-- **P3 已知边界**：① 撤销/重做栈仍是整场景快照，未降到 op 粒度（行为与用户无关，op 粒度化属后续优化）；② 编辑日志不随撤销/重做弹栈——撤销后的场景摘要仍权威，日志里的过期 op 由 LLM 结合摘要自行消解；③ ~~手动编辑仅覆盖 属性面板/Gizmo/位移微调 四入口，无删除类手动编辑~~（**P4 已补齐**：平面图编辑提供增（拆房/放门窗/画墙）删（合并/删门窗/拖顶点缩小）全套入口）。
+- **P3 已知边界**：① 撤销/重做栈为整场景快照（**设计决策，非待办——别再提议 op 粒度化**）：op 逆操作（Gizmo 拖拽中间态 / normalizeContainment 约束 / splitRoom/mergeRoom 等）难以定义且回放后不保证还原，快照正确性最稳、内存开销在当前规模下可忽略、对用户行为无感；② 编辑日志不随撤销/重做弹栈——撤销后的场景摘要仍权威，日志里的过期 op 由 LLM 结合摘要自行消解；③ ~~手动编辑仅覆盖 属性面板/Gizmo/位移微调 四入口，无删除类手动编辑~~（**P4 已补齐**：平面图编辑提供增（拆房/放门窗/画墙）删（合并/删门窗/拖顶点缩小）全套入口）。
 
 ## 5. v3 实施注意事项（开始改之前读）
 
@@ -201,6 +201,11 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 59. **平面图增强的三层高度与编辑层交互平面不冲突**：足迹 0.14 / 门窗符号 0.25 / 尺寸线 0.35，全部低于 `PlanEditLayer` 交互平面 0.5——编辑工具下平面先命中（相机俯视按距离排序），足迹/符号不会拦截指针；选择工具下无交互平面，足迹（`onClick` + stopPropagation）可选中家具。改高度时别抬到 0.5 以上。
 60. **门扇符号弧线：atan2 差值恒为 ±π/2，天然是 90° 短弧且落在房间内**：铰链端（段起点门框角）→ 门扇线垂直入房间；弧线从门扇端点扫到洞口另一端，首尾点取精确坐标（浮点缝隙会导致线与墙之间出现断点）。窗洞符号 = 向内偏移 0.1/0.22 的双线（经典双线示意）。
 
+### 3.13 移动端横屏支持（2026-08-10 落地实录，README 路线图项，横屏限定）
+
+61. **竖屏引导用「窄屏 + 竖放」双条件（阈值 A），不要只用 `orientation: portrait`**：`(max-width: 767px) and (orientation: portrait)`——纯 orientation 会把 iPad 竖屏（768×1024，布局完全可用）也拦住。命中时**应用层不要卸载**（全屏覆盖层盖在下方即可），旋转回来即时恢复不丢状态；jsdom 无 matchMedia，组件默认放行、测试须 stub。**桌面端任何情况都不应命中**——窄横屏样式全部收进 `@media (max-width: 760px)`，别写成全局覆盖。
+62. **触屏必须给 Canvas `touch-action: none`**：否则手机横屏上平面图拖拽（PlanEditLayer 的 Pointer Events）与 OrbitControls 双指缩放会被浏览器滚动/捏合手势劫持。桌面鼠标不受影响，改这条不影响桌面端。
+
 ## 6. 快速文件地图
 
 | 需求 | 改哪里 |
@@ -232,4 +237,5 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | 共享配色（2D/3D 一致） | `lib/palette.ts` |
 | Gizmo 编辑 | `GizmoControls.tsx` + `SceneViewer.tsx` + `PropertyPanel.tsx` + `useModelStore.ts` |
 | 截图分享/口令 | `ShareDialog.tsx` + `HomePage.tsx` + `SceneViewer.tsx` + `lib/watermark.ts` + `lib/compression.ts`（`wc3:` 前缀）+ `store/useShareStore.ts` |
+| 竖屏横屏引导 + 窄横屏布局【2026-08-10】 | `components/ui/OrientationGuard.tsx`（matchMedia 阈值 A 覆盖层）+ `App.tsx`（包裹整棵路由）+ `styles/global.css`（覆盖层样式 + `@media (max-width: 760px)` 紧凑布局 + `.scene-canvas` `touch-action: none`） |
 | i18n | `i18n/translations.ts`（zh 为真源） |

@@ -1,6 +1,6 @@
 # 言筑（WordCraft）技术文档 —— 现行实现（v3 足迹模型 + ops 操作契约 + 双向同步）
 
-> 版本：v2.4 · 更新：2026-08-10。本文档描述**当前代码**的架构与数据契约（v3 足迹几何模型 + ops 操作契约 + v2 快照容错路径 + P3 手动编辑 op 回流 + P4 平面图自由编辑 + 平面图增强）。P1（v3 数据模型）、P2（契约动词化）、P3（双向同步）与 P4（平面图自由编辑：拖顶点/拖房间/点墙放门窗/拆房/合并）已实施：P1 为纯重构（旧数据可打开、用例全绿、截图无回归）；P2 将生成契约从"整屋快照"动词化为"操作序列"（逐条容错执行器 + 提示词重写 + 快照 diff 容错）；P3 把手动编辑 diff 成同构 op 日志回流对话上下文（摘要 + 编辑日志替代整段旧历史，省 token）；P4 在平面图上直接编辑（全部产出同构 op：新增 splitRoom/mergeRoom 操作与 setOpenings 的 edgeIndex/remove，纯函数库 planEdit.ts + 交互层 PlanEditLayer）。2026-08-10 追加落地：**平面图增强**（家具足迹/门窗符号/房间尺寸线 + 尺寸开关，README 路线图项，非 design.md P5）、**移动房间带动家具**（translateRoomContents）、**家具 13 → 20 类**（浴缸/床头柜/梳妆台/鞋柜/灶台/烤箱/微波炉）、微调按钮顺序调整、罗盘标签方向感知定位（不再遮挡东侧尺寸标签）。下一代 v3 完整架构见 [设计方案](design.md)，演进脉络见 [版本演进](history.md)，踩坑记录见 [开发注意事项](notes.md)。
+> 版本：v2.5 · 更新：2026-08-10。本文档描述**当前代码**的架构与数据契约（v3 足迹几何模型 + ops 操作契约 + v2 快照容错路径 + P3 手动编辑 op 回流 + P4 平面图自由编辑 + 平面图增强）。P1（v3 数据模型）、P2（契约动词化）、P3（双向同步）与 P4（平面图自由编辑：拖顶点/拖房间/点墙放门窗/拆房/合并）已实施：P1 为纯重构（旧数据可打开、用例全绿、截图无回归）；P2 将生成契约从"整屋快照"动词化为"操作序列"（逐条容错执行器 + 提示词重写 + 快照 diff 容错）；P3 把手动编辑 diff 成同构 op 日志回流对话上下文（摘要 + 编辑日志替代整段旧历史，省 token）；P4 在平面图上直接编辑（全部产出同构 op：新增 splitRoom/mergeRoom 操作与 setOpenings 的 edgeIndex/remove，纯函数库 planEdit.ts + 交互层 PlanEditLayer）。2026-08-10 追加落地：**平面图增强**（家具足迹/门窗符号/房间尺寸线 + 尺寸开关，README 路线图项，非 design.md P5）、**移动房间带动家具**（translateRoomContents）、**家具 13 → 20 类**（浴缸/床头柜/梳妆台/鞋柜/灶台/烤箱/微波炉）、微调按钮顺序调整、罗盘标签方向感知定位（不再遮挡东侧尺寸标签）、**移动端横屏支持**（OrientationGuard 竖屏引导 + 窄横屏紧凑布局 + Canvas touch-action，README 路线图项，横屏限定，桌面端零影响）。下一代 v3 完整架构见 [设计方案](design.md)，演进脉络见 [版本演进](history.md)，踩坑记录见 [开发注意事项](notes.md)。
 
 本文档面向开发者和贡献者，描述言筑的核心架构、数据契约与实现细节。项目为**纯前端**应用，无需后端。
 
@@ -66,7 +66,7 @@ Zod 校验（schemas/ops.schema.ts，逐条容错）
 - **`splitRoom`（P4 画墙拆房间）**：`{ op:'splitRoom', id, axis:'x'|'z', position, name? }`——矩形房间沿轴线在 position（世界坐标）处切两半：原房间保留 id 与西/南部分（a），新房间排东/北侧（b，默认名「原名2」）；家具/嵌套房间按中心归属；显式开洞按边重映射（跨切线丢弃）；**共墙自动开一扇门**——门加在**渲染共享墙的一侧**（`sharedWallOwner`，与墙体方案同源，避免开在非渲染侧成为静默空操作，坑 43 同源）。非矩形房间/切线两侧 < 1m 抛错跳过。
 - **`mergeRoom`（P4 合并房间）**：`{ op:'mergeRoom', keep, remove }`——两房间必须为矩形且**并集为合法矩形**（面积守恒判定：`unionRectOf`），keep 保留 id/名称、层高取较大值；家具/嵌套房间保持世界坐标直接并入；显式开洞重映射（变成内部墙的边丢弃）；remove 是入口房间时 `entranceRoomId` 迁移到 keep；**keep 嵌套在 remove 内时交换角色**（否则 removeNode 会连 keep 一起删掉）。
 - **多轮上下文（P3 起）**：当前场景摘要（房间/家具 id·名称·尺寸 + **顶层房间邻接表（邻居-方位，与墙体判定同源）**）+ **手动编辑日志**（`useChatStore.editOps`，与对话 op 同构）注入对话；历史只回传用户消息与文本助手消息（助手纯 JSON 的上一轮 ops 原文由摘要替代，token 省 80%+）；LLM 基于摘要 + 日志输出增量修改。
-- **编辑 op 回流（P3 双向同步）**：手动编辑（属性面板/Gizmo/位移微调）提交时经 `editDiffToOps`（lib/editOps.ts）diff 成单条 op——家具 → `updateFurniture`（position 换算为相对房间中心），房间 → `updateRoom.patch.footprint`（世界坐标顶点环）；日志上限 50、会话内不持久化；`setScene`/`resetScene`/`clearConversation` 时清空（旧日志描述的是已替换的场景）。撤销/重做栈仍为整场景快照（行为不变，op 粒度化属后续优化）。
+- **编辑 op 回流（P3 双向同步）**：手动编辑（属性面板/Gizmo/位移微调）提交时经 `editDiffToOps`（lib/editOps.ts）diff 成单条 op——家具 → `updateFurniture`（position 换算为相对房间中心），房间 → `updateRoom.patch.footprint`（世界坐标顶点环）；日志上限 50、会话内不持久化；`setScene`/`resetScene`/`clearConversation` 时清空（旧日志描述的是已替换的场景）。撤销/重做栈为整场景快照（**最终设计，不做 op 粒度化**——op 逆操作难以定义且回放不保证还原，快照正确性最稳）。
 - **v2 快照容错**：auto 模板 → 直接映射 `macro`（与旧版行为一致）；custom → 按 id 递归 diff（改名/改尺寸/增删房间/家具增删改）；v3 场景原样通过（`migrateModel` 幂等）。
 - **房间规格与家具规格**沿用 v2 语义：家具 `position` 相对所在房间中心（x/z 偏移、y 为高度一半）；房间可嵌套子房间；`custom` 模式支持绝对 `position` 或 `footprint` 顶点环。
 - **卫生间命名归属**：`X卫生间` 只与其归属房间 `X` 开门（`主卧卫生间 → 主卧`、`走廊卫生间 → 走廊`）。
@@ -222,6 +222,12 @@ interface WallPlan { edges: WallEdge[] }   // 与 footprint 顶点环一一对�
 - **指针捕获**：R3F `setPointerCapture` 保证拖拽期间 move/up 持续路由到起始对象（顶点手柄拖拽不因指针悬停手柄而中断）。
 - **清理**：切换工具时结束进行中的手势（拖拽中的预览场景会先 commit，避免只改场景不记历史）。
 
+### 6.6.6 移动端横屏支持（2026-08-10，README 路线图项，横屏限定）
+
+- **竖屏引导**：`components/ui/OrientationGuard.tsx` 包裹整棵路由——`matchMedia('(max-width: 767px) and (orientation: portrait)')`（**阈值 A：窄屏 + 竖放才拦**，手机横屏/iPad/桌面均不命中）命中时渲染全屏覆盖层（旋转图标 + 双语提示，`role="alert"`）；**应用层不卸载**（盖在下方，旋转回来即时恢复、不丢状态）；jsdom/无 matchMedia 环境默认放行。
+- **窄横屏紧凑布局**（≤760px，纯 CSS 媒体查询，桌面端零影响）：侧边栏 200→160（隐藏品牌副标题）、聊天栏 320→280、工具栏横向滚动（左右组 `flex-shrink: 0`）、状态栏可换行、属性面板 240px、设置页 API 表单改单列。
+- **触控正确性**：`.scene-canvas` 加 `touch-action: none`——OrbitControls 双指缩放/平面图拖拽不被浏览器滚动与捏合手势劫持（桌面鼠标无影响）。
+
 ## 6.7 Gizmo 辅助编辑 + 截图分享与口令（v1.3.0）
 
 ### Gizmo（TransformControls）
@@ -252,7 +258,7 @@ src/
 ├── main.tsx / App.tsx         # 入口与路由
 ├── components/
 │   ├── layout/AppShell.tsx    # 侧边栏 + 内容区
-│   ├── ui/                    # Button/Input/HelpDialog/ProjectLibraryDialog/ShareDialog
+│   ├── ui/                    # Button/Input/HelpDialog/ProjectLibraryDialog/ShareDialog/OrientationGuard【移动端横屏】
 │   └── viewport/              # SceneViewer/Viewport3D/ModelNodeView/PropertyPanel/Compass/PlanRig/PlanAnnotations/GizmoControls/PlanEditLayer【P4】/PlanEnhancements【平面图增强】
 ├── lib/
 │   ├── chat.ts                # 生成链路与系统提示词（ops 契约 + 场景摘要 + 编辑日志 + 快照容错）
@@ -279,7 +285,7 @@ src/
 ├── types/ops.ts               # ops 操作契约类型（Op/RoomSpec/FurnitureSpec）【新增】
 ```
 
-## 9. 测试（Vitest，370 用例）
+## 9. 测试（Vitest，374 用例）
 
 - `lib/planEdit.test.ts`【P4 新增】：网格吸附/足迹校验（非正交/过短/自交拒绝）、正交顶点拖拽（矩形滑行/L 形内凹角/退化与自交拒绝/最近顶点）、平移贴墙吸附（线差阈值/网格先行/无重叠不吸附）、拆房布局（家具/嵌套/开洞归属重映射）、合并布局（unionRectOf 面积守恒/开洞重映射）、墙命中（实心墙/入户门/门段/邻屋共墙）。
 - `lib/editOps.test.ts`【新增】：editDiffToOps 纯函数——家具位移（相对房间中心换算）/房间位移与改尺寸（footprint 顶点环）/层高（dimensions.height）/家具改名改尺寸/约束后位置变化/normalize 提交一致性/无变化与节点缺失返回空/整屋改名（setHouse）/嵌套房间内家具归属最内层房间。
@@ -297,6 +303,7 @@ src/
 - `store/useModelStore.test.ts`：编辑/撤销重做 + previewSelected/commitDrag（Gizmo）+ **手动编辑记录编辑日志（translate/update/commitDrag/reset/setScene 清空）【P3】** + **平面图编辑【P4】（planTool 切换与复位/previewFootprint 预览与 commitPlanEdit 提交/applyPlanOps 记历史与编辑日志/splitRoom 可撤销）** + **showPlanDims 尺寸开关【平面图增强】会话内切换、不随 setScene 复位**。
 - `store/useChatStore.test.ts` / `store/useShareStore.test.ts` / `store/useSettingsStore.test.ts` / `store/useProjectStore.test.ts`：各 store 行为（chat 含 **editOps 追加/上限 50/清空/不持久化 + toChatHistory 精简【P3】**）。
 - `components/ui/ShareDialog.test.tsx`：口令复制/还原/历史 + **旧 v1 口令迁移还原为 v3**。
+- `components/ui/OrientationGuard.test.tsx`【2026-08-10 新增】：竖屏横屏引导——jsdom 无 matchMedia 默认放行 / 窄屏竖放渲染全屏覆盖层（子内容保留在 DOM）/ 横屏与平板不渲染 / 旋转回横屏（change 事件）后覆盖层消失。
 - `pages/HomePage.test.tsx`：对话交互 + 分享/还原（mock 3D 视口）。
 
 ## 10. 调试模式
@@ -305,4 +312,4 @@ src/
 
 ---
 
-**维护者**：JoyFish · 文档版本 v2.4
+**维护者**：JoyFish · 文档版本 v2.5
