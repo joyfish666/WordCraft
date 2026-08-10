@@ -42,7 +42,7 @@
 | Code compression | **lz-string** | Efficient JSON compression |
 | HTTP | **Axios** | API requests with interceptors and error handling |
 | Build | **Vite** | Fast dev/build tooling |
-| Testing | **Vitest + Testing Library** | Unit and component tests (375 cases) |
+| Testing | **Vitest + Testing Library** | Unit and component tests (376 cases) |
 
 ## Project Docs
 
@@ -65,7 +65,7 @@ npm run build    # type check + build
 
 ## Roadmap
 
-- [ ] **v3 free design**: ~~P1 data model v3~~ (footprints + migration + window segments, ✅ done) → ~~P2 operation-contract generation~~ (op sequence + executor + prompt rewrite, ✅ done) → ~~P3 bidirectional sync~~ (edits flow back into chat + slimmed context, ✅ done) → ~~P4 plan-view editing~~ (drag vertices / move rooms / place doors & windows / split walls / merge rooms, all undoable, ✅ done)
+- [x] **v3 free design**: ~~P1 data model v3~~ (footprints + migration + window segments, ✅ done) → ~~P2 operation-contract generation~~ (op sequence + executor + prompt rewrite, ✅ done) → ~~P3 bidirectional sync~~ (edits flow back into chat + slimmed context, ✅ done) → ~~P4 plan-view editing~~ (drag vertices / move rooms / place doors & windows / split walls / merge rooms, all undoable, ✅ done)
 - [x] **Mobile base adaptation** (landscape-only; portrait screens are prompted to rotate, ✅ done)
 - [x] **2D plan enhancements** (furniture footprints / door symbols / dimension labels, ✅ done)
 

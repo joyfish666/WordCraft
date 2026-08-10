@@ -72,7 +72,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 12. **公共卫生间没门**：`公共卫生间` 归属名"公共"在房屋中不存在，曾导致密封无门。规则：**归属房间不存在时，公共/公用卫生间允许与走廊开门**。
 13. **多轮修改 LLM 原样输出**：大模型经常不应用修改、原样重复上一次 JSON。提示词明确要求"基于上一个模型输出修改后的完整 JSON、不得原样重复"。即便如此仍可能不稳定（LLM 行为），必要时让用户换个说法。
 14. **入口房间保留**：`resolveCorridor` 里入口房间即使名字含「走廊」（如 LLM 为"大门开在走廊"创建的「入口走廊」）也保留为真实房间，否则被 `isCorridorName` 过滤后 `entranceRoomId` 悬空、大门回退到南边界房间、改大门位置无反应。
-15. **家具常理摆放只对生成生效（auto 模式）**：`resolveLayout` 里 auto 模式跑 `applyFurnitureConventions`，custom 自由布局保留 LLM 显式坐标。常理规则：靠墙家具贴**最近墙**（保持平行坐标）、**大面积贴墙**（长边沿墙，必要时旋转）、再**沿墙滑动避开三类禁区**（嵌套子房间、**房间门口通道**、已放置的其他家具，按 children 顺序贪心）；独立家具（茶几/餐桌/椅子等）仅约束、不贴墙。**normalizeContainment 不避让嵌套房间/门口**——属性面板手动把家具拖进卫生间或门口不会被弹开（已知限制）。
+15. **家具常理摆放只对生成生效（auto 模式）**：`resolveLayout` 里 auto 模式跑 `applyFurnitureConventions`，custom 自由布局保留 LLM 显式坐标。常理规则：靠墙家具贴**最近墙**（保持平行坐标）、**大面积贴墙**（长边沿墙，必要时旋转）、再**沿墙滑动避开三类禁区**（嵌套子房间、**房间门口通道**、已放置的其他家具，按 children 顺序贪心）；独立家具（茶几/餐桌/椅子等）仅约束、不贴墙。~~**normalizeContainment 不避让嵌套房间/门口——属性面板手动把家具拖进卫生间或门口不会被弹开（已知限制）**~~（**已修复**：`normalizeContainment` 现把家具推出嵌套占地（坑 47）**与门口通道**——与渲染同源的 `computeDoorZones` + `doorZoneRect` 作为禁止进入区并入 `pushOutOfRects`，手动编辑（属性面板/Gizmo/平面图）把家具拖进门洞会被推开，与生成路径一致；`pushOutOfRects` 候选对**所有**禁区生成（只对当前重叠禁区取候选时，家具推出 A 恰好撞进 B 会被拒绝而原地不动）。已知边界：嵌套房间（如卫生间）内部的**门区不参与避让**（`computeDoorZones` 只遍历顶层房间，与 `furniturePlacement` 行为一致）；门区避让会让某些"唯一安全位"家具在越界拖拽后回弹原位（此时编辑日志 diff 为空，不记 op，属坑 18 语义）。
 16. **床放置要「短边/床头贴墙」**：大面积贴墙默认长边沿墙，床必须例外——交换条件取反，短边贴墙、长边垂直墙伸入室内。改测试注意：示例床落点会随示例模型/房间几何变，`modelTree`/`useModelStore`/`planGeometry` 的相关断言随之更新。
 17. **旋转 = 交换长宽**：大面积贴墙时若长边不在墙的平行轴，通过**交换 length/width** 实现 90° 旋转（`rotationY` 同步 +90°，但**渲染器暂不读 rotationY**，视觉靠交换后的尺寸生效）。副作用：旋转后属性面板显示的"长×宽"与家具语义相反。改渲染器支持 rotationY 前，别在面板里"修正"它的尺寸。
 
@@ -136,7 +136,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 - **嵌套房间地板**：父房间地板是整块的（嵌套房间地板叠在其上，靠 `floorLift` 防闪烁），不是真正挖出 L 形地板；两个嵌套房间共用内隔墙时只处理一半（后处理者看到先处理者的墙）。
 - **手动编辑不触发重排**：改房间尺寸/位置不会重跑布局引擎（见坑 22）。
 - **家具-家具避让是"贪心顺序"**：生成时常理按 children 顺序逐个放置并避让已放置家具，非全局最优。
-- **属性面板/Gizmo 编辑不避让门口**：`normalizeContainment` 只约束进父房间外边界与推出嵌套占地。
+- ~~**属性面板/Gizmo 编辑不避让门口**~~（**已修复**：`normalizeContainment` 把家具推出门口通道——`computeDoorZones` + `doorZoneRect` 并入 `pushOutOfRects`，覆盖属性面板/Gizmo/平面图/执行器全部提交路径，见坑 15 更新）。
 - ~~**房间移动不带动家具**~~（**已修复**：移动房间（属性面板微调/复位、X/Z 数值框、Gizmo 拖拽、平面图移动工具、LLM `moveRoom`）整体平移足迹 + 家具 + 嵌套房间，相对关系不变——`modelTree.translateRoomContents`；`updateNodeFootprint` 对纯平移足迹同样带动家具（保证编辑日志 `updateRoom.patch.footprint` 回放行为一致）。改形状/缩放仍只约束进墙内）。
 - **LLM 输出质量依赖提示词**（当前 DeepSeek v4-flash）。多轮修改、家具常理摆放等依赖 LLM 遵循度。
 - **拆分仅支持矩形房间**：`splitRoom` 只接受 4 点矩形足迹（L 形等需先拖顶点/或用 addRoom 重建）；合并要求并集为合法矩形（面积守恒）。
@@ -228,7 +228,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | v3 模型类型 | `types/model.ts` |
 | 渲染 | `components/viewport/*`（核心 `ModelNodeView.tsx`：Shape 足迹地板 + 沿边墙段 + window 窗洞） |
 | 属性面板 UI | `components/viewport/PropertyPanel.tsx`（房间尺寸/坐标经 `nodeDims`/`nodePosition` 派生） |
-| 编辑提交/撤销重做 | `store/useModelStore.ts`（persist migrate）、`lib/modelTree.ts` |
+| 编辑提交/撤销重做 | `store/useModelStore.ts`（persist migrate）、`lib/modelTree.ts`（normalizeContainment 约束进墙 + 推出嵌套占地**与门口通道**、updateNodeFootprint/removeNode、translateRoomContents 移动带动家具） |
 | 状态 | `store/*` |
 | 家具部件模型（分类/拼装/包围盒） | `lib/furniturePresets.ts` + `ModelNodeView.tsx`（`FurnitureMesh`） |
 | 项目库 UI/保存/守卫 | `ProjectLibraryDialog.tsx` + `HomePage.tsx` + `db/database.ts` + `store/useProjectStore.ts` |

@@ -189,6 +189,55 @@ describe('modelTree', () => {
     expect(bed.position.z).toBeCloseTo(2, 5)
   })
 
+  it('normalizeContainment 把堵门的家具推出门口通道（手动编辑兜底）', () => {
+    // 主卧床挪到主卧南墙门区中心（门区 x∈[-0.7,0.2]、z∈[1,2]，与渲染同源）
+    const moved: SceneModel = {
+      ...scene,
+      root: {
+        ...scene.root,
+        levels: scene.root.levels.map((level) => ({
+          ...level,
+          rooms: level.rooms.map((r) =>
+            r.id === 'room-master'
+              ? {
+                  ...r,
+                  furniture: r.furniture.map((f) =>
+                    f.id === 'bed-master'
+                      ? { ...f, position: { ...f.position, x: -0.25, z: 1.5 } }
+                      : f,
+                  ),
+                }
+              : r,
+          ),
+        })),
+      },
+    }
+    const normalized = normalizeContainment(moved)
+    const bed = findNodeById(normalized.root, 'bed-master') as FurnitureNode
+    const hx = bed.dimensions.length / 2
+    const hz = bed.dimensions.width / 2
+    const overlapsDoor =
+      bed.position.x + hx > -0.7 + 1e-6 &&
+      bed.position.x - hx < 0.2 - 1e-6 &&
+      bed.position.z + hz > 1 + 1e-6 &&
+      bed.position.z - hz < 2 - 1e-6
+    expect(overlapsDoor).toBe(false)
+    // 也不压嵌套卫生间占地（坑 47 保持）
+    const bath = findNodeById(normalized.root, 'bath-master') as RoomNode
+    const kb = footprintBounds(bath.footprint)
+    const overlapsBath =
+      bed.position.x + hx > kb.minX - 0.15 + 1e-6 &&
+      bed.position.x - hx < kb.maxX + 0.15 - 1e-6 &&
+      bed.position.z + hz > kb.minZ - 0.15 + 1e-6 &&
+      bed.position.z - hz < kb.maxZ + 0.15 - 1e-6
+    expect(overlapsBath).toBe(false)
+    // 仍在主卧墙内
+    const rm = findNodeById(normalized.root, 'room-master')
+    const mb = footprintBounds((rm as RoomNode).footprint)
+    expect(bed.position.x).toBeGreaterThanOrEqual(mb.minX + 0.15 + hx - 1e-9)
+    expect(bed.position.z).toBeLessThanOrEqual(mb.maxZ - 0.15 - hz + 1e-9)
+  })
+
   it('父房间内嵌套子房间：家具被推出其占地（真·内嵌）', () => {
     // 主卧 4×3 内嵌主卧卫生间（NE 角），床头柜初始落在卫生间占地（足迹+墙厚）内
     const nightstand: FurnitureNode = {

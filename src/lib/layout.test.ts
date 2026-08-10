@@ -188,11 +188,12 @@ describe('resolveLayout - living 客厅居中型', () => {
 
 describe('resolveLayout - custom 自由型', () => {
   it('家具相对房间中心偏移为绝对坐标', () => {
-    // 用独立家具（茶几）测相对→绝对转换，避免被家具常理贴墙逻辑挪动
+    // 用独立家具（茶几）测相对→绝对转换，避免被家具常理贴墙逻辑挪动；
+    // z 取 0 落在南北两个门口通道（入户门 + 兜底门）之间，normalizeContainment 不会推出堵门家具
     const model = resolveLayout(
       scene({
         children: [
-          roomV2('r1', '客厅', 3, 3, undefined, [{ id: '茶几', x: 0.5, z: -0.3 }]),
+          roomV2('r1', '客厅', 3, 3, undefined, [{ id: '茶几', x: 0.5, z: 0 }]),
         ],
       }),
     )
@@ -201,7 +202,7 @@ describe('resolveLayout - custom 自由型', () => {
     const table = room.furniture.find((c) => c.id === '茶几')
     // 房间在自定义坐标（未提供 → 原点），家具 = 房间中心 + 相对偏移
     expect(table?.position.x).toBeCloseTo(0.5)
-    expect(table?.position.z).toBeCloseTo(-0.3)
+    expect(table?.position.z).toBeCloseTo(0)
     expect(table?.position.y).toBeCloseTo(0.25)
   })
 
