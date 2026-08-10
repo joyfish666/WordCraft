@@ -547,7 +547,8 @@ export function HomePage() {
           {planMode && (
             <div className="plan-toolbar">
               {mobileCompact ? (
-                /* 移动端：单个「工具」按钮 + 弹出面板（选择即关闭），不再常驻遮挡平面图 */
+                /* 移动端：「工具」+「尺寸」两个独立常驻按钮（尺寸不进面板，避免点不到），
+                   工具按钮呼出弹出面板（选择即关闭），不再常驻遮挡平面图 */
                 <>
                   <button
                     type="button"
@@ -556,6 +557,14 @@ export function HomePage() {
                     title={t('plan.toolsTitle')}
                   >
                     {t('plan.tools')} {planToolsOpen ? '▴' : '▾'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`plan-toolbar__dims segmented__btn ${showPlanDims ? 'segmented__btn--active' : ''}`}
+                    onClick={() => setShowPlanDims(!showPlanDims)}
+                    title={t('plan.toggleDimsTitle')}
+                  >
+                    {t('plan.toggleDims')}
                   </button>
                   {planToolsOpen && (
                     <>
@@ -605,14 +614,6 @@ export function HomePage() {
                             ))}
                           </div>
                         )}
-                        <button
-                          type="button"
-                          className={`plan-toolbar__dims segmented__btn ${showPlanDims ? 'segmented__btn--active' : ''}`}
-                          onClick={() => setShowPlanDims(!showPlanDims)}
-                          title={t('plan.toggleDimsTitle')}
-                        >
-                          {t('plan.toggleDims')}
-                        </button>
                         {planTool !== 'select' && (
                           <div className="plan-toolbar__hint">
                             {planTool === 'move'
