@@ -1,6 +1,6 @@
 # 言筑（WordCraft）技术文档 —— 现行实现（v3 足迹模型 + ops 操作契约 + 双向同步）
 
-> 版本：v2.5 · 更新：2026-08-10。本文档描述**当前代码**的架构与数据契约（v3 足迹几何模型 + ops 操作契约 + v2 快照容错路径 + P3 手动编辑 op 回流 + P4 平面图自由编辑 + 平面图增强）。P1（v3 数据模型）、P2（契约动词化）、P3（双向同步）与 P4（平面图自由编辑：拖顶点/拖房间/点墙放门窗/拆房/合并）已实施：P1 为纯重构（旧数据可打开、用例全绿、截图无回归）；P2 将生成契约从"整屋快照"动词化为"操作序列"（逐条容错执行器 + 提示词重写 + 快照 diff 容错）；P3 把手动编辑 diff 成同构 op 日志回流对话上下文（摘要 + 编辑日志替代整段旧历史，省 token）；P4 在平面图上直接编辑（全部产出同构 op：新增 splitRoom/mergeRoom 操作与 setOpenings 的 edgeIndex/remove，纯函数库 planEdit.ts + 交互层 PlanEditLayer）。2026-08-10 追加落地：**平面图增强**（家具足迹/门窗符号/房间尺寸线 + 尺寸开关，README 路线图项，非 design.md P5）、**移动房间带动家具**（translateRoomContents）、**家具 13 → 20 类**（浴缸/床头柜/梳妆台/鞋柜/灶台/烤箱/微波炉）、微调按钮顺序调整、罗盘标签方向感知定位（不再遮挡东侧尺寸标签）、**移动端横屏支持**（OrientationGuard 竖屏引导 + 窄横屏紧凑布局 + Canvas touch-action，README 路线图项，横屏限定，桌面端零影响）。下一代 v3 完整架构见 [设计方案](design.md)，演进脉络见 [版本演进](history.md)，踩坑记录见 [开发注意事项](notes.md)。
+> 版本：v2.6 · 更新：2026-08-10。本文档描述**当前代码**的架构与数据契约（v3 足迹几何模型 + ops 操作契约 + v2 快照容错路径 + P3 手动编辑 op 回流 + P4 平面图自由编辑 + 平面图增强）。P1（v3 数据模型）、P2（契约动词化）、P3（双向同步）与 P4（平面图自由编辑：拖顶点/拖房间/点墙放门窗/拆房/合并）已实施：P1 为纯重构（旧数据可打开、用例全绿、截图无回归）；P2 将生成契约从"整屋快照"动词化为"操作序列"（逐条容错执行器 + 提示词重写 + 快照 diff 容错）；P3 把手动编辑 diff 成同构 op 日志回流对话上下文（摘要 + 编辑日志替代整段旧历史，省 token）；P4 在平面图上直接编辑（全部产出同构 op：新增 splitRoom/mergeRoom 操作与 setOpenings 的 edgeIndex/remove，纯函数库 planEdit.ts + 交互层 PlanEditLayer）。2026-08-10 追加落地：**平面图增强**（家具足迹/门窗符号/房间尺寸线 + 尺寸开关，README 路线图项，非 design.md P5）、**移动房间带动家具**（translateRoomContents）、**家具 13 → 20 类**（浴缸/床头柜/梳妆台/鞋柜/灶台/烤箱/微波炉）、微调按钮顺序调整、罗盘标签方向感知定位（不再遮挡东侧尺寸标签）、**移动端横屏支持**（OrientationGuard JS 视口判定 + `wc-compact` 类门控紧凑布局 + 平面图「工具/尺寸」工具栏 + 罗盘缩小 + Canvas touch-action，README 路线图项，横屏限定，桌面端零影响）。下一代 v3 完整架构见 [设计方案](design.md)，演进脉络见 [版本演进](history.md)，踩坑记录见 [开发注意事项](notes.md)。
 
 本文档面向开发者和贡献者，描述言筑的核心架构、数据契约与实现细节。项目为**纯前端**应用，无需后端。
 
@@ -286,7 +286,7 @@ src/
 ├── types/ops.ts               # ops 操作契约类型（Op/RoomSpec/FurnitureSpec）【新增】
 ```
 
-## 9. 测试（Vitest，374 用例）
+## 9. 测试（Vitest，375 用例）
 
 - `lib/planEdit.test.ts`【P4 新增】：网格吸附/足迹校验（非正交/过短/自交拒绝）、正交顶点拖拽（矩形滑行/L 形内凹角/退化与自交拒绝/最近顶点）、平移贴墙吸附（线差阈值/网格先行/无重叠不吸附）、拆房布局（家具/嵌套/开洞归属重映射）、合并布局（unionRectOf 面积守恒/开洞重映射）、墙命中（实心墙/入户门/门段/邻屋共墙）。
 - `lib/editOps.test.ts`【新增】：editDiffToOps 纯函数——家具位移（相对房间中心换算）/房间位移与改尺寸（footprint 顶点环）/层高（dimensions.height）/家具改名改尺寸/约束后位置变化/normalize 提交一致性/无变化与节点缺失返回空/整屋改名（setHouse）/嵌套房间内家具归属最内层房间。
@@ -304,8 +304,8 @@ src/
 - `store/useModelStore.test.ts`：编辑/撤销重做 + previewSelected/commitDrag（Gizmo）+ **手动编辑记录编辑日志（translate/update/commitDrag/reset/setScene 清空）【P3】** + **平面图编辑【P4】（planTool 切换与复位/previewFootprint 预览与 commitPlanEdit 提交/applyPlanOps 记历史与编辑日志/splitRoom 可撤销）** + **showPlanDims 尺寸开关【平面图增强】会话内切换、不随 setScene 复位**。
 - `store/useChatStore.test.ts` / `store/useShareStore.test.ts` / `store/useSettingsStore.test.ts` / `store/useProjectStore.test.ts`：各 store 行为（chat 含 **editOps 追加/上限 50/清空/不持久化 + toChatHistory 精简【P3】**）。
 - `components/ui/ShareDialog.test.tsx`：口令复制/还原/历史 + **旧 v1 口令迁移还原为 v3**。
-- `components/ui/OrientationGuard.test.tsx`【2026-08-10 新增】：竖屏横屏引导——jsdom 无 matchMedia 默认放行 / 窄屏竖放渲染全屏覆盖层（子内容保留在 DOM）/ 横屏与平板不渲染 / 旋转回横屏（change 事件）后覆盖层消失。
-- `pages/HomePage.test.tsx`：对话交互 + 分享/还原（mock 3D 视口）。
+- `components/ui/OrientationGuard.test.tsx`【2026-08-10 新增】：竖屏横屏引导与紧凑类——桌面视口只渲染子内容 / 窄屏竖放渲染全屏覆盖层（子内容保留在 DOM）+ 加 `wc-compact` 类 / 横屏手机不渲染覆盖层但加紧凑类 / 旋转回横屏后覆盖层消失且类移除（`Object.defineProperty` 模拟视口 + resize 事件）。
+- `pages/HomePage.test.tsx`：对话交互 + 分享/还原（mock 3D 视口）+ **移动端紧凑视口下平面图「工具」「尺寸」独立按钮与弹出面板交互（选工具即关闭、尺寸开关不受面板影响）**。
 
 ## 10. 调试模式
 
@@ -313,4 +313,4 @@ src/
 
 ---
 
-**维护者**：JoyFish · 文档版本 v2.5
+**维护者**：JoyFish · 文档版本 v2.6
