@@ -137,6 +137,12 @@ describe('HomePage 对话交互', () => {
     // 点开面板：工具列表出现；选择「移动」后面板关闭且工具生效
     fireEvent.click(screen.getByRole('button', { name: /工具/ }))
     expect(screen.getByRole('toolbar', { name: '平面图编辑工具' })).toBeInTheDocument()
+    // 面板内含「尺寸」开关，点击切换 showPlanDims
+    expect(screen.getByRole('button', { name: '尺寸' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '尺寸' }))
+    expect(useModelStore.getState().showPlanDims).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '尺寸' }))
+    expect(useModelStore.getState().showPlanDims).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: '移动' }))
     expect(screen.queryByRole('toolbar', { name: '平面图编辑工具' })).not.toBeInTheDocument()
     expect(useModelStore.getState().planTool).toBe('move')
