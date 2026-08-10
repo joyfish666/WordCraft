@@ -130,13 +130,14 @@ describe('editDiffToOps（手动编辑 → op，P3 双向同步）', () => {
 
   it('编辑后 normalizeContainment 约束的位置变化也能被捕获（与真实提交一致）', () => {
     const before = sample()
+    // 把主卧床头柜拖进门口通道（门区中心），normalizeContainment 会把它推出门口禁区
     const next = normalizeContainment({
       ...before,
-      root: updateNodeFields(before.root, 'bed-master', {
-        position: { x: -2 },
+      root: updateNodeFields(before.root, 'nightstand-master', {
+        position: { x: -0.25, z: 1.5 },
       }) as SceneModel['root'],
     })
-    const ops = editDiffToOps(before, next, 'bed-master')
+    const ops = editDiffToOps(before, next, 'nightstand-master')
     expect(ops).toHaveLength(1)
     expect(ops[0].op).toBe('updateFurniture')
   })

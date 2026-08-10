@@ -9,7 +9,8 @@ import type {
   SceneModel,
 } from '../types/model'
 import { footprintBounds, footprintCenter, resizeFootprint, translateFootprint } from './footprint'
-import { WALL_THICKNESS } from './roomGeometry'
+import { doorZoneRect } from './furniturePlacement'
+import { WALL_THICKNESS, computeDoorZones, type DoorZoneInfo } from './roomGeometry'
 
 /**
  * 深度优先遍历树中的所有节点。
@@ -350,8 +351,10 @@ function overlapsRect(x: number, z: number, hx: number, hz: number, k: Rect): bo
 }
 
 /**
- * 推出禁区（≤4 次迭代）：对每个重叠的禁区，候选 = 沿 X/Z 最小穿透推出 + 四个方向
+ * 推出禁区（≤4 次迭代）：对每个禁区生成候选 = 沿 X/Z 最小穿透推出 + 四个方向
  * 「完全退出」（移动到禁区边界外侧）的钳制结果，选择重叠数最少的候选（优先完全避开）。
+ * 候选对**所有**禁区生成（不只当前重叠的）——只对当前重叠禁区取候选时，
+ * 家具推出 A 可能恰好撞进 B（如卫生间旁的门区），重叠数不变被拒绝而原地不动（几何有解但找不到）。
  * 旧实现只沿最小穿透轴推一次再钳制——① 钳制会把家具拉回禁区（家具贴墙时尤其明显）；
  * ② 完全在禁区内的家具（nestRoom 把卫生间嵌进已有家具的房间时）最小穿透推不出去；
  * ③ 贴边浮点噪声被判为重叠。三处都导致家具与嵌套房间可见重叠（坑 47）。
@@ -376,7 +379,6 @@ function pushOutOfRects(
     let best: { x: number; z: number } | null = null
     let bestCount = Infinity
     for (const k of keepOuts) {
-      if (!overlapsRect(x, z, hx, hz, k)) continue
       const cx = (k.minX + k.maxX) / 2
       const cz = (k.minZ + k.maxZ) / 2
       const penX = hx + (k.maxX - k.minX) / 2 - Math.abs(x - cx)
@@ -407,23 +409,36 @@ function pushOutOfRects(
 /**
  * 将每个容器内的家具约束在墙体之内，避免家具与墙/门重叠；
  * 父房间内若有嵌套子房间，家具还要被推出其占地（真·内嵌：父房间可用空间减去嵌套占地）。
+ * 房间门口（含入户门）也是禁止进入区（与渲染/常理摆放同源）：手动编辑把家具拖进
+ * 门口通道时会被推开，与生成路径行为一致。
  * 容器边界按墙体厚度内缩（沿足迹包围盒）；家具保持自身半宽/半深余量。
  */
 export function normalizeContainment(scene: SceneModel): SceneModel {
-  return { ...scene, root: containChildren(scene.root) as SceneModel['root'] }
+  const rooms = scene.root.levels[0]?.rooms ?? []
+  const doorZones = computeDoorZones(rooms, {
+    entrance: scene.root.entranceDir ?? 'south',
+    entranceRoomId: scene.root.entranceRoomId,
+  })
+  return { ...scene, root: containChildren(scene.root, doorZones) as SceneModel['root'] }
 }
 
-function containChildren(container: HouseNode | RoomNode): HouseNode | RoomNode {
+function containChildren(
+  container: HouseNode | RoomNode,
+  doorZones: Map<string, DoorZoneInfo[]>,
+): HouseNode | RoomNode {
   if (container.type === 'house') {
     return {
       ...container,
-      levels: container.levels.map((level) => ({ ...level, rooms: level.rooms.map(containRoom) })),
+      levels: container.levels.map((level) => ({
+        ...level,
+        rooms: level.rooms.map((r) => containRoom(r, doorZones)),
+      })),
     }
   }
-  return containRoom(container)
+  return containRoom(container, doorZones)
 }
 
-function containRoom(room: RoomNode): RoomNode {
+function containRoom(room: RoomNode, doorZones: Map<string, DoorZoneInfo[]>): RoomNode {
   const b = footprintBounds(room.footprint)
   const minX = b.minX + WALL_THICKNESS
   const maxX = b.maxX - WALL_THICKNESS
@@ -433,15 +448,18 @@ function containRoom(room: RoomNode): RoomNode {
 
   // 嵌套子房间的禁止进入区：父房间家具须避开
   const nestedKeepOuts: Rect[] = room.nestedRooms.map(nestedKeepOut)
+  // 房间门口通道的禁止进入区（与渲染/常理摆放同源）；嵌套房间无门区条目（computeDoorZones 只遍历顶层）
+  const doorKeepOuts: Rect[] = (doorZones.get(room.id) ?? []).map((z) => doorZoneRect(room, z))
+  const keepOuts = [...nestedKeepOuts, ...doorKeepOuts]
 
   const furniture = room.furniture.map((child) => {
     const hx = child.dimensions.length / 2
     const hz = child.dimensions.width / 2
     let x = clampTo(child.position.x, minX + hx, maxX - hx)
     let z = clampTo(child.position.z, minZ + hz, maxZ - hz)
-    // 真·内嵌：把家具推出嵌套子房间占地（生成时由 furniturePlacement 负责，这里兜底手动编辑/加载）
-    if (nestedKeepOuts.length > 0) {
-      const pushed = pushOutOfRects(x, z, hx, hz, nestedKeepOuts, bounds)
+    // 真·内嵌：把家具推出嵌套子房间占地与门口通道（生成时由 furniturePlacement 负责，这里兜底手动编辑/加载）
+    if (keepOuts.length > 0) {
+      const pushed = pushOutOfRects(x, z, hx, hz, keepOuts, bounds)
       x = pushed.x
       z = pushed.z
     }
@@ -454,17 +472,17 @@ function containRoom(room: RoomNode): RoomNode {
     const cb = footprintBounds(child.footprint)
     const hx = (cb.maxX - cb.minX) / 2
     const hz = (cb.maxZ - cb.minZ) / 2
-    const moved = containRoom(child)
+    const moved = containRoom(child, doorZones)
     const nc = footprintCenter(moved.footprint)
     const targetX = clampTo(nc.x, minX + hx, maxX - hx)
     const targetZ = clampTo(nc.z, minZ + hz, maxZ - hz)
     const dx = targetX - c.x
     const dz = targetZ - c.z
     if (dx === 0 && dz === 0) return moved
-    return containRoom({
-      ...moved,
-      footprint: translateFootprint(moved.footprint, dx, dz),
-    })
+    return containRoom(
+      { ...moved, footprint: translateFootprint(moved.footprint, dx, dz) },
+      doorZones,
+    )
   })
 
   return { ...room, furniture, nestedRooms }

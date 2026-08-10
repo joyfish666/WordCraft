@@ -454,7 +454,7 @@ describe('executeOps - 房间增删改', () => {
               dimensions: { length: 2, width: 1.8, height: 2.8 },
               position: { x: 5, y: 1.4, z: 0 },
               furniture: [
-                { id: 'toilet', name: '马桶', dimensions: { length: 0.6, width: 0.4, height: 0.7 } },
+                { id: 'toilet', name: '马桶', dimensions: { length: 0.6, width: 0.4, height: 0.7 }, position: { x: 0.55, y: 0.35, z: 0.5 } },
               ],
             },
           ],
@@ -472,10 +472,11 @@ describe('executeOps - 房间增删改', () => {
     expect(footprintBounds(bath.footprint).minX).toBeGreaterThan(mb.minX)
     expect(footprintBounds(bath.footprint).maxX).toBeLessThanOrEqual(mb.maxX + 1e-6)
     expect(footprintBounds(bath.footprint).maxZ).toBeGreaterThan(mb.minZ)
-    // 家具随房间整体平移（相对位置不变）
+    // 家具随房间整体平移（相对位置不变；初始放在卫生间东北角以避开门口通道）
     const toilet = findNodeById(scene.root, 'toilet') as FurnitureNode
     const bathC = footprintCenter(bath.footprint)
-    expect(toilet.position.x - bathC.x).toBeCloseTo(0, 5)
+    expect(toilet.position.x - bathC.x).toBeCloseTo(0.55, 5)
+    expect(toilet.position.z - bathC.z).toBeCloseTo(0.5, 5)
     // 主卧床被 normalizeContainment 推出嵌套占地
     const bed = findNodeById(scene.root, 'bed') as FurnitureNode
     expect(bed).toBeDefined()
@@ -1514,7 +1515,7 @@ describe('diffSceneV2 - 快照容错路径', () => {
     name: string,
     length = 3,
     width = 3,
-    furniture: { id: string; name: string }[] = [],
+    furniture: { id: string; name: string; position?: { x: number; y: number; z: number } }[] = [],
   ): SceneModelV2['root']['children'][number] {
     return {
       id,
@@ -1526,7 +1527,7 @@ describe('diffSceneV2 - 快照容错路径', () => {
         type: 'furniture',
         name: f.name,
         dimensions: { length: 1, width: 0.5, height: 0.5 },
-        position: { x: 0, y: 0.25, z: 0 },
+        position: f.position ?? { x: 0, y: 0.25, z: 0 },
       })),
     }
   }
@@ -1559,7 +1560,8 @@ describe('diffSceneV2 - 快照容错路径', () => {
                   id: 'f1',
                   name: '旧家具',
                   dimensions: { length: 1, width: 0.5, height: 0.5 },
-                  position: { x: 0, y: 0.25, z: 0 },
+                  // 初始放 z=0.8 避开门口通道（normalizeContainment 会推出堵门家具，位置变化会引入 position 补丁）
+                  position: { x: 0, y: 0.25, z: 0.8 },
                 },
               ],
             },
@@ -1576,7 +1578,7 @@ describe('diffSceneV2 - 快照容错路径', () => {
     const target = v2Scene(
       [
         roomV2('a', '房A改名', 5, 4, [
-          { id: 'f1', name: '新家具' },
+          { id: 'f1', name: '新家具', position: { x: 0, y: 0.25, z: 0.8 } },
           { id: 'f2', name: '新加的' },
         ]),
         roomV2('new', '新房间'),
