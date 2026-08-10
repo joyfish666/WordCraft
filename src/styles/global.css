@@ -1163,6 +1163,72 @@ button {
   width: fit-content;
 }
 
+/* 移动端「工具」按钮 + 弹出面板（选择工具后关闭，面板可上下滚动） */
+.plan-toolbar__menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.plan-toolbar__menu-btn--active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.plan-toolbar__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  background: transparent;
+}
+
+.plan-toolbar__sheet {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: min(300px, calc(100vw - 24px));
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.plan-toolbar__sheet-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.plan-toolbar__sheet-btn {
+  padding: 8px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.plan-toolbar__sheet-btn--active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
 /* 平面图标签（drei Html 内部元素；外层容器已 pointer-events:none） */
 .plan-label {
   display: inline-flex;
@@ -1332,27 +1398,9 @@ button {
   grid-template-columns: 1fr;
 }
 
-/* 平面图工具栏：单行横向滚动 + 紧凑按钮，不再纵向堆叠挡住平面图 */
+/* 平面图工具栏（移动端）：单个「工具」按钮 + 弹出面板，选择即关闭，不再常驻遮挡平面图 */
 .wc-compact .plan-toolbar {
   top: 46px;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: flex-start;
-  overflow-x: auto;
-}
-
-.wc-compact .plan-toolbar__row {
-  flex-shrink: 0;
-}
-
-.wc-compact .plan-toolbar__hint {
-  display: none;
-}
-
-.wc-compact .plan-toolbar__tools .segmented__btn,
-.wc-compact .plan-toolbar__dims {
-  padding: 4px 8px;
-  font-size: 11px;
 }
 
 /* 右上角罗盘缩小，给视口让位（条件同 wc-compact：横屏手机高度 360-430px） */

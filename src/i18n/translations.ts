@@ -54,6 +54,8 @@ export const zh = {
   'home.viewModeAria': '视图模式',
   'home.viewPlan': '平面图',
   'home.viewPlanTitle': '切换至俯视平面图',
+  'plan.tools': '工具',
+  'plan.toolsTitle': '打开平面图编辑工具列表',
 
   // ---------- 调试面板 ----------
   'home.debugLog': '调试日志',
@@ -325,6 +327,8 @@ export const en: Record<TKey, string> = {
   'home.viewModeAria': 'View mode',
   'home.viewPlan': 'Plan',
   'home.viewPlanTitle': 'Switch to top-down plan view',
+  'plan.tools': 'Tools',
+  'plan.toolsTitle': 'Open plan editing tools',
 
   // ---------- Debug panel ----------
   'home.debugLog': 'Debug log',
