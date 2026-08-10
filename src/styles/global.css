@@ -1292,84 +1292,80 @@ button {
 }
 
 /* ---------- 窄屏/横屏手机适配（桌面端正常窗口不受影响） ----------
-   条件 1：窗口 ≤760px（窄窗口 / 窄横屏老机型 / 桌面窄窗口）
-   条件 2：高度 ≤480px——任意宽度的横屏手机（手机横屏高度恒为 360-430px，含 844px 宽
-   新 iPhone；曾用 (pointer: coarse) 限定触屏，但部分安卓浏览器/桌面模式报告 pointer: fine，
-   导致工具栏样式漏命中，已去掉）；桌面正常窗口高度 ≥500px 不命中 */
+   不用媒体查询门控（小米系统浏览器等部分安卓浏览器对媒体查询的视口判定不可靠，
+   实测横屏不命中），改由 OrientationGuard 的 JS 计算（innerWidth/innerHeight，
+   恒为 CSS 像素）给 <html> 加 .wc-compact 类：
+   条件 = 宽度 ≤760px 或 高度 ≤480px（手机横屏高度恒为 360-430px，含 844px 宽新 iPhone；
+   桌面正常窗口高度 ≥500px 不会命中） */
 
-@media (max-width: 760px), (max-height: 480px) {
-  .sidebar {
-    width: 160px;
-  }
-
-  .sidebar__brand-text span {
-    display: none;
-  }
-
-  .home__chat {
-    width: 280px;
-  }
-
-  .home__toolbar {
-    overflow-x: auto;
-  }
-
-  .home__toolbar-left,
-  .home__toolbar-right {
-    flex-shrink: 0;
-  }
-
-  .home__statusbar {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .prop-panel {
-    width: 240px;
-  }
-
-  .api-form {
-    grid-template-columns: 1fr;
-  }
-
-  /* 平面图工具栏：单行横向滚动 + 紧凑按钮，不再纵向堆叠挡住平面图 */
-  .plan-toolbar {
-    top: 46px;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-items: flex-start;
-    overflow-x: auto;
-  }
-
-  .plan-toolbar__row {
-    flex-shrink: 0;
-  }
-
-  .plan-toolbar__hint {
-    display: none;
-  }
-
-  .plan-toolbar__tools .segmented__btn,
-  .plan-toolbar__dims {
-    padding: 4px 8px;
-    font-size: 11px;
-  }
+.wc-compact .sidebar {
+  width: 160px;
 }
 
-/* 横屏手机（任意宽度，含 844px 宽的新 iPhone）：右上角罗盘缩小，给视口让位。
-   条件同「窄屏适配」条件 2：高度 ≤480px 覆盖横屏手机高度（360-430px），桌面正常窗口不命中 */
-@media (max-height: 480px) {
-  .corner-compass {
-    width: 68px;
-    height: 68px;
-  }
+.wc-compact .sidebar__brand-text span {
+  display: none;
+}
 
-  .corner-compass__label {
-    font-size: 9px;
-  }
+.wc-compact .home__chat {
+  width: 280px;
+}
 
-  .corner-compass__cross {
-    width: 6px;
-    height: 6px;
-  }
+.wc-compact .home__toolbar {
+  overflow-x: auto;
+}
+
+.wc-compact .home__toolbar-left,
+.wc-compact .home__toolbar-right {
+  flex-shrink: 0;
+}
+
+.wc-compact .home__statusbar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wc-compact .prop-panel {
+  width: 240px;
+}
+
+.wc-compact .api-form {
+  grid-template-columns: 1fr;
+}
+
+/* 平面图工具栏：单行横向滚动 + 紧凑按钮，不再纵向堆叠挡住平面图 */
+.wc-compact .plan-toolbar {
+  top: 46px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  overflow-x: auto;
+}
+
+.wc-compact .plan-toolbar__row {
+  flex-shrink: 0;
+}
+
+.wc-compact .plan-toolbar__hint {
+  display: none;
+}
+
+.wc-compact .plan-toolbar__tools .segmented__btn,
+.wc-compact .plan-toolbar__dims {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+/* 右上角罗盘缩小，给视口让位（条件同 wc-compact：横屏手机高度 360-430px） */
+.wc-compact .corner-compass {
+  width: 68px;
+  height: 68px;
+}
+
+.wc-compact .corner-compass__label {
+  font-size: 9px;
+}
+
+.wc-compact .corner-compass__cross {
+  width: 6px;
+  height: 6px;
 }

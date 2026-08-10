@@ -203,7 +203,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 ### 3.13 移动端横屏支持（2026-08-10 落地实录，README 路线图项，横屏限定）
 
-61. **竖屏引导用「窄屏 + 竖放」双条件（阈值 A），不要只用 `orientation: portrait`**：`(max-width: 767px) and (orientation: portrait)`——纯 orientation 会把 iPad 竖屏（768×1024，布局完全可用）也拦住。命中时**应用层不要卸载**（全屏覆盖层盖在下方即可），旋转回来即时恢复不丢状态；jsdom 无 matchMedia，组件默认放行、测试须 stub。**桌面端任何情况都不应命中**——窄屏/横屏手机样式全部收进媒体查询（`(max-width:760px)` **或** `(max-height:480px)`），别写成全局覆盖。⚠️ **别用 `(pointer: coarse)` 限定触屏**（2026-08-10 实测踩坑）：部分安卓浏览器/「桌面版网站」模式/部分 WebView 报告 `pointer: fine`，罗盘缩小与平面图工具栏单行样式会漏命中；手机横屏高度恒为 360-430px，`(max-height: 480px)` 即可覆盖任意宽度，桌面正常窗口（≥500px 高）不受影响。
+61. **竖屏引导与紧凑布局判定一律走 JS 视口（innerWidth/innerHeight），不要用 matchMedia/媒体查询**（2026-08-10 实测踩坑两轮）：小米系统浏览器（Redmi K70E 实测）等部分安卓浏览器对媒体查询的视口判定不可靠——先是用 `(pointer: coarse)` 限定触屏（安卓/桌面模式报告 `pointer: fine` 漏命中），去掉后纯 `(max-height: 480px)` 仍不命中。最终方案：`OrientationGuard` 用 `window.innerWidth/innerHeight`（恒为 CSS 像素）计算两个状态——① 竖屏引导（阈值 A：`w < 768 && h > w`，纯 orientation 会把 iPad 竖屏也拦住）；② 紧凑布局（`w <= 760 || h <= 480`）给 `<html>` 加 `wc-compact` 类，**窄屏样式全部由该类门控**；`index.html` 内联脚本在首帧前预置该类防闪烁。命中时**应用层不要卸载**（覆盖层盖在下方即可），旋转回来即时恢复不丢状态；jsdom 无真实视口，测试用 `Object.defineProperty(window, 'innerWidth'...)` + resize 事件模拟。**桌面端任何情况都不应命中**——桌面正常窗口高度 ≥500px、宽度 >760px。
 62. **触屏必须给 Canvas `touch-action: none`**：否则手机横屏上平面图拖拽（PlanEditLayer 的 Pointer Events）与 OrbitControls 双指缩放会被浏览器滚动/捏合手势劫持。桌面鼠标不受影响，改这条不影响桌面端。
 63. **从元素尺寸推导布局偏移时，警惕 `box-sizing: border-box` 下的 `clientWidth`（不含边框）与首帧 0 值**（2026-08-10 实测）：`.corner-compass` 缩小到 68px 后 `clientWidth` = 66 → `66/2 - 10 = 23`，被 `radius < 24` 的守卫提前 return，四个方向标签全部停在圆心叠成一团。修复：偏移量下限取 20（`Math.max(size/2 - 10, 20)`）并**删除提前 return**——标签永远有位置；67px 以下的元素配合下限也不会越界。
 

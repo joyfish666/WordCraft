@@ -8,6 +8,15 @@
       content="言筑 WordCraft —— 通过自然语言对话快速生成 3D 空间结构模型的纯前端 Web 应用"
     />
     <title>言筑 WordCraft</title>
+    <script>
+      // 首帧前预判移动端紧凑布局（对应 OrientationGuard 的 wc-compact，避免横屏手机
+      // 首帧闪出桌面布局；CSS 样式由 document.documentElement 上的 wc-compact 类门控）
+      try {
+        var w = window.innerWidth,
+          h = window.innerHeight
+        if (w <= 760 || h <= 480) document.documentElement.classList.add('wc-compact')
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
