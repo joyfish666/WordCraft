@@ -607,7 +607,7 @@ export function HomePage() {
                         )}
                         <button
                           type="button"
-                          className={`plan-toolbar__dims ${showPlanDims ? 'segmented__btn--active' : ''}`}
+                          className={`plan-toolbar__dims segmented__btn ${showPlanDims ? 'segmented__btn--active' : ''}`}
                           onClick={() => setShowPlanDims(!showPlanDims)}
                           title={t('plan.toggleDimsTitle')}
                         >

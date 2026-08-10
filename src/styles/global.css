@@ -1197,7 +1197,9 @@ button {
   left: 0;
   z-index: 20;
   width: min(300px, calc(100vw - 24px));
-  max-height: calc(100vh - 140px);
+  /* 面板顶部约在视口 90px 处，100vh-90px 保证内容全部可见；
+     留 140px 余量会因中文行高差异把「尺寸」按钮挤出可视区（需滚动才见） */
+  max-height: calc(100vh - 90px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1207,6 +1209,12 @@ button {
   border: 1px solid var(--border);
   background: var(--bg-panel);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.plan-toolbar__sheet-tools,
+.plan-toolbar__kind,
+.plan-toolbar__hint {
+  flex-shrink: 0;
 }
 
 .plan-toolbar__sheet-tools {
@@ -1403,6 +1411,11 @@ button {
 /* 平面图工具栏（移动端）：单个「工具」按钮 + 弹出面板，选择即关闭，不再常驻遮挡平面图 */
 .wc-compact .plan-toolbar {
   top: 46px;
+}
+
+/* 移动端面板内「尺寸」开关独立成行：防压缩、不被中文行高差异挤出可视区 */
+.wc-compact .plan-toolbar__dims {
+  flex-shrink: 0;
 }
 
 /* 右上角罗盘缩小，给视口让位（条件同 wc-compact：横屏手机高度 360-430px） */
