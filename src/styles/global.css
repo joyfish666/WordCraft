@@ -1291,9 +1291,11 @@ button {
   }
 }
 
-/* ---------- 窄屏适配（横屏手机 ≤760px；桌面端不受影响） ---------- */
+/* ---------- 窄屏/横屏手机适配（桌面端不受影响） ----------
+   条件 1：窗口 ≤760px（窄窗口 / 窄横屏老机型）
+   条件 2：触屏设备 + 高度 ≤480px（任意宽度的横屏手机，含 844px 宽的新 iPhone） */
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 480px) and (pointer: coarse) {
   .sidebar {
     width: 160px;
   }
@@ -1326,6 +1328,29 @@ button {
 
   .api-form {
     grid-template-columns: 1fr;
+  }
+
+  /* 平面图工具栏：单行横向滚动 + 紧凑按钮，不再纵向堆叠挡住平面图 */
+  .plan-toolbar {
+    top: 46px;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    overflow-x: auto;
+  }
+
+  .plan-toolbar__row {
+    flex-shrink: 0;
+  }
+
+  .plan-toolbar__hint {
+    display: none;
+  }
+
+  .plan-toolbar__tools .segmented__btn,
+  .plan-toolbar__dims {
+    padding: 4px 8px;
+    font-size: 11px;
   }
 }
 
