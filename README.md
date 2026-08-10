@@ -17,7 +17,7 @@
 - 🧭 **Consistent directions**: world-anchored compass + corner compass; both 3D and the plan view share the same orientation — north up, west left, east right (standard map)
 - 🔧 **Precise editing**: a property panel (exact values) + Gizmo handles (direct dragging), with undo/redo; **free plan-view editing** (drag vertices to reshape / move rooms / click walls to place doors & windows / split & merge rooms — every action is undoable and flows back into the chat); **plan-view enhancements** (furniture footprints / door symbols / room dimension lines, with a one-click toggle for dimension annotations)
 - 🔒 **Privacy-first**: pure frontend, conversations / models / API keys all stay in the browser
-- 📱 **Mobile landscape support**: portrait screens are prompted to rotate; narrow landscape gets a compact layout (desktop untouched)
+- 📱 **Mobile landscape support**: portrait screens are prompted to rotate; narrow landscape gets a compact layout with a pop-out plan toolbar and a smaller compass (desktop untouched)
 - 📤 **Easy sharing**: one-click HD screenshot + a share code that fully restores the model
 - 🌐 **Open source**: MIT licensed, contributions welcome
 
@@ -42,7 +42,7 @@
 | Code compression | **lz-string** | Efficient JSON compression |
 | HTTP | **Axios** | API requests with interceptors and error handling |
 | Build | **Vite** | Fast dev/build tooling |
-| Testing | **Vitest + Testing Library** | Unit and component tests (374 cases) |
+| Testing | **Vitest + Testing Library** | Unit and component tests (375 cases) |
 
 ## Project Docs
 

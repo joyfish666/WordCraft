@@ -239,5 +239,5 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | 共享配色（2D/3D 一致） | `lib/palette.ts` |
 | Gizmo 编辑 | `GizmoControls.tsx` + `SceneViewer.tsx` + `PropertyPanel.tsx` + `useModelStore.ts` |
 | 截图分享/口令 | `ShareDialog.tsx` + `HomePage.tsx` + `SceneViewer.tsx` + `lib/watermark.ts` + `lib/compression.ts`（`wc3:` 前缀）+ `store/useShareStore.ts` |
-| 竖屏横屏引导 + 窄横屏布局【2026-08-10】 | `components/ui/OrientationGuard.tsx`（matchMedia 阈值 A 覆盖层）+ `App.tsx`（包裹整棵路由）+ `styles/global.css`（覆盖层样式 + `@media (max-width: 760px)` 紧凑布局 + `.scene-canvas` `touch-action: none`） |
+| 竖屏横屏引导 + 窄横屏布局【2026-08-10】 | `components/ui/OrientationGuard.tsx`（JS 视口判定：竖屏覆盖层 + `wc-compact` 类）+ `App.tsx`（包裹整棵路由）+ `index.html`（内联脚本首帧预置类）+ `styles/global.css`（覆盖层样式 + `.wc-compact` 门控紧凑布局 + `.scene-canvas` `touch-action: none`） |
 | i18n | `i18n/translations.ts`（zh 为真源） |
