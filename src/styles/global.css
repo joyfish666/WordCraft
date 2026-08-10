@@ -1328,3 +1328,21 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+/* 横屏手机（任意宽度，含 844px 宽的新 iPhone）：右上角罗盘缩小，给视口让位。
+   max-height 覆盖横屏手机高度（375-430px），pointer: coarse 限定触屏设备，桌面端不受影响 */
+@media (max-height: 480px) and (pointer: coarse) {
+  .corner-compass {
+    width: 68px;
+    height: 68px;
+  }
+
+  .corner-compass__label {
+    font-size: 9px;
+  }
+
+  .corner-compass__cross {
+    width: 6px;
+    height: 6px;
+  }
+}
