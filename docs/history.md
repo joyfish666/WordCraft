@@ -134,7 +134,7 @@ README 路线图「2D 平面图增强」落地（验收：370 用例全绿，新
 README 路线图「移动端基础适配」以**横屏限定**方式落地（验收：374 用例全绿，新增 OrientationGuard 4 用例）：
 
 - **竖屏引导**：`OrientationGuard` 全屏覆盖层（**阈值 A**：`(max-width:767px) and (orientation:portrait)` 才拦——手机竖屏提示旋转，手机横屏/iPad/桌面零影响；**应用层不卸载**，旋转回来即时恢复不丢状态）；
-- **窄横屏紧凑布局**（`(max-width:760px)` 或 `(max-height:480px) and (pointer:coarse)` 纯 CSS 媒体查询，桌面端零影响）：侧边栏 200→160、聊天栏 320→280、工具栏横向滚动、状态栏换行、设置页 API 表单单列、**平面图工具栏单行横向滚动**（不再纵向堆叠遮挡平面图）；
+- **窄横屏紧凑布局**（`(max-width:760px)` 或 `(max-height:480px)` 纯 CSS 媒体查询，桌面端正常窗口零影响）：侧边栏 200→160、聊天栏 320→280、工具栏横向滚动、状态栏换行、设置页 API 表单单列、**平面图工具栏单行横向滚动**（不再纵向堆叠遮挡平面图）；
 - **触控正确性**：Canvas `touch-action: none`，平面图拖拽与 OrbitControls 双指缩放不受浏览器手势劫持。
 - **修复**：罗盘缩小后标签叠字——`box-sizing: border-box` 使 `clientWidth`（68→66）算出的偏移 23 被 `radius < 24` 守卫拦截，标签停圆心；改为 `Math.max(size/2-10, 20)` 并删除提前 return（坑 63）。
 

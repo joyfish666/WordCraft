@@ -1291,11 +1291,13 @@ button {
   }
 }
 
-/* ---------- 窄屏/横屏手机适配（桌面端不受影响） ----------
-   条件 1：窗口 ≤760px（窄窗口 / 窄横屏老机型）
-   条件 2：触屏设备 + 高度 ≤480px（任意宽度的横屏手机，含 844px 宽的新 iPhone） */
+/* ---------- 窄屏/横屏手机适配（桌面端正常窗口不受影响） ----------
+   条件 1：窗口 ≤760px（窄窗口 / 窄横屏老机型 / 桌面窄窗口）
+   条件 2：高度 ≤480px——任意宽度的横屏手机（手机横屏高度恒为 360-430px，含 844px 宽
+   新 iPhone；曾用 (pointer: coarse) 限定触屏，但部分安卓浏览器/桌面模式报告 pointer: fine，
+   导致工具栏样式漏命中，已去掉）；桌面正常窗口高度 ≥500px 不命中 */
 
-@media (max-width: 760px), (max-height: 480px) and (pointer: coarse) {
+@media (max-width: 760px), (max-height: 480px) {
   .sidebar {
     width: 160px;
   }
@@ -1355,8 +1357,8 @@ button {
 }
 
 /* 横屏手机（任意宽度，含 844px 宽的新 iPhone）：右上角罗盘缩小，给视口让位。
-   max-height 覆盖横屏手机高度（375-430px），pointer: coarse 限定触屏设备，桌面端不受影响 */
-@media (max-height: 480px) and (pointer: coarse) {
+   条件同「窄屏适配」条件 2：高度 ≤480px 覆盖横屏手机高度（360-430px），桌面正常窗口不命中 */
+@media (max-height: 480px) {
   .corner-compass {
     width: 68px;
     height: 68px;

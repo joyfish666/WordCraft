@@ -225,7 +225,7 @@ interface WallPlan { edges: WallEdge[] }   // 与 footprint 顶点环一一对�
 ### 6.6.6 移动端横屏支持（2026-08-10，README 路线图项，横屏限定）
 
 - **竖屏引导**：`components/ui/OrientationGuard.tsx` 包裹整棵路由——`matchMedia('(max-width: 767px) and (orientation: portrait)')`（**阈值 A：窄屏 + 竖放才拦**，手机横屏/iPad/桌面均不命中）命中时渲染全屏覆盖层（旋转图标 + 双语提示，`role="alert"`）；**应用层不卸载**（盖在下方，旋转回来即时恢复、不丢状态）；jsdom/无 matchMedia 环境默认放行。
-- **窄横屏紧凑布局**（`(max-width:760px)` 或 `(max-height:480px) and (pointer:coarse)` 的纯 CSS 媒体查询——后者覆盖 844px 宽新 iPhone 等任意宽度横屏手机，桌面端零影响）：侧边栏 200→160（隐藏品牌副标题）、聊天栏 320→280、工具栏横向滚动（左右组 `flex-shrink: 0`）、状态栏可换行、属性面板 240px、设置页 API 表单改单列、**平面图工具栏改单行横向滚动**（紧凑按钮 + 隐藏操作提示条，不再纵向堆叠遮挡平面图）。
+- **窄横屏紧凑布局**（`(max-width:760px)` 或 `(max-height:480px)` 的纯 CSS 媒体查询——高度条件覆盖 844px 宽新 iPhone 等任意宽度横屏手机，手机横屏高度恒为 360-430px，桌面正常窗口 ≥500px 不命中；曾用 `(pointer: coarse)` 限定触屏，但部分安卓浏览器/桌面模式报告 `pointer: fine` 导致漏命中，已去掉）：侧边栏 200→160（隐藏品牌副标题）、聊天栏 320→280、工具栏横向滚动（左右组 `flex-shrink: 0`）、状态栏可换行、属性面板 240px、设置页 API 表单改单列、**平面图工具栏改单行横向滚动**（紧凑按钮 + 隐藏操作提示条，不再纵向堆叠遮挡平面图）。
 - **触控正确性**：`.scene-canvas` 加 `touch-action: none`——OrbitControls 双指缩放/平面图拖拽不被浏览器滚动与捏合手势劫持（桌面鼠标无影响）。
 
 ## 6.7 Gizmo 辅助编辑 + 截图分享与口令（v1.3.0）
