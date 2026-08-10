@@ -1408,14 +1408,20 @@ button {
   grid-template-columns: 1fr;
 }
 
-/* 平面图工具栏（移动端）：单个「工具」按钮 + 弹出面板，选择即关闭，不再常驻遮挡平面图 */
+/* 平面图工具栏（移动端）：「工具」+「尺寸」并排常驻，工具按钮呼出弹出面板（选择即关闭），
+   不再常驻遮挡平面图 */
 .wc-compact .plan-toolbar {
   top: 46px;
+  flex-direction: row;
+  align-items: flex-start;
 }
 
-/* 移动端面板内「尺寸」开关独立成行：防压缩、不被中文行高差异挤出可视区 */
+/* 移动端「尺寸」开关为独立常驻按钮：与「工具」按钮等高、防压缩、去掉左侧偏移 */
 .wc-compact .plan-toolbar__dims {
   flex-shrink: 0;
+  margin-left: 0;
+  padding: 6px 12px;
+  font-size: 13px;
 }
 
 /* 右上角罗盘缩小，给视口让位（条件同 wc-compact：横屏手机高度 360-430px） */

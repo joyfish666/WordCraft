@@ -122,7 +122,7 @@ describe('HomePage 对话交互', () => {
     expect(viewer().getAttribute('data-planmode')).toBe('false')
   })
 
-  it('移动端紧凑视口：平面图工具栏为「工具」按钮 + 弹出面板，选工具即关闭', () => {
+  it('移动端紧凑视口：平面图工具栏为「工具」+「尺寸」独立按钮 + 弹出面板，选工具即关闭', () => {
     Object.defineProperty(window, 'innerWidth', { value: 904, configurable: true, writable: true })
     Object.defineProperty(window, 'innerHeight', { value: 390, configurable: true, writable: true })
     render(
@@ -131,18 +131,19 @@ describe('HomePage 对话交互', () => {
       </MemoryRouter>,
     )
     fireEvent.click(screen.getByRole('button', { name: '平面图' }))
-    // 常驻工具行不渲染，只有「工具」按钮
+    // 常驻工具行不渲染；「工具」「尺寸」两个独立按钮常驻（尺寸不进面板）
     expect(screen.queryByRole('toolbar', { name: '平面图编辑工具' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /工具/ })).toBeInTheDocument()
-    // 点开面板：工具列表出现；选择「移动」后面板关闭且工具生效
-    fireEvent.click(screen.getByRole('button', { name: /工具/ }))
-    expect(screen.getByRole('toolbar', { name: '平面图编辑工具' })).toBeInTheDocument()
-    // 面板内含「尺寸」开关，点击切换 showPlanDims
-    expect(screen.getByRole('button', { name: '尺寸' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '尺寸' }))
+    const dimsBtn = screen.getByRole('button', { name: '尺寸' })
+    expect(dimsBtn).toBeInTheDocument()
+    // 尺寸开关与面板互不影响，直接切换
+    fireEvent.click(dimsBtn)
     expect(useModelStore.getState().showPlanDims).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: '尺寸' }))
     expect(useModelStore.getState().showPlanDims).toBe(true)
+    // 点开面板：工具列表出现；选择「移动」后面板关闭且工具生效
+    fireEvent.click(screen.getByRole('button', { name: /工具/ }))
+    expect(screen.getByRole('toolbar', { name: '平面图编辑工具' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '移动' }))
     expect(screen.queryByRole('toolbar', { name: '平面图编辑工具' })).not.toBeInTheDocument()
     expect(useModelStore.getState().planTool).toBe('move')
