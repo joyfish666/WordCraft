@@ -1,10 +1,10 @@
 # 言筑（WordCraft）设计方案 —— v3「自由设计」
 
-> 版本：v3 草案 · 状态：已评审，P1（数据模型 v3）、P2（契约动词化）、P3（双向同步）与 P4（平面图自由编辑）已实施；另有 README 路线图项「2D 平面图增强」已落地（2026-08-10，见下方进度块） · 配套文档：[技术架构（现行实现）](architecture.md) · [版本演进](history.md) · [开发注意事项](notes.md)
+> 版本：v3 草案 · 状态：已评审，P1（数据模型 v3）、P2（契约动词化）、P3（双向同步）与 P4（平面图自由编辑）已实施；另有 README 路线图项「2D 平面图增强」「移动端横屏支持」已落地（2026-08-10，见下方进度块） · 配套文档：[技术架构（现行实现）](architecture.md) · [版本演进](history.md) · [开发注意事项](notes.md)
 
 > **P1 进度**（2026-08-09 完成）：§3 数据模型 v3 已落地——v3 类型、`migrateModel` 迁移（项目 JSON/分享口令/持久化三路径）、足迹渲染（Shape 地板 + 沿边墙段）、`window` 段与显式开洞覆盖层。验收达标：旧数据可打开（迁移测试）、用例全绿（214）、示例截图无回归（houseBounds 断言不变）。
 >
-> **P2 进度**（2026-08-09 完成）：§4 契约动词化已落地——ops 操作契约（11 种操作，Zod 判别联合）、确定性执行器 `lib/executor.ts`（逐条容错 + `macro` 复用旧引擎 + v2 快照按 id diff 容错）、提示词重写（输出操作序列 + 多轮场景摘要上下文）。验收达标：生成/多轮/撤销/分享全链路可用（253 用例全绿）。
+> **P2 进度**（2026-08-09 完成）：§4 契约动词化已落地——ops 操作契约（当时 11 种操作，P3 补 `nestRoom`、P4 补 `splitRoom`/`mergeRoom` 后现共 **14 种**，见 §4.1，Zod 判别联合）、确定性执行器 `lib/executor.ts`（逐条容错 + `macro` 复用旧引擎 + v2 快照按 id diff 容错）、提示词重写（输出操作序列 + 多轮场景摘要上下文）。验收达标：生成/多轮/撤销/分享全链路可用（253 用例全绿）。
 >
 > **P3 进度**（2026-08-09 完成）：§5 双向同步已落地——手动编辑（属性面板/Gizmo/位移微调）经 `editDiffToOps`（`lib/editOps.ts`）diff 成与对话同构的 op 追加进 `useChatStore.editOps` 编辑日志（上限 50，会话内）；对话上下文 = 当前场景摘要（含**邻接表**）+ 手动编辑日志（`toChatHistory` 不再回传助手纯 JSON 的上一轮 ops 原文，用户消息与文本回复保留）。验收达标：手动编辑后对话能看到改动、token 显著下降（281 用例全绿）。期间补强：生成链路容错（流式回复截断自动补全闭合括号 `repairTruncatedJson` + 双编码 JSON 解包，坑 42）、入户门迁移操作（`setHouse.entranceRoomId`/`entranceDir`，坑 43）、方向一致性（世界锚定罗盘 + 右上角投影罗盘 + 平面图标准地图，坑 26 反转）、卫生间单门规则（坑 44）、`nestRoom` 内嵌操作（含避门口禁区与家具推出，坑 45/47）、贴靠对齐走廊边线（坑 46）、moveRoom 取消内嵌 + 落点空侧回退（坑 48，最终 308 用例全绿）。P4 起按 §9 计划推进。
 >
@@ -114,13 +114,13 @@ StairNode  { id, fromLevel, toLevel, position, dimensions } // Phase 5 预留
 
 > **P2 落地实录**（2026-08-09）：本节的 ops 契约、确定性执行器（`src/lib/executor.ts`）与提示词重写（`chat.ts`）均已实施，用例覆盖于 `executor.test.ts` / `chat.test.ts`。实施要点：
 >
-> - **11 种操作**：`setHouse / macro / addRoom / updateRoom / removeRoom / moveRoom / addFurniture / updateFurniture / removeFurniture / setOpenings / addAdjacency`，Zod 判别联合白名单（`schemas/ops.schema.ts`），类型在 `types/ops.ts`。
+> - **当时 11 种操作**（P2 落地；P3 补 `nestRoom`、P4 补 `splitRoom`/`mergeRoom`，现共 14 种，见 §4.1）：`setHouse / macro / addRoom / updateRoom / removeRoom / moveRoom / addFurniture / updateFurniture / removeFurniture / setOpenings / addAdjacency`，Zod 判别联合白名单（`schemas/ops.schema.ts`），类型在 `types/ops.ts`。
 > - **执行器**：`executeOps(scene, ops, {furnitureConventions})` 逐条 try/catch，失败仅跳过该条并记录原因；全部执行后统一 `normalizeContainment`（+ auto 批次家具常理兜底）+ 楼层高度刷新。`macro` 直接构造 v2 HouseNode 调 `resolveLayout`，老引擎零浪费。
 > - **`addRoom`/`moveRoom` 的 `relativeTo`**：贴靠目标房间某侧无缝共墙（间隔 0，共享墙去重沿用）；无 `relativeTo` 的新房间排到整屋东侧（确定性、不重叠）；显式 `footprint` 提供时以顶点环为准。**约束图求解（多房间约束推理）仍属 Phase 5**，`relativeTo` 仅支持单房间贴靠。
 > - **`custom` 升级**：v2 房间规格支持可选 `footprint` 顶点环（L 形/U 形直接表达），`resolveCustom` 直接使用；矩形仍是特例。
 > - **快照容错路径**：LLM 输出旧式 v2 整屋快照时——auto 模板直接映射 `macro`（与旧版行为一致），custom 按 id 递归 diff（改名/改尺寸/增删房间/家具增删改），空 diff 场景不变。
 > - **多轮上下文**：`generateModelFromChat` 在有当前场景时注入「当前房屋状态」摘要消息（房间/家具 id·名称·尺寸），LLM 靠 id 引用节点修改；历史仍携带上一轮 ops 原文（场景摘要替换整段 v2 JSON 的 token 优化属 P3）。
-> - **已知边界**：`updateRoom.patch.side` 对已平铺房间无几何意义（接受并忽略，布局意图改动请用 moveRoom 或 macro）；`setOpenings` 只替换同边同种开洞，暂不支持删除开洞（P4 平面图编辑接入）；家具相对位置 y 沿用 v2 语义（高度一半，非偏移）。
+> - **已知边界**：`updateRoom.patch.side` 对已平铺房间无几何意义（接受并忽略，布局意图改动请用 moveRoom 或 macro）；~~`setOpenings` 只替换同边同种开洞，暂不支持删除开洞~~（**P4 已补齐**：`remove: true` + 可选 `from/to` 只删重叠者、`edgeIndex` 精确指边）；家具相对位置 y 沿用 v2 语义（高度一半，非偏移）。
 
 ### 4.1 操作契约
 
@@ -135,8 +135,11 @@ type Op =
   | { op: 'removeRoom', id }
   | { op: 'moveRoom', id, relativeTo?: { roomId, dir } }
   | { op: 'nestRoom', id, into, side? }                                // 内嵌为嵌套子房间（P3 补）
+  | { op: 'splitRoom', id, axis: 'x' | 'z', position, name? }          // 矩形房间沿轴线切两半，共墙自动开门（P4 补）
+  | { op: 'mergeRoom', keep, remove }                                  // 并集为合法矩形的相邻房间合并（P4 补）
   | { op: 'addFurniture' | 'updateFurniture' | 'removeFurniture', ... }
-  | { op: 'setOpenings', roomId, side, kind: 'door' | 'window', from?, to? }
+  | { op: 'setOpenings', roomId, side, kind: 'door' | 'window', from?, to?,
+      edgeIndex?, remove? }        // edgeIndex 精确指边、remove 删除开洞（P4 补）
   | { op: 'addAdjacency', roomId, neighborId, side }
   | { op: 'macro', name: 'corridor' | 'living' | 'custom', params? }   // 复用旧布局引擎
 ```

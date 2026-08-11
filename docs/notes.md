@@ -16,7 +16,7 @@ npm run lint
 npm run build    # tsc --noEmit && vite build
 ```
 
-**调试模式**：设置页 → 调试 → 开启。首页底部出现日志面板（可复制/下载），记录"请求参数 → 原始回复 → v2 解析 → 布局平铺 → 入户门生成"。排查生成问题第一件事就是开它。
+**调试模式**：设置页 → 调试 → 开启。首页底部出现日志面板（可复制/下载），记录"请求参数（含是否有当前场景摘要）→ 模型原始回复 → ops 操作序列解析（截断自动补全/单条无效跳过原因）→ v2 快照容错路径 → 失败明细"。排查生成问题第一件事就是开它。
 
 **GitHub 推送**：本机访问 GitHub 443 常被网络阻断，可用代理：
 
@@ -97,7 +97,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 ### 3.5 存储与持久化
 
-27. **持久化迁移**：`useSettingsStore` persist 带 `version` 字段（如 version 2 起默认关闭线框），旧数据自动迁移。localStorage keys：`wordcraft.settings` / `wordcraft.model` / `wordcraft.chat`。**改持久化结构必须升 version 并写迁移**（v3 模型的 IndexedDB/口令迁移见 design.md §3.4）。
+27. **持久化迁移**：`useSettingsStore` persist 带 `version` 字段（如 version 2 起默认关闭线框），旧数据自动迁移。localStorage keys：`wordcraft.settings` / `wordcraft.model` / `wordcraft.chat` / `wordcraft.project` / `wordcraft.share`。**改持久化结构必须升 version 并写迁移**（v3 模型的 IndexedDB/口令迁移见 design.md §3.4）。
 28. **项目库脏标记用 lastSavedJsonRef 而非 revision**：HomePage 持 `lastSavedJsonRef`（上次保存的场景 JSON），`useEffect` 订阅 `scene`——与之一致则 `markSaved`、不一致则 `markDirty`；**仅 `currentId !== null` 时跟踪**（游离新场景不算脏）。打开项目/保存成功后必须先 `lastSavedJsonRef.current = JSON.stringify(scene)` 再 `setProject`/`markSaved`，顺序反了会被 effect 误标脏。
 29. **截图三件套**：① Canvas 必须 `gl={{ preserveDrawingBuffer: true }}` 否则 `toDataURL()` 读不到缓冲（空白）；② 场景净化用 `useModelStore.screenshotMode`，置 true 后**等两帧 rAF** 让 React 应用隐藏辅助元素再截图，最后复位；③ jsdom 无 WebGL，HomePage 调用须用 `viewportRef.current?.captureScreenshot?.()`（`?.` 守卫方法本身）。口令历史只持久化 records（上限 20），还原校验走 `migrateModel`（v1/v3 均可，P1 起）；口令编码带 `wc3:` 前缀（P1 起）。
 
@@ -109,7 +109,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 ### 3.7 家具部件模型
 
 32. **家具部件模型（v1.4.0，20 类）**：
-   ① `furnitureKind` 分类器必须**先排除易误判词**再宽松匹配（`床尾凳` 含「床」会误套床造型 → `GENERIC_GUARD_RE` 先归 generic；**词表顺序敏感**：`床头柜/床边柜` 必须排在 `床` 之前、`电视柜` 排在 `电视` 之前，含子串的宽松词后置）；
+   ① `furnitureKind` 分类器必须**先排除易误判词**再宽松匹配（`床尾凳` 含「床」会误套床造型 → `GENERIC_GUARD_RE` 先归 generic；**词表顺序敏感**：`床头柜/床边柜` 必须排在 `床` 之前，含子串的宽松词后置）；
    ② **水平（x/z）必须钳制在 L×W 足迹内、底面贴地**——测试硬性断言覆盖 20 类 × 小/大尺寸 × 四朝向；**竖直顶部允许向上悬挑**（电视柜上的电视屏/梳妆台镜面高于盒顶），别把 y 上界当硬约束；
    ③ **朝向用 `facingFromRoom(node, room, BACK_AXIS[kind])`**（不是最近墙）：柜/沙发等背侧沿**短轴**——朝短轴上最近的墙；**床单独处理**：床头在**长轴端**（短边中间），朝长轴上最近的墙。用「最近墙」会出错：转角衣柜 tie 到相邻墙后柜门开到小面。`parentRoom` 由 `ModelNodeView` 房间分支下传，改代码别漏；
    ④ 渲染用 `<group onClick>` + 各部件 mesh（点击任一部分选中整件），**选中轮廓是并集包围盒的隐形 box + Edges，须 `raycast={() => null}`**（同坑 4）；

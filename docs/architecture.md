@@ -58,7 +58,7 @@ Zod 校验（schemas/ops.schema.ts，逐条容错）
 
 关键约定（详见 `types/ops.ts` / `schemas/ops.schema.ts` / `lib/executor.ts`）：
 
-- **11 种操作**：`setHouse`（改名 / **迁移入户门 `entranceRoomId` + 方向 `entranceDir`**，P3 补）、`macro`（corridor/living/custom 整体布局，复用旧布局引擎）、`addRoom`/`updateRoom`/`removeRoom`/`moveRoom`、**`nestRoom`（把已有房间内嵌为另一个房间的嵌套子房间，P3 补）**、**`splitRoom`（P4：矩形房间沿轴线切两半，共墙自动开一扇门）**、**`mergeRoom`（P4：并集为合法矩形的相邻房间合并）**、`addFurniture`/`updateFurniture`/`removeFurniture`、`setOpenings`（门/窗开洞，**P4 起支持 `edgeIndex` 精确指边与 `remove: true` 删除**）、`addAdjacency`（相邻约束）。
+- **14 种操作**：`setHouse`（改名 / **迁移入户门 `entranceRoomId` + 方向 `entranceDir`**，P3 补）、`macro`（corridor/living/custom 整体布局，复用旧布局引擎）、`addRoom`/`updateRoom`/`removeRoom`/`moveRoom`、**`nestRoom`（把已有房间内嵌为另一个房间的嵌套子房间，P3 补）**、**`splitRoom`（P4：矩形房间沿轴线切两半，共墙自动开一扇门）**、**`mergeRoom`（P4：并集为合法矩形的相邻房间合并）**、`addFurniture`/`updateFurniture`/`removeFurniture`、`setOpenings`（门/窗开洞，**P4 起支持 `edgeIndex` 精确指边与 `remove: true` 删除**）、`addAdjacency`（相邻约束）。
 - **id 全局唯一、复用**：修改已有节点必须用其 id；`addRoom`/`addFurniture` 的 id 可省略（执行器自动生成）。
 - **`relativeTo` 贴靠**：新房间/移动贴到已有房间某侧，无缝共墙，**垂直于贴靠方向的轴对齐走廊边线**（`alignAdjacentPlacement`，坑 46：避免宽度不同的房间与走廊错位出缝隙）；**嵌套房间贴靠时自动提升到顶层（取消内嵌，坑 48）**；**落点与其他房间重叠时按 北/南/东/西 回退选空侧**（`pickFreePlacement`，避免贴到走廊/别的房间上）；无 `relativeTo` 的新房间排到整屋东侧；显式 `footprint` 顶点环优先（L 形/U 形）。
 - **逐条容错**：每条 op 独立 try/catch，失败仅跳过该条（`skipped` 记录原因），绝不整屋回滚；执行顺序 = 数组顺序（确定性）。
@@ -88,7 +88,7 @@ interface RoomNode {
   id: string; name: string
   footprint: Point2D[]              // 正交多边形顶点环（世界坐标，矩形 = 4 点特例）
   height: number                    // 层高，独立于 footprint
-  doors: Opening[]; windows: Opening[]   // 显式开洞（覆盖层，P1 无 UI 产出但模型/渲染/墙体支持）
+  doors: Opening[]; windows: Opening[]   // 显式开洞（覆盖层，P4 起平面图编辑可产出；模型/渲染/墙体层 P1 已支持）
   furniture: FurnitureNode[]        // 家具（绝对坐标）
   nestedRooms: RoomNode[]           // 嵌套子房间（如卧室内卫生间）
 }
@@ -97,7 +97,7 @@ interface Opening { edgeIndex: number; from: number; to: number; width: number }
 
 - **房间不再存 position/dimensions**：中心/尺寸由 footprint 推导（`lib/footprint.ts` 的 `footprintCenter`/`footprintDims`/`roomCenter`/`roomDims` 等纯函数统一提供，属性面板/Gizmo/HomePage 全部经 `nodePosition`/`nodeDims` 访问器消费）。
 - 房间高度独立于 footprint；整屋高度 = 楼层高度（墙顶/标注层）。
-- **显式开洞覆盖层**（设计 §3.2）：`doors/windows` 显式开口在渲染时覆盖推导结果（`applyOpenings`）；P2 起 `setOpenings` 操作（LLM 生成路径）可产出，P1 生成器/示例模型仍产出空数组，UI 入口待 P4 平面图编辑。
+- **显式开洞覆盖层**（设计 §3.2）：`doors/windows` 显式开口在渲染时覆盖推导结果（`applyOpenings`）；P2 起 `setOpenings` 操作（LLM 生成路径）可产出，P4 起平面图编辑「门窗」工具提供 UI 入口（点墙放门窗/点已开洞删除），P1 生成器/示例模型仍产出空数组。
 
 ### 2.3 迁移与版本（migrateModel，lib/migration.ts）
 
@@ -164,11 +164,11 @@ interface WallPlan { edges: WallEdge[] }   // 与 footprint 顶点环一一对�
 
 家具不渲染为统一长方体，而是按名称识别种类、用程序化部件拼装（纯函数，无渲染依赖；**P1 无变化**）：
 
-- **分类**：`furnitureKind(name)` 用中文正则词表把家具名映射到种类（床/衣柜/书桌/沙发/椅子/马桶/洗手池/冰箱/电视柜/餐桌/圆桌/书架/洗衣机/浴缸/床头柜/梳妆台/鞋柜/灶台/烤箱/微波炉，20 类），未命中回退 `generic`（整盒）。`GENERIC_GUARD_RE` 先排除易误判词（如「床尾凳」含「床」）；词表顺序敏感——床头柜/床边柜须在「床」之前、电视柜须在「电视」之前（含子串的宽松词后置）。
+- **分类**：`furnitureKind(name)` 用中文正则词表把家具名映射到种类（床/衣柜/书桌/沙发/椅子/马桶/洗手池/冰箱/电视柜/餐桌/圆桌/书架/洗衣机/浴缸/床头柜/梳妆台/鞋柜/灶台/烤箱/微波炉，20 类），未命中回退 `generic`（整盒）。`GENERIC_GUARD_RE` 先排除易误判词（如「床尾凳」含「床」）；词表顺序敏感——床头柜/床边柜须在「床」之前（含子串的宽松词后置）。
 - **拼装**：`buildFurnitureParts(kind, L, H, W, facing)` 返回部件列表（`center`/`size`/`shape`(box|cylinder)/`shade`）。柜/沙发等按「背侧朝 +z」的规范朝向构建，东/西墙用「交换长宽 + 旋转 90°」、南/北墙用 0°/180°（`orientParts`），足迹保持不变；`BACK_DIR`/`BACK_AXIS` 声明每类背侧的局部方向与沿轴。
 - **床/浴缸**：单独 `buildBedParts`/`buildBathtubParts`——床头板/枕头放**长轴端**（短边中间）、浴缸长边贴墙，朝向由长轴上最近的墙决定；放置层（`furniturePlacement.ts`）也例外处理床**短边贴墙**（浴缸长边贴墙即常理，无需例外）。
 - **朝向**：`facingFromRoom(node, room, backAxis)` 由家具在父房间内的位置算背侧应贴的墙（短轴/长轴规则，避免转角衣柜门开在小面）；v3 下父房间几何经 `roomCenter/roomDims` 派生。
-- **配色**：三档——主色 `FURNITURE_COLOR`（色盲模式切换）、副色 `FURNITURE_PART_DARK`、深色强调 `FURNITURE_PART_INK`（床头板/柜门/电视屏/浴缸内胆）。
+- **配色**：三档——主色 `FURNITURE_COLOR`（色盲模式切换）、副色 `FURNITURE_PART_DARK`、深色强调 `FURNITURE_PART_INK`（床头板/柜门/电视屏/浴缸内胆），常量定义在 `lib/palette.ts`，`buildFurnitureParts` 只产出 `shade: 'base'|'secondary'|'dark'` 标签，渲染时映射。
 - **防共面（z-fighting）**：垂直面前脸部件不得与箱体/床架前脸共面——箱体前脸后缩 `doorTh+0.02`、门板凸出；床头板内凹 0.05、沙发靠背/扶手内凹 0.03。
 
 ## 6. 状态管理（store/*）
@@ -246,7 +246,7 @@ interface WallPlan { edges: WallEdge[] }   // 与 footprint 顶点环一一对�
 ## 7. 生成链路（lib/chat.ts + lib/executor.ts）
 
 1. 构建 messages：系统提示词（**ops 操作序列契约**，P2 重写）+ 多轮历史（**P3 精简**：`toChatHistory` 剔除助手纯 JSON）+ **当前房屋状态摘要**（有场景时）+ **手动编辑日志**（`editOps` 非空时）+ 用户输入。
-2. **SSE 流式请求**（`streamChatCompletion`，lib/api.ts）：180s 兜底超时。
+2. **SSE 流式请求**（`streamChatCompletion`，lib/api.ts）：`chat.ts` 侧 `GENERATION_TIMEOUT_MS = 180s` 兜底超时（axios 默认 30s）。
 3. 从回复提取 JSON，解析为操作序列（**截断/双编码容错**：`repairTruncatedJson` 按未闭合括号栈补全被截断的 JSON，`extractModelJson` 解包被包进字符串的 JSON；逐条 zod 校验，单条无效跳过）。
 4. `executeOps` 确定性执行：`macro` 走旧布局引擎；`addRoom/updateRoom/...` 增量修改；失败单条跳过；结束统一 `normalizeContainment`（auto 批次额外家具常理兜底）+ 楼层高度刷新。
 5. **快照容错路径**：输出为 v2 整屋快照时，auto → 映射 `macro`，custom → `diffSceneV2` 按 id diff 成 ops 再执行；v3 场景直接使用。
@@ -259,8 +259,12 @@ src/
 ├── main.tsx / App.tsx         # 入口与路由
 ├── components/
 │   ├── layout/AppShell.tsx    # 侧边栏 + 内容区
-│   ├── ui/                    # Button/Input/HelpDialog/ProjectLibraryDialog/ShareDialog/OrientationGuard【移动端横屏】
+│   ├── ui/                    # Button/Input/HelpDialog/ProjectLibraryDialog/ShareDialog/OrientationGuard【移动端横屏】/LanguageToggle
 │   └── viewport/              # SceneViewer/Viewport3D/ModelNodeView/PropertyPanel/Compass/PlanRig/PlanAnnotations/GizmoControls/PlanEditLayer【P4】/PlanEnhancements【平面图增强】
+├── pages/                     # HomePage（对话 + 平面图工具栏/项目库）/ SettingsPage（设置/调试/i18n）
+├── db/database.ts             # Dexie（IndexedDB）项目库
+├── i18n/                      # translations.ts（zh 真源 + en）+ useT/t 包装
+├── store/                     # useSettingsStore/useModelStore/useChatStore/useProjectStore/useShareStore
 ├── lib/
 │   ├── chat.ts                # 生成链路与系统提示词（ops 契约 + 场景摘要 + 编辑日志 + 快照容错）
 │   ├── editOps.ts             # 双向同步：editDiffToOps 手动编辑 → op【P3】
@@ -279,11 +283,12 @@ src/
 │   ├── watermark.ts           # 截图口令水印（离屏 canvas）
 │   ├── sampleModel.ts         # 示例模型
 │   ├── debugLog.ts            # 调试日志器
-│   └── palette.ts / id.ts     # palette 含共享 roomFaceColor
+│   └── palette.ts / id.ts     # palette 含共享 roomFaceColor 与家具三档配色（FURNITURE_COLOR 等）
 ├── schemas/model.schema.ts    # v2 Zod Schema（快照容错路径用）
 ├── schemas/ops.schema.ts      # ops 操作契约 Zod Schema（判别联合白名单）【新增】
 ├── types/model.ts             # v2 契约 + v3 已解析模型类型
 ├── types/ops.ts               # ops 操作契约类型（Op/RoomSpec/FurnitureSpec）【新增】
+├── types/settings.ts          # 设置项类型（AppSettings/ApiKeyEntry/ColorMode 等）
 ```
 
 ## 9. 测试（Vitest，376 用例）
@@ -309,8 +314,8 @@ src/
 
 ## 10. 调试模式
 
-设置页开启后，`logDebug` 记录：请求参数（含是否有当前场景摘要）→ 模型原始回复 → ops 操作序列解析（操作清单/单条无效跳过原因）→ v2 快照容错路径 → 部分操作失败明细，首页面板可一键复制，便于向开发者复现问题。
+设置页开启后，`logDebug` 记录：请求参数（含是否有当前场景摘要）→ 模型原始回复 → ops 操作序列解析（操作清单/单条无效跳过原因）→ v2 快照容错路径 → 部分操作失败明细，首页面板可一键复制/下载，便于向开发者复现问题。
 
 ---
 
-**维护者**：JoyFish · 文档版本 v2.6
+**维护者**：JoyFish · 文档版本 v2.7
