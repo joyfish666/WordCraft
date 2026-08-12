@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>言筑 WordCraft — UI 风格预览 v3</title>
+<style>
+:root {
+  --bg: #e2dccb;
+  --bg-panel: #ede8dd;
+  --bg-elevated: #f5f1e8;
+  --bg-viewport: #d6cfbf;
+  --border: #d2cbba;
+  --border-light: #ddd7c9;
+  --text: #2d2a22;
+  --text-dim: #706a5a;
+  --text-muted: #7d7666;
+  --accent: #3d7a48;
+  --accent-hover: #356840;
+  --accent-soft: rgba(61,122,72,.12);
+  --danger: #b3403a;
+  --danger-soft: rgba(179,64,58,.10);
+  --ok: #2f8f5b;
+  --ok-soft: rgba(47,143,91,.12);
+  --warn: #b57918;
+  --warn-soft: rgba(181,121,24,.12);
+  --shadow-sm: 0 1px 3px rgba(80,65,40,.10);
+  --shadow-md: 0 4px 14px rgba(80,65,40,.13);
+  --shadow-lg: 0 8px 28px rgba(80,65,40,.16);
+  --shadow-inset: inset 0 2px 10px rgba(80,65,40,.10), inset 0 0 0 1px rgba(0,0,0,.04);
+  --radius: 10px;
+  --radius-sm: 8px;
+  --radius-xs: 6px;
+  --radius-pill: 999px;
+  --toolbar-h: 44px;
+  --statusbar-h: 32px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root {
+  height: 100%;
+  font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 14px; line-height: 1.5;
+  color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input:focus-visible, textarea:focus-visible { outline: none; }
+
+/* ===== 布局骨架 ===== */
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* --- 工具栏 --- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+  height: var(--toolbar-h);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+
+.toolbar__brand {
+  display: flex; align-items: center; gap: 8px;
+  height: 30px; padding-right: 12px; margin-right: 2px;
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.toolbar__brand-logo { width: 22px; height: 22px; color: var(--accent); flex-shrink: 0; }
+.toolbar__brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+.toolbar__brand-name { font-size: 14px; font-weight: 700; letter-spacing: 0.2px; }
+.toolbar__brand-sub { font-size: 10px; color: var(--text-muted); font-weight: 500; }
+
+.toolbar__group { display: flex; align-items: center; gap: 2px; }
+
+.toolbar__sep {
+  width: 1px; height: 20px;
+  margin: 0 6px;
+  background: var(--border);
+}
+
+.toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-xs);
+  color: var(--text-dim);
+  font-size: 13px; font-weight: 500;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+  height: 30px;
+}
+
+.toolbar__btn:hover { background: var(--bg-elevated); color: var(--text); }
+.toolbar__btn--icon-only { padding: 5px; }
+.toolbar__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.toolbar__btn:disabled:hover { background: transparent; color: var(--text-dim); }
+.toolbar__btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+.toolbar__btn--active { background: var(--accent-soft); color: var(--accent); }
+
+.toolbar__btn--primary {
+  background: var(--accent-soft); color: var(--accent); font-weight: 600;
+}
+.toolbar__btn--primary:hover { background: rgba(61,122,72,.18); }
+
+.toolbar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar__nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolbar__nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px; height: 30px;
+  border-radius: var(--radius-xs);
+  color: var(--text-dim);
+  transition: background 0.12s, color 0.12s;
+  position: relative;
+}
+
+.toolbar__nav-btn:hover { background: var(--bg-elevated); color: var(--text); }
+.toolbar__nav-btn--active { background: var(--accent-soft); color: var(--accent); }
+.toolbar__nav-btn svg { width: 16px; height: 16px; }
+
+.toolbar__nav-btn::after {
+  content: attr(data-label);
+  position: absolute;
+  top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  padding: 3px 7px; border-radius: var(--radius-xs);
+  background: var(--text); color: var(--bg);
+  font-size: 11px; font-weight: 500; white-space: nowrap;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.15s; z-index: 100;
+}
+.toolbar__nav-btn:hover::after { opacity: 1; }
+
+.lang-btn {
+  padding: 3px 7px; border-radius: var(--radius-xs);
+  font-size: 11px; font-weight: 600; color: var(--accent);
+  transition: background 0.12s;
+}
+.lang-btn:hover { background: var(--accent-soft); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: var(--radius-pill);
+  font-size: 11px; font-weight: 500;
+}
+.badge--ok { color: var(--ok); background: var(--ok-soft); }
+.badge--warn { color: var(--warn); background: var(--warn-soft); }
+
+/* --- 主内容区 --- */
+.home {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+/* --- 画布 --- */
+.home__viewport {
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  background: var(--bg-viewport);
+  box-shadow: var(--shadow-inset);
+  overflow: hidden;
+}
+
+.viewport__grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(170,164,148,.28) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(170,164,148,.28) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* 视图切换 */
+.view-toggle {
+  position: absolute; top: 12px; left: 12px; z-index: 10;
+  display: flex;
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.view-toggle__btn {
+  padding: 5px 14px;
+  font-size: 12px; font-weight: 500;
+  color: var(--text-dim);
+  transition: background 0.12s, color 0.12s;
+}
+.view-toggle__btn--active { background: var(--accent-soft); color: var(--accent); }
+.view-toggle__btn:hover:not(.view-toggle__btn--active) { background: var(--bg-elevated); color: var(--text); }
+
+/* 罗盘（左下角） */
+.compass {
+  position: absolute; bottom: 12px; left: 12px; z-index: 5;
+  width: 68px; height: 68px;
+  border-radius: 50%;
+  background: rgba(235,230,217,.80);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+}
+
+.compass__n { position: absolute; top: 5px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 700; color: var(--danger); }
+.compass__s { position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 600; color: var(--text-muted); }
+.compass__e { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 10px; font-weight: 600; color: var(--text-muted); }
+.compass__w { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-size: 10px; font-weight: 600; color: var(--text-muted); }
+.compass__center { position: absolute; top: 50%; left: 50%; width: 5px; height: 5px; transform: translate(-50%,-50%); border-radius: 50%; background: var(--text-dim); }
+.compass__pointer { position: absolute; top: 50%; left: 50%; width: 2px; height: 18px; transform: translate(-50%, -100%); background: var(--danger); border-radius: 1px; opacity: 0.5; }
+
+/* 空态引导卡 */
+.empty-card {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(440px, calc(100% - 48px));
+  display: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 24px;
+  text-align: center;
+  z-index: 20;
+}
+.home__viewport--empty .empty-card { display: block; }
+.home__viewport--empty .viewport__model { display: none; }
+.home__viewport--empty .prop-panel { display: none; }
+
+.empty-card__icon {
+  width: 40px; height: 40px; margin: 0 auto 12px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent);
+}
+.empty-card__icon svg { width: 20px; height: 20px; }
+.empty-card__title { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+.empty-card__desc { font-size: 13px; color: var(--text-dim); margin-bottom: 16px; }
+.empty-card__chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+
+.chip {
+  padding: 6px 14px; border-radius: var(--radius-pill);
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 12px; font-weight: 500;
+  transition: background 0.12s;
+}
+.chip:hover { background: rgba(61,122,72,.20); }
+
+.empty-card__foot { margin-top: 16px; font-size: 11px; color: var(--text-muted); }
+
+/* 属性面板 */
+.prop-panel {
+  position: absolute; top: 56px; right: 14px;
+  width: 270px; z-index: 15;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 14px;
+}
+
+.prop-panel__type {
+  display: inline-block; font-size: 11px; font-weight: 600;
+  color: var(--accent); border: 1.5px solid var(--accent);
+  border-radius: var(--radius-pill); padding: 0 8px; line-height: 1.8;
+  margin-bottom: 4px; letter-spacing: 0.3px;
+}
+.prop-panel__title { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+.prop-panel__section { margin-top: 8px; }
+.prop-panel__section-title {
+  display: block; font-size: 11px; font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.3px; margin-bottom: 5px;
+}
+.prop-panel__grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+.prop-field label { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 2px; }
+.prop-field input {
+  width: 100%; padding: 5px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: var(--bg); color: var(--text);
+  font-size: 13px; font-family: inherit; outline: none;
+  transition: border-color 0.15s;
+}
+.prop-field input:focus { border-color: var(--accent); }
+.prop-panel__nudge { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 8px; }
+.prop-panel__nudge-center { grid-column: 2; }
+.nudge-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 6px; border-radius: var(--radius-xs);
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--text-dim);
+  transition: background 0.12s, color 0.12s;
+}
+.nudge-btn:hover { background: var(--bg-elevated); color: var(--text); }
+.nudge-btn svg { width: 14px; height: 14px; }
+.nudge-btn--center { padding: 5px; }
+.prop-panel__hint { margin-top: 8px; font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+
+/* CSS isometric 模型 */
+.viewport__model {
+  position: absolute;
+  bottom: 48%; left: 50%;
+  transform: translateX(-50%) perspective(600px) rotateX(55deg) rotateZ(-45deg);
+  transform-style: preserve-3d;
+  user-select: none;
+}
+
+.model__ground {
+  width: 400px; height: 300px;
+  background: rgba(180,174,160,.15);
+  border: 1.5px solid rgba(130,125,110,.30);
+  border-radius: 3px; position: relative;
+}
+
+.model__room1 {
+  position: absolute; top: 25px; left: 25px;
+  width: 162px; height: 125px;
+  background: rgba(61,122,72,.14);
+  border: 2px solid rgba(61,122,72,.50);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+.model__room2, .model__room3 { cursor: pointer; transition: filter 0.12s; }
+.model__room1:hover, .model__room2:hover, .model__room3:hover { filter: brightness(1.08); }
+
+.model__room1-label, .model__room2-label, .model__room3-label {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%,-50%) rotateZ(45deg) rotateX(-55deg);
+  font-size: 12px; font-weight: 600; opacity: 0.65;
+}
+
+.model__room1-label { color: var(--accent); }
+.model__room2 { position: absolute; top: 25px; left: 200px; width: 175px; height: 125px; background: rgba(181,121,24,.10); border: 2px solid rgba(181,121,24,.35); border-radius: 2px; }
+.model__room2-label { color: var(--warn); }
+.model__room3 { position: absolute; top: 162px; left: 25px; width: 350px; height: 112px; background: rgba(47,143,91,.08); border: 2px solid rgba(47,143,91,.30); border-radius: 2px; }
+.model__room3-label { color: var(--ok); }
+
+.model__selected {
+  position: absolute; top: 22px; left: 22px;
+  width: 168px; height: 131px;
+  border: 2.5px solid var(--accent);
+  border-radius: 4px;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px rgba(61,122,72,.18);
+}
+
+.model__door1 { position: absolute; top: 144px; left: 88px; width: 35px; height: 2px; background: #d97b29; border-radius: 1px; }
+.model__door1::after {
+  content: ''; position: absolute;
+  right: -2px; top: -12px;
+  width: 12px; height: 12px;
+  border: 1.5px solid #d97b29;
+  border-radius: 0 0 0 12px;
+  border-top: none; border-left: none;
+}
+
+.model__win1 { position: absolute; top: 12px; left: 250px; width: 50px; height: 3px; background: #5bc0de; border-radius: 1.5px; }
+.model__win2 { position: absolute; top: 12px; left: 100px; width: 38px; height: 3px; background: #5bc0de; border-radius: 1.5px; }
+
+.model__dim {
+  position: absolute; font-size: 10px; font-weight: 600;
+  color: #d97b29; white-space: nowrap;
+  transform: rotateZ(45deg) rotateX(-55deg);
+}
+.model__dim--top { top: 5px; left: 50%; transform: translateX(-50%) rotateZ(45deg) rotateX(-55deg); font-size: 11px; }
+.model__dim--left { top: 50%; left: 2px; transform: translateY(-50%) rotateZ(45deg) rotateX(-55deg); font-size: 11px; }
+
+/* ===== 底部聊天抽屉（push布局）===== */
+.chat-bottom {
+  flex-shrink: 0;
+  display: flex; flex-direction: column;
+  max-height: 55vh;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: var(--radius) var(--radius) 0 0;
+  overflow: hidden;
+}
+
+.chat-bottom--collapsed { max-height: 112px; }
+
+.chat-bottom__toggle {
+  display: flex; align-items: center; justify-content: center;
+  padding: 5px; cursor: pointer;
+  transition: background 0.12s;
+  flex-shrink: 0;
+}
+.chat-bottom__toggle:hover { background: var(--bg-elevated); }
+.chat-bottom__toggle svg { width: 14px; height: 14px; color: var(--text-dim); transition: transform 0.2s; }
+.chat-bottom:not(.chat-bottom--collapsed) .chat-bottom__toggle svg { transform: rotate(180deg); }
+
+.chat-bottom__log { flex: 1; overflow-y: auto; padding: 0 16px; min-height: 0; }
+.chat-bottom--collapsed .chat-bottom__log { display: none; }
+.chat-bottom--collapsed .chat-bottom__actions { display: none; }
+
+.chat-bottom__log-inner { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+
+.chat-msg { display: flex; flex-direction: column; gap: 2px; }
+.chat-msg__label { font-size: 11px; font-weight: 600; color: var(--text-dim); }
+.chat-msg--user .chat-msg__label { color: var(--accent); text-align: right; }
+.chat-msg--assistant .chat-msg__label { color: var(--text-muted); }
+
+.chat-msg--user { align-items: flex-end; }
+.chat-msg--assistant { align-items: flex-start; }
+
+.chat-msg__body {
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  background: var(--bg); border: 1px solid var(--border-light);
+  font-size: 13px; word-break: break-word;
+  white-space: pre-wrap; line-height: 1.5;
+  max-width: 85%;
+}
+.chat-msg--user .chat-msg__body {
+  background: var(--accent-soft); border-color: rgba(61,122,72,.18);
+  color: var(--text);
+}
+.chat-msg--assistant .chat-msg__body {
+  background: var(--bg-elevated); border-color: var(--border-light);
+}
+
+.chat-model-card {
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  border: 1px solid rgba(61,122,72,.18);
+}
+.chat-model-card__name { font-weight: 600; font-size: 13px; color: var(--accent); }
+.chat-model-card__meta { font-size: 11px; color: var(--text-dim); }
+
+/* 生成中状态 */
+.chat-msg--generating .chat-msg__body {
+  border-color: var(--accent);
+  animation: pulse 1.8s ease-in-out infinite;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.generating-dots {
+  display: inline-flex; gap: 3px; flex-shrink: 0;
+}
+
+.generating-dots span {
+  display: block; width: 5px; height: 5px;
+  border-radius: 50%; background: var(--accent);
+  animation: dot-bounce 1.4s infinite ease-in-out both;
+}
+
+.generating-dots span:nth-child(1) { animation-delay: 0s; }
+.generating-dots span:nth-child(2) { animation-delay: 0.16s; }
+.generating-dots span:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes pulse {
+  0%, 100% { border-color: var(--border-light); }
+  50% { border-color: var(--accent); }
+}
+
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: scale(0.4); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* API Key 未配置提示 */
+.api-hint {
+  display: none; align-items: center; justify-content: center; gap: 8px;
+  margin: 0 16px 6px; padding: 6px 12px;
+  border-radius: var(--radius-xs);
+  background: var(--warn-soft); border: 1px solid rgba(181,121,24,.35);
+  color: var(--warn); font-size: 12px;
+  flex-shrink: 0;
+}
+.api-hint--show { display: flex; }
+.api-hint__link {
+  background: none; border: none; cursor: pointer;
+  color: var(--warn); font-size: 12px; font-weight: 600;
+  text-decoration: underline;
+}
+
+.chat-bottom__input {
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 8px 16px 10px;
+  flex-shrink: 0;
+}
+
+.chat-bottom__textarea {
+  flex: 1; padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg); color: var(--text);
+  font-family: inherit; font-size: 13px; line-height: 1.5;
+  resize: none; outline: none;
+  max-height: 80px; min-height: 36px;
+  transition: border-color 0.15s;
+}
+.chat-bottom__textarea:focus { border-color: var(--accent); }
+
+.chat-bottom__send {
+  padding: 7px 18px;
+  border-radius: var(--radius-sm);
+  background: var(--accent); color: #fff;
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+  transition: background 0.12s, opacity 0.12s;
+}
+.chat-bottom__send:hover:not(:disabled) { background: var(--accent-hover); }
+.chat-bottom__send:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.chat-bottom__actions { display: flex; gap: 4px; padding: 0 16px 6px; flex-shrink: 0; }
+.chat-bottom--collapsed .chat-bottom__actions { display: none; }
+.chat-bottom__action-btn {
+  padding: 3px 8px; border-radius: var(--radius-xs);
+  color: var(--text-dim); font-size: 11px; font-weight: 500;
+  transition: background 0.12s, color 0.12s;
+}
+.chat-bottom__action-btn:hover { background: var(--bg-elevated); color: var(--text); }
+
+/* ===== 底部状态栏（主要信息区）===== */
+.statusbar {
+  display: flex; align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  height: var(--statusbar-h);
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-dim);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.breadcrumb { display: flex; align-items: center; gap: 4px; }
+.breadcrumb__sep { color: var(--text-muted); font-size: 10px; }
+.breadcrumb__link {
+  border: none; background: none;
+  color: var(--accent); cursor: pointer; padding: 0;
+  font-size: 12px; font-weight: 500;
+}
+.breadcrumb__link:hover { text-decoration: underline; }
+
+.statusbar__sep { width: 1px; height: 14px; background: var(--border); }
+
+.dim-info { font-size: 12px; }
+
+.statusbar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 1024px) {
+  .prop-panel {
+    width: 220px; padding: 12px;
+  }
+  .prop-field input { font-size: 12px; padding: 4px 6px; }
+  .model__ground { width: 340px; height: 256px; }
+  .model__room1 { width: 138px; height: 106px; top: 22px; left: 22px; }
+  .model__room2 { width: 150px; height: 106px; top: 22px; left: 170px; }
+  .model__room3 { width: 296px; height: 95px; top: 138px; left: 22px; }
+  .model__selected { width: 144px; height: 112px; top: 19px; left: 19px; }
+  .model__door1 { top: 123px; left: 75px; width: 30px; }
+  .model__win1 { left: 213px; width: 43px; }
+  .model__win2 { left: 86px; width: 32px; }
+}
+
+@media (max-width: 768px) {
+  .toolbar__brand-sub { display: none; }
+  .toolbar__btn span { font-size: 0; }
+  .toolbar__btn { padding: 5px; gap: 0; }
+  .toolbar__btn svg { width: 18px; height: 18px; }
+  .toolbar__sep { margin: 0 2px; }
+  .toolbar { padding: 0 8px; gap: 2px; }
+  .toolbar__btn { height: 32px; }
+
+  .prop-panel {
+    width: 200px; padding: 10px;
+    top: 48px; right: 8px;
+  }
+  .prop-panel__title { font-size: 13px; }
+  .prop-field input { font-size: 12px; }
+  .nudge-btn { padding: 5px; }
+  .nudge-btn svg { width: 12px; height: 12px; }
+
+  .empty-card { width: min(360px, calc(100% - 32px)); padding: 18px; }
+  .empty-card__title { font-size: 15px; }
+
+  .view-toggle { top: 8px; left: 8px; }
+  .view-toggle__btn { padding: 4px 10px; font-size: 11px; }
+  .compass { width: 52px; height: 52px; bottom: 8px; left: 8px; }
+  .compass__n, .compass__s, .compass__e, .compass__w { font-size: 8px; }
+  .compass__pointer { height: 14px; }
+
+  .model__ground { width: 260px; height: 196px; }
+  .model__room1 { width: 106px; height: 82px; top: 16px; left: 16px; }
+  .model__room2 { width: 116px; height: 82px; top: 16px; left: 130px; }
+  .model__room3 { width: 228px; height: 73px; top: 106px; left: 16px; }
+  .model__selected { width: 112px; height: 88px; top: 13px; left: 13px; }
+  .model__door1 { top: 95px; left: 58px; width: 24px; }
+  .model__win1 { left: 164px; width: 33px; }
+  .model__win2 { left: 66px; width: 25px; }
+  .model__room1-label, .model__room2-label, .model__room3-label { font-size: 10px; }
+
+  .statusbar { padding: 0 10px; gap: 6px; font-size: 11px; }
+  .breadcrumb__link { font-size: 11px; }
+  .dim-info { font-size: 11px; }
+}
+
+@media (max-width: 480px) {
+  .toolbar__brand { display: none; }
+  .toolbar__group--save { display: none; }
+  .toolbar__btn--primary { display: none; }
+  .prop-panel { display: none; }
+  .compass { display: none; }
+  .toolbar__right .toolbar__nav { display: none; }
+  .lang-btn { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- 工具栏（品牌 + 操作分组）-->
+  <header class="toolbar">
+    <div class="toolbar__brand">
+      <svg class="toolbar__brand-logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3L4 9v12h5v-7h6v7h5V9l-8-6z"/></svg>
+      <span class="toolbar__brand-text">
+        <span class="toolbar__brand-name">言筑</span>
+        <span class="toolbar__brand-sub">WordCraft</span>
+      </span>
+    </div>
+
+    <div class="toolbar__group">
+      <button class="toolbar__btn" id="toolbar-example" title="加载示例模型">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+        <span>示例</span>
+      </button>
+      <button class="toolbar__btn" id="toolbar-clear" title="清空场景">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8a2 2 0 002-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        <span>清空场景</span>
+      </button>
+    </div>
+    <div class="toolbar__sep"></div>
+    <div class="toolbar__group">
+      <button class="toolbar__btn toolbar__btn--icon-only" title="撤销 (Ctrl+Z)" aria-label="撤销" disabled>
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62A7.94 7.94 0 0112.5 10c3.53 0 6.43 2.61 7.03 6h2.02c-.62-4.46-4.36-8-8.55-8z"/></svg>
+      </button>
+      <button class="toolbar__btn toolbar__btn--icon-only" title="重做 (Ctrl+Shift+Z)" aria-label="重做" disabled>
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.5 8c2.65 0 5.05.99 6.9 2.6L22 7v9h-9l3.62-3.62A7.94 7.94 0 0011.5 10c-3.53 0-6.43 2.61-7.03 6H2.45c.62-4.46 4.36-8 8.55-8z"/></svg>
+      </button>
+    </div>
+    <div class="toolbar__sep"></div>
+    <button class="toolbar__btn toolbar__btn--active" id="toolbar-chat-btn" title="对话">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+      <span>对话</span>
+    </button>
+    <button class="toolbar__btn" title="分享" aria-label="分享">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11A2.99 2.99 0 0018 8a3 3 0 10-3-3c0 .24.04.47.09.7L8.04 9.81A2.99 2.99 0 006 9a3 3 0 000 6c1.19 0 2.24-.66 2.79-1.64l7.12 4.16c-.05.21-.08.43-.08.65a2.92 2.92 0 002.92 2.92 2.92 2.92 0 002.92-2.92 2.92 2.92 0 00-2.92-2.92z"/></svg>
+    </button>
+    <button class="toolbar__btn" title="截图保存" aria-label="截图保存">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.65 0-3 1.35-3 3s1.35 3 3 3 3-1.35 3-3-1.35-3-3-3z"/></svg>
+      <span>截图</span>
+    </button>
+    <button class="toolbar__btn" title="帮助" aria-label="帮助">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+    </button>
+
+    <div class="toolbar__right">
+      <div class="toolbar__group toolbar__group--save">
+        <button class="toolbar__btn toolbar__btn--primary" title="保存项目">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+          <span>保存</span>
+        </button>
+        <button class="toolbar__btn" title="项目库">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
+          <span>项目库</span>
+        </button>
+      </div>
+      <div class="toolbar__sep"></div>
+      <div class="toolbar__nav">
+        <button class="toolbar__nav-btn toolbar__nav-btn--active" data-label="首页" aria-label="首页">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3L4 9v12h5v-7h6v7h5V9l-8-6z"/></svg>
+        </button>
+        <button class="toolbar__nav-btn" data-label="设置" aria-label="设置">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96a7.04 7.04 0 00-1.62-.94l-.36-2.54a.48.48 0 00-.48-.41h-3.84a.48.48 0 00-.48.41l-.36 2.54c-.59.22-1.13.53-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87a.48.48 0 00.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.36 1.03.67 1.62.94l.36 2.54c.05.24.26.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.27 1.12-.58 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.49-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z"/></svg>
+        </button>
+      </div>
+      <button class="lang-btn">中/EN</button>
+      <button class="badge badge--ok" id="api-badge" title="点击切换演示的 API 状态">API</button>
+    </div>
+  </header>
+
+  <!-- 主内容：画布 -->
+  <div class="home">
+    <section class="home__viewport home__viewport--empty" id="viewport">
+      <div class="viewport__grid"></div>
+
+      <div class="view-toggle">
+        <button class="view-toggle__btn view-toggle__btn--active">3D</button>
+        <button class="view-toggle__btn">平面图</button>
+      </div>
+
+      <div class="compass">
+        <span class="compass__n">N</span>
+        <span class="compass__s">S</span>
+        <span class="compass__e">E</span>
+        <span class="compass__w">W</span>
+        <div class="compass__center"></div>
+        <div class="compass__pointer"></div>
+      </div>
+
+      <!-- 空态引导卡 -->
+      <div class="empty-card" id="empty-card">
+        <div class="empty-card__icon">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3L4 9v12h5v-7h6v7h5V9l-8-6z"/></svg>
+        </div>
+        <h1 class="empty-card__title">用一句话，生成你的房子</h1>
+        <p class="empty-card__desc">描述房间、风格与朝向，AI 会为你搭建 3D 模型，之后可随时微调。试试这些：</p>
+        <div class="empty-card__chips">
+          <button class="chip" data-example="三室一厅一厨，主卧带卫生间">三室一厅一厨</button>
+          <button class="chip" data-example="现代简约独栋小屋，两室一厅，朝南带花园">现代简约小屋</button>
+          <button class="chip" data-example="一个带大窗户的书房工作室">书房工作室</button>
+        </div>
+        <p class="empty-card__foot">数据全在本地 · 隐私安全</p>
+      </div>
+
+      <!-- CSS isometric 模型 -->
+      <div class="viewport__model">
+        <div class="model__ground">
+          <div class="model__room1" id="room1">
+            <span class="model__room1-label">客厅</span>
+          </div>
+          <div class="model__room2" id="room2">
+            <span class="model__room2-label">卧室</span>
+          </div>
+          <div class="model__room3" id="room3">
+            <span class="model__room3-label">厨房</span>
+          </div>
+          <div class="model__selected"></div>
+          <div class="model__door1"></div>
+          <div class="model__win1"></div>
+          <div class="model__win2"></div>
+          <div class="model__dim model__dim--top">8.00 m</div>
+          <div class="model__dim model__dim--left">6.00 m</div>
+        </div>
+      </div>
+
+      <!-- 属性面板 -->
+      <div class="prop-panel">
+        <span class="prop-panel__type" id="prop-type">房间</span>
+        <h3 class="prop-panel__title" id="prop-title">客厅</h3>
+        <div class="prop-panel__section">
+          <span class="prop-panel__section-title">尺寸</span>
+          <div class="prop-panel__grid">
+            <div class="prop-field"><label for="prop-len">长 (m)</label><input id="prop-len" type="text" value="8.00" /></div>
+            <div class="prop-field"><label for="prop-wid">宽 (m)</label><input id="prop-wid" type="text" value="6.00" /></div>
+            <div class="prop-field"><label for="prop-hei">高 (m)</label><input id="prop-hei" type="text" value="2.80" /></div>
+          </div>
+        </div>
+        <div class="prop-panel__section">
+          <span class="prop-panel__section-title">微调</span>
+          <div class="prop-panel__nudge">
+            <span></span>
+            <button class="nudge-btn" data-dir="up" title="上移 0.1 m" aria-label="上移 0.1 m">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+            </button>
+            <span></span>
+            <button class="nudge-btn" data-dir="left" title="左移 0.1 m" aria-label="左移 0.1 m">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
+            </button>
+            <button class="nudge-btn nudge-btn--center" title="重置位置" aria-label="重置位置">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm0-14c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/></svg>
+            </button>
+            <button class="nudge-btn" data-dir="right" title="右移 0.1 m" aria-label="右移 0.1 m">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+            </button>
+            <span></span>
+            <button class="nudge-btn" data-dir="down" title="下移 0.1 m" aria-label="下移 0.1 m">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+            </button>
+            <span></span>
+          </div>
+          <p class="prop-panel__hint">提示：选中房间后，可用方向键微调</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 底部聊天抽屉（push布局）-->
+  <div class="chat-bottom chat-bottom--collapsed" id="chat-bottom">
+    <button class="chat-bottom__toggle" id="chat-toggle" type="button" title="展开对话" aria-expanded="false" aria-controls="chat-log">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+    </button>
+    <div class="chat-bottom__log" id="chat-log" role="log" aria-live="polite" aria-label="对话记录">
+      <div class="chat-bottom__log-inner">
+        <div class="chat-msg chat-msg--assistant">
+          <span class="chat-msg__label">言筑</span>
+          <div class="chat-msg__body">你好！我是言筑。描述你想要的房子（房间、风格、朝向），我来搭建模型；也可以点左上角「示例」快速看看效果。</div>
+        </div>
+      </div>
+    </div>
+    <div class="chat-bottom__actions">
+      <button class="chat-bottom__action-btn" disabled>↩ 撤销生成</button>
+      <button class="chat-bottom__action-btn" disabled>清空对话</button>
+    </div>
+    <div class="api-hint" id="api-hint">
+      <span>尚未配置 API Key，暂时无法生成。</span>
+      <button class="api-hint__link" type="button" title="预览演示，尚未接入">前往设置</button>
+    </div>
+    <div class="chat-bottom__input">
+      <textarea class="chat-bottom__textarea" id="chat-input" rows="1" placeholder="描述你想建造的空间..." aria-label="描述你想建造的空间"></textarea>
+      <button class="chat-bottom__send" id="chat-send" disabled>生成</button>
+    </div>
+  </div>
+
+  <!-- 底部状态栏（主要信息区）-->
+  <footer class="statusbar">
+    <nav class="breadcrumb" aria-label="当前位置">
+      <span class="breadcrumb__link">整屋</span>
+      <span class="breadcrumb__sep">/</span>
+      <span class="breadcrumb__link" id="bc-current" style="color:var(--accent)">客厅</span>
+    </nav>
+    <div class="statusbar__sep"></div>
+    <span class="dim-info" id="sb-dims">8.00 m × 6.00 m × 2.80 m</span>
+    <div class="statusbar__right">
+      <span>v1.0</span>
+    </div>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+const chatBottom = document.getElementById('chat-bottom');
+const chatToggle = document.getElementById('chat-toggle');
+const toolbarChatBtn = document.getElementById('toolbar-chat-btn');
+const viewport = document.getElementById('viewport');
+const selOverlay = document.querySelector('.model__selected');
+const textarea = document.getElementById('chat-input');
+const sendBtn = document.getElementById('chat-send');
+const logBox = document.querySelector('.chat-bottom__log');
+const logInner = document.querySelector('.chat-bottom__log-inner');
+const apiBadge = document.getElementById('api-badge');
+const apiHint = document.getElementById('api-hint');
+
+let apiReady = true;
+let selectedKey = 'room1';
+
+const ROOMS = {
+  room1: { label: '客厅', w: '8.00', h: '6.00', d: '2.80' },
+  room2: { label: '卧室', w: '8.75', h: '6.25', d: '2.80' },
+  room3: { label: '厨房', w: '17.50', h: '5.60', d: '2.80' },
+};
+
+function isCollapsed() {
+  return chatBottom.classList.contains('chat-bottom--collapsed');
+}
+
+function setCollapsed(collapsed) {
+  chatBottom.classList.toggle('chat-bottom--collapsed', collapsed);
+  toolbarChatBtn.classList.toggle('toolbar__btn--active', !collapsed);
+  chatToggle.setAttribute('aria-expanded', String(!collapsed));
+  chatToggle.title = collapsed ? '展开对话' : '收起对话';
+}
+
+function scrollLog() {
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function appendMsg(role, label, html) {
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg chat-msg--' + role;
+  const lab = document.createElement('span');
+  lab.className = 'chat-msg__label';
+  lab.textContent = label;
+  const body = document.createElement('div');
+  body.className = 'chat-msg__body';
+  body.innerHTML = html;
+  msg.append(lab, body);
+  logInner.appendChild(msg);
+  scrollLog();
+  return msg;
+}
+
+chatToggle.addEventListener('click', () => setCollapsed(!isCollapsed()));
+toolbarChatBtn.addEventListener('click', () => setCollapsed(!isCollapsed()));
+
+apiBadge.addEventListener('click', () => {
+  apiReady = !apiReady;
+  apiBadge.classList.toggle('badge--ok', apiReady);
+  apiBadge.classList.toggle('badge--warn', !apiReady);
+  apiHint.classList.toggle('api-hint--show', !apiReady);
+  updateSend();
+});
+
+function setEmpty(empty) {
+  viewport.classList.toggle('home__viewport--empty', empty);
+  if (!empty) selectRoom(selectedKey);
+}
+
+document.getElementById('toolbar-example').addEventListener('click', () => {
+  const wasEmpty = viewport.classList.contains('home__viewport--empty');
+  setEmpty(false);
+  if (wasEmpty) {
+    appendMsg('assistant', '言筑', '已加载示例户型：');
+    appendMsg('assistant', '言筑',
+      '<div class="chat-model-card">' +
+      '<div class="chat-model-card__name">现代简约独栋小屋</div>' +
+      '<div class="chat-model-card__meta">3 个房间 · 5 件家具 · 共 14 个节点</div>' +
+      '</div>');
+  }
+  setCollapsed(false);
+});
+
+document.getElementById('toolbar-clear').addEventListener('click', () => {
+  if (viewport.classList.contains('home__viewport--empty')) return;
+  setEmpty(true);
+  appendMsg('assistant', '言筑', '场景已清空。点击「示例」恢复演示模型，或直接描述新的需求。');
+  setCollapsed(false);
+});
+
+function selectRoom(key) {
+  selectedKey = key;
+  const room = document.getElementById(key);
+  if (!room) return;
+  selOverlay.style.left = (room.offsetLeft - 3) + 'px';
+  selOverlay.style.top = (room.offsetTop - 3) + 'px';
+  selOverlay.style.width = (room.offsetWidth + 6) + 'px';
+  selOverlay.style.height = (room.offsetHeight + 6) + 'px';
+  const info = ROOMS[key];
+  document.getElementById('prop-type').textContent = '房间';
+  document.getElementById('prop-title').textContent = info.label;
+  document.getElementById('prop-len').value = info.w;
+  document.getElementById('prop-wid').value = info.h;
+  document.getElementById('prop-hei').value = info.d;
+  document.getElementById('bc-current').textContent = info.label;
+  document.getElementById('sb-dims').textContent = info.w + ' m × ' + info.h + ' m × ' + info.d + ' m';
+}
+
+Object.keys(ROOMS).forEach((key) => {
+  document.getElementById(key).addEventListener('click', () => selectRoom(key));
+});
+
+const NUDGE_STEP = 8;
+
+function nudge(dx, dy) {
+  const room = document.getElementById(selectedKey);
+  room.style.left = (room.offsetLeft + dx) + 'px';
+  room.style.top = (room.offsetTop + dy) + 'px';
+  selOverlay.style.left = (room.offsetLeft - 3) + 'px';
+  selOverlay.style.top = (room.offsetTop - 3) + 'px';
+}
+
+document.querySelectorAll('.nudge-btn[data-dir]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const dir = btn.dataset.dir;
+    if (dir === 'up') nudge(0, -NUDGE_STEP);
+    else if (dir === 'down') nudge(0, NUDGE_STEP);
+    else if (dir === 'left') nudge(-NUDGE_STEP, 0);
+    else if (dir === 'right') nudge(NUDGE_STEP, 0);
+  });
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest && e.target.closest('input, textarea, select')) return;
+  const dirs = {
+    ArrowUp: [0, -NUDGE_STEP],
+    ArrowDown: [0, NUDGE_STEP],
+    ArrowLeft: [-NUDGE_STEP, 0],
+    ArrowRight: [NUDGE_STEP, 0],
+  };
+  const dir = dirs[e.key];
+  if (!dir) return;
+  e.preventDefault();
+  nudge(dir[0], dir[1]);
+});
+
+function updateSend() {
+  sendBtn.disabled = !apiReady || !textarea.value.trim();
+}
+
+function doSend() {
+  if (sendBtn.disabled) return;
+  const text = textarea.value.trim();
+  if (!text) return;
+  appendMsg('user', '你', text);
+  textarea.value = '';
+  updateSend();
+  const gen = appendMsg('assistant', '言筑',
+    '<span class="generating-dots"><span></span><span></span><span></span></span>正在分析建筑需求并生成模型...');
+  gen.classList.add('chat-msg--generating');
+  setTimeout(() => {
+    gen.classList.remove('chat-msg--generating');
+    const body = gen.querySelector('.chat-msg__body');
+    body.innerHTML = '（预览演示）模型已生成，可在右侧属性面板微调尺寸与位置。';
+    scrollLog();
+  }, 1400);
+}
+
+textarea.addEventListener('input', updateSend);
+textarea.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    doSend();
+  }
+});
+sendBtn.addEventListener('click', doSend);
+
+document.querySelectorAll('.chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    textarea.value = chip.dataset.example || chip.textContent;
+    updateSend();
+    setCollapsed(false);
+    textarea.focus();
+  });
+});
+
+setTimeout(() => setCollapsed(false), 400);
+selectRoom('room1');
+updateSend();
+
+// Screenshot
+document.querySelector('[title="截图保存"]').addEventListener('click', async () => {
+  const target = document.querySelector('.shell');
+  try {
+    const canvas = await html2canvas(target, {
+      backgroundColor: null,
+      scale: 2,
+      useCORS: true,
+    });
+    const link = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    link.download = 'ui-preview-' + ts + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  } catch (e) {
+    alert('截图失败: ' + e.message);
+  }
+});
+</script>
+</body>
+</html>

@@ -65,15 +65,17 @@ afterEach(() => {
 })
 
 describe('HomePage 对话交互', () => {
-  it('未配置 API Key 时点击生成，提示前往设置且不调用模型', async () => {
+  it('未配置 API Key 时点击生成，提示前往设置、不调用模型，且保留草稿（坑 70）', async () => {
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <HomePage />
       </MemoryRouter>,
     )
     typeAndSend('设计一个卧室')
-    expect(await screen.findByText(/尚未配置 API Key/)).toBeInTheDocument()
+    expect(await screen.findByText(/尚未配置 API Key，请先前往设置页配置后再试/)).toBeInTheDocument()
     expect(mockGenerate).not.toHaveBeenCalled()
+    // 草稿不被清空，用户无需重新输入
+    expect(screen.getByPlaceholderText(/帮我设计/)).toHaveValue('设计一个卧室')
   })
 
   it('生成成功后显示摘要并更新场景模型', async () => {
@@ -91,6 +93,53 @@ describe('HomePage 对话交互', () => {
     await waitFor(() => {
       expect(useModelStore.getState().scene?.root.name).toBe('示例小屋')
     })
+  })
+
+  it('生成期间场景被编辑：确认框取消则保留用户编辑、丢弃生成结果（坑 70）', async () => {
+    useSettingsStore.getState().addApiKey({ name: '测试', key: 'sk-test' })
+    const generated = createSampleModel()
+    const edited = { ...generated, root: { ...generated.root, name: '用户编辑版' } }
+    mockGenerate.mockImplementation(async () => {
+      // 模拟生成期间用户手动编辑场景（如拖动房间）
+      useModelStore.getState().setScene(edited)
+      return { reply: '', model: generated }
+    })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    typeAndSend('设计一个小屋')
+
+    expect(await screen.findByText(/生成结果已丢弃：生成期间场景发生了变化/)).toBeInTheDocument()
+    // 用户编辑保留，生成结果未覆盖
+    expect(useModelStore.getState().scene?.root.name).toBe('用户编辑版')
+    expect(confirmSpy).toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('生成期间场景被编辑：确认应用则覆盖为新生成模型', async () => {
+    useSettingsStore.getState().addApiKey({ name: '测试', key: 'sk-test' })
+    const generated = createSampleModel()
+    const edited = { ...generated, root: { ...generated.root, name: '用户编辑版' } }
+    mockGenerate.mockImplementation(async () => {
+      useModelStore.getState().setScene(edited)
+      return { reply: '', model: generated }
+    })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    typeAndSend('设计一个小屋')
+
+    await waitFor(() => {
+      expect(useModelStore.getState().scene?.root.name).toBe('示例小屋')
+    })
+    expect(confirmSpy).toHaveBeenCalled()
+    confirmSpy.mockRestore()
   })
 
   it('模型返回业务错误时在对话中展示错误信息', async () => {
@@ -168,7 +217,7 @@ describe('HomePage 对话交互', () => {
     typeAndSend('再改一下')
     await waitFor(() => expect(useModelStore.getState().scene?.root.name).toBe('二次生成'))
 
-    fireEvent.click(screen.getByRole('button', { name: '撤销生成' }))
+    fireEvent.click(screen.getByRole('button', { name: /撤销生成/ }))
     await waitFor(() => expect(useModelStore.getState().scene?.root.name).toBe('示例小屋'))
     expect(useChatStore.getState().messages).toHaveLength(0)
   })
@@ -179,13 +228,57 @@ describe('HomePage 对话交互', () => {
         <HomePage />
       </MemoryRouter>,
     )
-    expect(screen.getByRole('button', { name: '加载示例' })).toBeInTheDocument()
+    // 「示例」出现两处：顶栏按钮 + 空态卡内按钮
+    expect(screen.getAllByRole('button', { name: '示例' }).length).toBeGreaterThanOrEqual(1)
 
     useSettingsStore.getState().setLanguage('en')
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Load sample' })).toBeInTheDocument(),
+      expect(screen.getAllByRole('button', { name: 'Sample' }).length).toBeGreaterThanOrEqual(1),
     )
-    expect(screen.queryByRole('button', { name: '加载示例' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '示例' })).not.toBeInTheDocument()
+  })
+
+  it('未配置 API Key 时，空态卡提示可加载示例模型；点击后加载示例', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    expect(
+      screen.getByText(/尚未配置 API Key，可先加载示例模型体验/),
+    ).toBeInTheDocument()
+    // 空态卡内的「示例」按钮（chip 样式）与顶栏「示例」按钮并存，取空态卡内的
+    const loadBtn = screen
+      .getAllByRole('button', { name: '示例' })
+      .find((b) => b.className.includes('chip'))
+    expect(loadBtn).toBeDefined()
+    fireEvent.click(loadBtn!)
+    expect(useModelStore.getState().scene?.root.name).toBe('示例小屋')
+  })
+
+  it('已配置 API Key 时，空态卡不再提示加载示例', () => {
+    useSettingsStore.getState().addApiKey({ name: '测试', key: 'sk-test' })
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    expect(
+      screen.queryByText(/尚未配置 API Key，可先加载示例模型体验/),
+    ).not.toBeInTheDocument()
+  })
+
+  it('无场景时显示空态引导卡，点击示例标签填入输入框', () => {
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <HomePage />
+      </MemoryRouter>,
+    )
+    expect(
+      screen.getByRole('heading', { name: '用一句话，生成你的房子' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '三室一厅一厨' }))
+    expect(screen.getByPlaceholderText(/帮我设计/)).toHaveValue('三室一厅一厨，主卧带卫生间')
   })
 
   it('工具栏「项目库」按钮打开本地项目库对话框', async () => {
@@ -205,7 +298,12 @@ describe('HomePage 对话交互', () => {
         <HomePage />
       </MemoryRouter>,
     )
-    fireEvent.click(screen.getByRole('button', { name: '加载示例' }))
+    // 顶栏「示例」按钮（与空态卡内按钮同名，取顶栏那个）
+    const sampleBtn = screen
+      .getAllByRole('button', { name: '示例' })
+      .find((b) => b.className.includes('toolbar__btn'))
+    expect(sampleBtn).toBeDefined()
+    fireEvent.click(sampleBtn!)
     fireEvent.click(screen.getByRole('button', { name: '分享' }))
     expect(await screen.findByRole('heading', { name: '分享与口令' })).toBeInTheDocument()
     // 口令输入框已生成；历史记录写入一条

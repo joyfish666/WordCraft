@@ -127,12 +127,15 @@ export function ProjectLibraryDialog({
             projects.map((rec) => {
               const isCurrent = rec.id === currentId
               const isRenaming = rec.id === renamingId
-              let nodeCount = 0
+              let roomCount = 0
               try {
-                const parsed = JSON.parse(rec.data) as { root?: { children?: unknown[] } }
-                nodeCount = parsed?.root?.children?.length ?? 0
+                // v3 模型：房间在 root.levels[0].rooms（旧 v1/v2 盒子模型走相同入口，migrate 后同样成立）
+                const parsed = JSON.parse(rec.data) as {
+                  root?: { levels?: { rooms?: unknown[] }[] }
+                }
+                roomCount = parsed?.root?.levels?.[0]?.rooms?.length ?? 0
               } catch {
-                nodeCount = 0
+                roomCount = 0
               }
               return (
                 <div key={rec.id} className={`project-row ${isCurrent ? 'project-row--current' : ''}`}>
@@ -155,7 +158,7 @@ export function ProjectLibraryDialog({
                         {isCurrent && <span className="project-row__tag">{t('project.currentTag')}</span>}
                       </span>
                       <span className="project-row__meta">
-                        {formatTime(rec.updatedAt)} · {t('project.roomCount', { count: nodeCount })}
+                        {formatTime(rec.updatedAt)} · {t('project.roomCount', { count: roomCount })}
                       </span>
                     </div>
                   )}

@@ -1,8 +1,8 @@
 import { logDebug } from './debugLog'
-import { footprintCenter, levelHeight, rectFootprint, translateFootprint } from './footprint'
-import { applyFurnitureConventions } from './furniturePlacement'
+import { footprintBounds, footprintCenter, levelHeight, rectFootprint, translateFootprint } from './footprint'
+import { applyFurnitureConventions, doorZoneRect } from './furniturePlacement'
 import { normalizeContainment } from './modelTree'
-import { WALL_THICKNESS, isCorridorName } from './roomGeometry'
+import { WALL_THICKNESS, computeDoorZones, isCorridorName } from './roomGeometry'
 import type {
   FurnitureNode,
   FurnitureNodeV2,
@@ -37,12 +37,89 @@ export function resolveLayout(scene: SceneModelV2): SceneModel {
     house: scene.root.name,
   })
   const root = resolveHouse(scene.root)
-  let model = normalizeContainment({ version: 3, root })
-  // 常规布局（auto）按家具常理贴墙放置；custom 自由布局保留大模型的显式坐标
+  // 嵌套房间避开父房间门口禁区（坑 47 同款，macro 路径的 placeNested 不含避让——
+  // 内卫落在东北角可能压住父房间朝走廊的门，门后无墙）
+  let model = avoidNestedDoorZones({ version: 3, root })
   if (layout.mode === 'auto') {
+    // 常理摆放自带约束（贴墙/避让门口/避让嵌套卫生间/约束进墙），无需先 normalize——
+    // 若先 normalize 再摆放：家具会被推到"零重叠但位置差"的角落（如床被推出门口
+    // 禁区后悬在房间中部），后续"就近贴墙"会被带偏，把本该留给其他家具的墙面占掉
+    // （复现：主卧床被推北上墙，衣柜无处可放、与床重叠）
     model = applyFurnitureConventions(model)
     model = normalizeContainment(model)
+    return withLayoutLog(model)
   }
+  // custom 自由布局保留大模型的显式坐标，仅约束进墙/推出嵌套占地与门口
+  return withLayoutLog(normalizeContainment(model))
+}
+
+/** 嵌套房间落点候选符号（与 executor.nestRoom 的坑 47 避让顺序一致：东北/西北/东南/西南） */
+const NEST_CORNER_ORDER: Array<{ x: number; z: number }> = [
+  { x: 1, z: 1 },
+  { x: -1, z: 1 },
+  { x: 1, z: -1 },
+  { x: -1, z: -1 },
+]
+
+/**
+ * 嵌套房间避开父房间门口禁区（坑 47 的布局引擎版本）：
+ * placeNested 按角落规则落位时只看父房间尺寸，不看父房间的门洞——卫生间落在
+ * 东北角可能恰好压在父房间朝走廊的门正下方（门后无墙、透过门洞看进卫生间）。
+ * 布局完成后统一检查（与渲染的 computeDoorZones 同源，含入户门）：
+ * 嵌套房间与父房间门区重叠时，按 东北/西北/东南/西南 确定性顺序移到
+ * 第一个不冲突的角；全部冲突保持原位。嵌套房间的嵌套房间递归处理。
+ */
+function avoidNestedDoorZones(model: SceneModel): SceneModel {
+  const rooms = model.root.levels[0].rooms
+  const doorZones = computeDoorZones(rooms, {
+    entrance: model.root.entranceDir ?? 'south',
+    entranceRoomId: model.root.entranceRoomId,
+  })
+  const fixRoom = (room: RoomNode): RoomNode => {
+    // 先修自身嵌套房间的内部（递归），再修本房间的嵌套房间
+    const nested = room.nestedRooms.map(fixRoom)
+    const rects = (doorZones.get(room.id) ?? []).map((z) => doorZoneRect(room, z))
+    if (rects.length === 0) return { ...room, nestedRooms: nested }
+    const pb = footprintBounds(room.footprint)
+    const pc = footprintCenter(room.footprint)
+    const fixed = nested.map((n) => {
+      const nb = footprintBounds(n.footprint)
+      const halfX = Math.max(0, (pb.maxX - pb.minX - (nb.maxX - nb.minX)) / 2 - WALL_THICKNESS)
+      const halfZ = Math.max(0, (pb.maxZ - pb.minZ - (nb.maxZ - nb.minZ)) / 2 - WALL_THICKNESS)
+      const hw = (nb.maxX - nb.minX) / 2
+      const hd = (nb.maxZ - nb.minZ) / 2
+      const overlap = (cx: number, cz: number): boolean =>
+        rects.some(
+          (r) =>
+            cx - hw < r.maxX - 1e-6 &&
+            cx + hw > r.minX + 1e-6 &&
+            cz - hd < r.maxZ - 1e-6 &&
+            cz + hd > r.minZ + 1e-6,
+        )
+      const cur = footprintCenter(n.footprint)
+      if (!overlap(cur.x, cur.z)) return n
+      for (const corner of NEST_CORNER_ORDER) {
+        const cx = pc.x + corner.x * halfX
+        const cz = pc.z + corner.z * halfZ
+        if (!overlap(cx, cz)) {
+          return translateRoom(n, cx - cur.x, cz - cur.z)
+        }
+      }
+      return n // 全部角都压门区（如门区过大）：保持原位
+    })
+    return { ...room, nestedRooms: fixed }
+  }
+  return {
+    ...model,
+    root: {
+      ...model.root,
+      levels: model.root.levels.map((level) => ({ ...level, rooms: level.rooms.map(fixRoom) })),
+    },
+  }
+}
+
+/** 布局完成的调试日志（resolveLayout 两个分支共用） */
+function withLayoutLog(model: SceneModel): SceneModel {
   const rooms = model.root.levels[0].rooms
   logDebug('布局解析完成', {
     house: model.root.name,
@@ -388,8 +465,56 @@ function placeRow(sideRooms: RoomNodeV2[], side: LivingSide, cl: number, cw: num
 // ---------------------------------------------------------------------------
 
 function resolveCustom(house: HouseNodeV2): HouseNode {
-  const children = house.children.map((r) =>
-    makeRoom(r, r.position?.x ?? 0, r.position?.z ?? 0, r.footprint),
-  )
-  return finalizeHouse(house, children)
+  // custom 模式：position/footprint 显式定位；否则若给了 relativeTo 就贴到
+  // 前文已列出的房间的 dir 侧（无缝共墙，与 addRoom 的 relativeTo 同语义；
+  // roomId 可用 id 或名称——LLM 常不给 id 直接用房间名）。都没有才落原点。
+  const built: RoomNode[] = []
+  for (const r of house.children) {
+    let cx: number
+    let cz: number
+    if (r.position) {
+      cx = r.position.x
+      cz = r.position.z
+    } else if (r.footprint) {
+      const b = footprintBounds(r.footprint)
+      cx = (b.minX + b.maxX) / 2
+      cz = (b.minZ + b.maxZ) / 2
+    } else if (r.relativeTo) {
+      const target = built.find(
+        (b) => b.id === r.relativeTo!.roomId || b.name === r.relativeTo!.roomId,
+      )
+      if (target) {
+        const tb = footprintBounds(target.footprint)
+        const c = footprintCenter(target.footprint)
+        const halfL = r.dimensions.length / 2
+        const halfW = r.dimensions.width / 2
+        switch (r.relativeTo.dir) {
+          case 'north':
+            cx = c.x
+            cz = tb.maxZ + halfW
+            break
+          case 'south':
+            cx = c.x
+            cz = tb.minZ - halfW
+            break
+          case 'east':
+            cx = tb.maxX + halfL
+            cz = c.z
+            break
+          default:
+            cx = tb.minX - halfL
+            cz = c.z
+        }
+      } else {
+        // 目标房间不在前文（或名称不匹配）：退回原点，避免布局失败
+        cx = 0
+        cz = 0
+      }
+    } else {
+      cx = 0
+      cz = 0
+    }
+    built.push(makeRoom(r, cx, cz, r.footprint))
+  }
+  return finalizeHouse(house, built)
 }

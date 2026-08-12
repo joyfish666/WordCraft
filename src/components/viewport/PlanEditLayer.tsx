@@ -366,7 +366,7 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
                 <mesh key={`${edge.roomId}-${edge.ringIndex}-${seg.from}`} position={pos} raycast={() => null}>
                   <boxGeometry args={edge.axis === 'x' ? [len, 0.12, 0.3] : [0.3, 0.12, len]} />
                   <meshBasicMaterial
-                    color={seg.kind === 'door' ? '#ff9f43' : '#5bc0de'}
+                    color={seg.kind === 'door' ? '#b57918' : '#5bc0de'}
                     transparent
                     opacity={0.9}
                   />
@@ -387,7 +387,7 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
             onPointerUp={(e) => onVertexUp(e, selectedRoom.id)}
           >
             <sphereGeometry args={[0.16, 12, 12]} />
-            <meshBasicMaterial color="#ffd93d" />
+            <meshBasicMaterial color="#c8901e" />
           </mesh>
         ))}
 
@@ -398,7 +398,7 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
             [split.start.x, 0.8, split.start.z],
             [splitCur.x, 0.8, splitCur.z],
           ]}
-          color="#ffd93d"
+          color="#c8901e"
           lineWidth={3}
           raycast={() => null}
         />
@@ -413,7 +413,7 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
           return (
             <Line
               points={[...pts.map((p) => [p.x, 0.9, p.z] as [number, number, number]), [pts[0].x, 0.9, pts[0].z]]}
-              color="#4ade80"
+              color="#2f8f5b"
               lineWidth={3}
               raycast={() => null}
             />

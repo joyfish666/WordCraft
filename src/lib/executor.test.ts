@@ -3,7 +3,7 @@ import { footprintBounds, footprintCenter, houseLevelsBounds, roomCenter, roomDi
 import { doorZoneRect } from './furniturePlacement'
 import { diffSceneV2, emptyScene, executeOps, findRoom } from './executor'
 import { findNodeById } from './modelTree'
-import { edgeOf, computeWallPlan, computeAllWallPlans, computeDoorZones } from './roomGeometry'
+import { DOOR_WIDTH, edgeOf, computeWallPlan, computeAllWallPlans, computeDoorZones } from './roomGeometry'
 import type { FurnitureNode, RoomNode, SceneModel, SceneModelV2 } from '../types/model'
 import type { Op } from '../types/ops'
 
@@ -64,6 +64,104 @@ describe('executeOps - macro 整体布局', () => {
     expect(
       edgeOf(plan.get('living')!, 'south')!.segments.some((s) => s.kind === 'door' && s.entrance),
     ).toBe(true)
+  })
+
+  it('macro custom：房间用 relativeTo 贴靠（复现用户反馈：全塞一块）', () => {
+    const scene = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          name: '现代简约独栋小屋',
+          rooms: [
+            { name: '客厅', dimensions: { length: 6, width: 4, height: 2.8 } },
+            {
+              name: '主卧',
+              dimensions: { length: 4, width: 3.5, height: 2.8 },
+              relativeTo: { roomId: '客厅', dir: 'east' },
+            },
+            {
+              name: '次卧',
+              dimensions: { length: 3.5, width: 3, height: 2.8 },
+              relativeTo: { roomId: '客厅', dir: 'west' },
+            },
+            {
+              name: '厨房',
+              dimensions: { length: 3, width: 2.5, height: 2.8 },
+              relativeTo: { roomId: '客厅', dir: 'north' },
+            },
+          ],
+        },
+      },
+    ])
+    const rooms = topRooms(scene)
+    const byName = (n: string) => rooms.find((r) => r.name === n)!
+    // 主卧贴客厅东侧：主卧西边 = 客厅东边（无缝共墙）
+    const living = byName('客厅')
+    const master = byName('主卧')
+    expect(master).toBeDefined()
+    expect(footprintBounds(master.footprint).minX).toBeCloseTo(
+      footprintBounds(living.footprint).maxX,
+      5,
+    )
+    // 次卧贴客厅西侧
+    const bed2 = byName('次卧')
+    expect(footprintBounds(bed2.footprint).maxX).toBeCloseTo(
+      footprintBounds(living.footprint).minX,
+      5,
+    )
+    // 厨房贴客厅北侧
+    const kitchen = byName('厨房')
+    expect(footprintBounds(kitchen.footprint).minZ).toBeCloseTo(
+      footprintBounds(living.footprint).maxZ,
+      5,
+    )
+    // 四个房间不再重叠（修复前全部落在原点）
+    for (const a of rooms) {
+      for (const b of rooms) {
+        if (a.id === b.id) continue
+        const ab = footprintBounds(a.footprint)
+        const bb = footprintBounds(b.footprint)
+        const overlap =
+          ab.minX < bb.maxX - 1e-6 && ab.maxX > bb.minX + 1e-6 && ab.minZ < bb.maxZ - 1e-6 && ab.maxZ > bb.minZ + 1e-6
+        expect(overlap).toBe(false)
+      }
+    }
+  })
+
+  it('macro custom：房间无 id 时，setOpenings/setHouse 可按名称引用（复现用户反馈）', () => {
+    const scene = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          name: '书房工作室',
+          rooms: [
+            { name: '书房工作室', dimensions: { length: 5, width: 4, height: 2.8 } },
+          ],
+        },
+      },
+      { op: 'setOpenings', roomId: '书房工作室', side: 'south', kind: 'window', from: 0.5, to: 4.5 },
+      { op: 'setHouse', entranceRoomId: '书房工作室', entranceDir: 'south' },
+    ])
+    // setOpenings 按名称命中：南墙出现窗段
+    const room = findRoom(scene, '书房工作室')!
+    expect(room.windows.length).toBe(1)
+    const plan = computeWallPlan(topRooms(scene), { entrance: 'south', entranceRoomId: room.id })
+    const south = edgeOf(plan.get(room.id)!, 'south')!
+    // 大窗保持完整一段（未被门劈开）
+    const southWindows = south.segments.filter((s) => s.kind === 'window')
+    expect(southWindows).toHaveLength(1)
+    expect(southWindows[0].from).toBeCloseTo(0.5)
+    expect(southWindows[0].to).toBeCloseTo(4.5)
+    // setHouse 按名称命中：入口房间落位 + 入户门恒为 0.9m（南墙放不下时改到东墙）
+    expect(scene.root.entranceRoomId).toBe(room.id)
+    const entranceSeg = plan
+      .get(room.id)!
+      .edges.flatMap((e) => e.segments)
+      .find((s) => s.entrance)!
+    expect(entranceSeg).toBeDefined()
+    expect(entranceSeg.to - entranceSeg.from).toBeCloseTo(DOOR_WIDTH)
   })
 
   it('macro living 客厅居中、其他房间环绕', () => {
@@ -789,7 +887,8 @@ describe('executeOps - 家具操作', () => {
           id: 'sofa',
           name: '沙发',
           dimensions: { length: 2, width: 0.9, height: 0.8 },
-          position: { x: 0.5, y: 0.4, z: -0.3 },
+          // z 选 0.8 避开南墙入户门通道（门区会把它推出原位，见 normalizeContainment 门区避让）
+          position: { x: 0.5, y: 0.4, z: 0.8 },
         },
       ],
       base,
@@ -798,7 +897,7 @@ describe('executeOps - 家具操作', () => {
     const sofa = room.furniture.find((f) => f.id === 'sofa')!
     expect(sofa).toBeDefined()
     expect(sofa.position.x).toBeCloseTo(roomCenter(room).x + 0.5, 5)
-    expect(sofa.position.z).toBeCloseTo(roomCenter(room).z - 0.3, 5)
+    expect(sofa.position.z).toBeCloseTo(roomCenter(room).z + 0.8, 5)
     expect(sofa.position.y).toBeCloseTo(0.4, 5)
   })
 
@@ -1694,6 +1793,130 @@ describe('executeOps - 端点行为', () => {
     ])
     expect(findRoom(base, 'bath')?.id).toBe('bath')
     expect(findRoom(base, 'ghost')).toBeNull()
+  })
+})
+
+describe('executeOps - 按名称引用（坑 71：findRoom 名称回退与 id-only 变更函数统一）', () => {
+  /** custom 基础场景：房A(4×3) 居中、房B(3×3) 在东侧 */
+  function baseScene(): SceneModel {
+    return run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'a',
+              name: '房A',
+              dimensions: { length: 4, width: 3, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+            },
+            {
+              id: 'b',
+              name: '房B',
+              dimensions: { length: 3, width: 3, height: 2.8 },
+              position: { x: 6, y: 1.4, z: 0 },
+            },
+          ],
+        },
+      },
+    ])
+  }
+
+  it('updateRoom 按名称引用：改名/改尺寸真正生效（原实现静默零变更）', () => {
+    const scene = run([{ op: 'updateRoom', id: '房A', patch: { name: '大客厅' } }], baseScene())
+    const a = findNodeById(scene.root, 'a') as RoomNode
+    expect(a.name).toBe('大客厅')
+    const sized = run(
+      [{ op: 'updateRoom', id: '大客厅', patch: { dimensions: { length: 5, width: 5 } } }],
+      scene,
+    )
+    const a2 = findNodeById(sized.root, 'a') as RoomNode
+    expect(roomDims(a2).length).toBeCloseTo(5, 5)
+    expect(roomDims(a2).width).toBeCloseTo(5, 5)
+  })
+
+  it('removeRoom 按名称引用：房间真正被删除，入口房间清空 entranceRoomId', () => {
+    const scene = run([{ op: 'removeRoom', id: '房A' }], baseScene())
+    expect(findNodeById(scene.root, 'a')).toBeNull()
+    expect(findNodeById(scene.root, 'b')).not.toBeNull()
+    const withEntrance = run([{ op: 'setHouse', name: 'x', entranceRoomId: 'a' }], baseScene())
+    const removed = run([{ op: 'removeRoom', id: '房A' }], withEntrance)
+    expect(findNodeById(removed.root, 'a')).toBeNull()
+    expect(removed.root.entranceRoomId).toBeUndefined()
+  })
+
+  it('moveRoom 按名称引用：真正移动到目标房间一侧（原实现名称引用不移动）', () => {
+    const scene = run(
+      [{ op: 'moveRoom', id: '房B', relativeTo: { roomId: '房A', dir: 'south' } }],
+      baseScene(),
+    )
+    const a = findNodeById(scene.root, 'a') as RoomNode
+    const b = findNodeById(scene.root, 'b') as RoomNode
+    expect(b.footprint.some((p) => p.z < a.footprint[0].z - 1)).toBe(true)
+  })
+
+  it('moveRoom 名称引用指向自身时失败跳过（相对引用与 id 引用等价）', () => {
+    const result = executeOps(
+      baseScene(),
+      [{ op: 'moveRoom', id: '房A', relativeTo: { roomId: '房A', dir: 'north' } }],
+    )
+    expect(result.skipped.length).toBe(1)
+  })
+
+  it('splitRoom 按名称引用：拆分真正生效（新房间名 = 原名2）', () => {
+    const scene = run(
+      [{ op: 'splitRoom', id: '房A', axis: 'x', position: 0 }],
+      baseScene(),
+    )
+    const a = findNodeById(scene.root, 'a') as RoomNode
+    expect(a).not.toBeNull()
+    const newRoom = topRooms(scene).find((r) => r.name === '房A2') as RoomNode
+    expect(newRoom).not.toBeNull()
+    // 房B 未被波及
+    expect(findNodeById(scene.root, 'b')?.name).toBe('房B')
+  })
+
+  it('mergeRoom 按名称引用：合并真正生效（keep/remove 均按名称）', () => {
+    // 相邻房间：房B 紧贴房A 东侧（共享整条边，并集为合法矩形）
+    const adjacent = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'a',
+              name: '房A',
+              dimensions: { length: 4, width: 3, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+            },
+            {
+              id: 'b',
+              name: '房B',
+              dimensions: { length: 3, width: 3, height: 2.8 },
+              position: { x: 3.5, y: 1.4, z: 0 },
+            },
+          ],
+        },
+      },
+    ])
+    const scene = run(
+      [{ op: 'mergeRoom', keep: '房A', remove: '房B' }],
+      adjacent,
+    )
+    const a = findNodeById(scene.root, 'a') as RoomNode
+    expect(a).not.toBeNull()
+    expect(a.name).toBe('房A')
+    expect(findNodeById(scene.root, 'b')).toBeNull()
+    expect(roomDims(a).length).toBeCloseTo(7, 5)
+  })
+
+  it('nestRoom 按名称引用：真正内嵌', () => {
+    const scene = run([{ op: 'nestRoom', id: '房B', into: '房A' }], baseScene())
+    const a = findNodeById(scene.root, 'a') as RoomNode
+    expect(a.nestedRooms.map((r) => r.id)).toContain('b')
+    expect(findNodeById(scene.root, 'b')).not.toBeNull()
   })
 })
 

@@ -104,4 +104,25 @@ describe('ProjectLibraryDialog', () => {
     fireEvent.click(await screen.findByRole('button', { name: '删除' }))
     await vi.waitFor(() => expect(mocks.deleteProject).toHaveBeenCalledWith(5))
   })
+
+  it('项目行显示房间数（v3 模型：root.levels[0].rooms，原实现读错字段恒为 0）', async () => {
+    const model = createSampleModel()
+    const rooms = model.root.levels[0].rooms.map((r) => ({ ...r }))
+    mocks.listProjects.mockResolvedValue([
+      { id: 1, name: '三房', data: JSON.stringify(model), createdAt: 1, updatedAt: 2 },
+      {
+        id: 2,
+        name: '空场景',
+        data: JSON.stringify({ version: 3, root: { type: 'house', levels: [{ rooms: [] }] } }),
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ])
+    renderDialog()
+    expect(await screen.findByText(`本地项目库`)).toBeInTheDocument()
+    await vi.waitFor(() => {
+      expect(screen.getByText(new RegExp(`${rooms.length} 个房间`))).toBeInTheDocument()
+      expect(screen.getByText(/0 个房间/)).toBeInTheDocument()
+    })
+  })
 })

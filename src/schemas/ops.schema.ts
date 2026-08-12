@@ -51,6 +51,8 @@ export const roomSpecSchema: z.ZodType<RoomSpec> = z.object({
   side: z.string().optional(),
   footprint: z.array(point2dSchema).min(4).optional(),
   position: positionSchema.optional(),
+  // custom 模式贴靠：roomId 可用 id 或名称（LLM 常不给 id 直接用房间名）
+  relativeTo: relativeToSchema.optional(),
   furniture: z.array(furnitureSpecSchema).optional(),
   nestedRooms: z.array(z.lazy(() => roomSpecSchema)).optional(),
 })

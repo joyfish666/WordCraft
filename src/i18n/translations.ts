@@ -4,7 +4,7 @@
  * 插值语法：{name} / {count} 等占位符，由 translate() 替换。
  *
  * 范围边界：只覆盖 UI 界面层。LLM 系统提示词、生成数据（房间/家具名）、示例模型名、
- * 品牌「言筑」等不在此列（见 docs/handoff.md 坑 27）。
+ * 品牌「言筑」等不在此列（见 docs/notes.md §3.6 坑 30）。
  */
 
 export type Lang = 'zh' | 'en'
@@ -16,10 +16,13 @@ export const zh = {
   'nav.home': '首页',
   'nav.settings': '设置',
   'nav.footer': '纯前端 · 数据本地存储',
+  'nav.label': '页面导航',
 
   // ---------- HomePage 工具栏 ----------
-  'home.loadSample': '加载示例',
+  'home.loadSample': '示例',
+  'home.loadSampleTitle': '加载示例模型',
   'home.clearScene': '清空场景',
+  'home.clearSceneTitle': '清空当前场景',
   'home.undo': '撤销',
   'home.undoTitle': '撤销 (Ctrl+Z)',
   'home.redo': '重做',
@@ -30,6 +33,12 @@ export const zh = {
   'home.library': '项目库',
   'home.share': '分享',
   'home.help': '操作说明',
+  'home.chat': '对话',
+  'home.chatExpandTitle': '展开对话',
+  'home.chatCollapseTitle': '收起对话',
+  'home.screenshot': '截图',
+  'home.screenshotTitle': '截图保存当前视角为 PNG 图片',
+  'home.screenshotFailed': '截图失败（当前环境不支持截图）',
   'home.backToHouse': '返回整屋',
   'home.apiOk': 'API Key 已配置',
   'home.apiMissing': '未配置 API Key · 前往设置',
@@ -47,8 +56,22 @@ export const zh = {
   'chat.generatingBtn': '生成中…（已 {elapsed}s）',
   'chat.generateBtn': '生成模型',
   'chat.placeholder': '例如：帮我设计一个 3×3 米的卧室，放一张双人床…',
+  'chat.ariaLog': '对话记录',
+  'chat.apiMissingHint': '尚未配置 API Key，暂时无法生成。',
   'chat.generatedModel':
     '已生成「{name}」模型，共 {count} 个模块。可点击模块查看/修改尺寸，或用方向键移动视角。',
+
+  // ---------- 空态引导 ----------
+  'home.emptyTitle': '用一句话，生成你的房子',
+  'home.emptyDesc': '描述房间、风格与朝向，AI 会为你搭建 3D 模型，之后可随时微调。试试这些：',
+  'home.emptyFoot': '数据全在本地 · 隐私安全',
+  'home.emptyApiHint': '尚未配置 API Key，可先加载示例模型体验：',
+  'home.example1': '三室一厅一厨，主卧带卫生间',
+  'home.example1Label': '三室一厅一厨',
+  'home.example2': '现代简约独栋小屋，两室一厅，朝南',
+  'home.example2Label': '现代简约小屋',
+  'home.example3': '一个带大窗户的书房工作室',
+  'home.example3Label': '书房工作室',
 
   // ---------- 视图切换 ----------
   'home.viewModeAria': '视图模式',
@@ -67,6 +90,7 @@ export const zh = {
   'home.debugEmpty': '暂无日志（调试模式已开启，生成模型或检测连通性时会记录）',
 
   // ---------- 状态栏 ----------
+  'home.breadcrumbAria': '当前位置',
   'home.viewTitle': '视角',
   'home.panLeftTitle': '视角左移 (←)',
   'home.panRightTitle': '视角右移 (→)',
@@ -85,6 +109,8 @@ export const zh = {
   'home.alertInvalid': '项目数据格式不正确，无法打开',
   'home.noApiKey': '尚未配置 API Key，请先前往设置页配置后再试。',
   'home.genFailed': '生成失败，请重试',
+  'home.genConflictApply': '生成期间你手动编辑了场景。仍要应用生成结果覆盖当前编辑吗？（建议选「取消」以保留你的修改）',
+  'home.genConflictAborted': '生成结果已丢弃：生成期间场景发生了变化，已保留你的手动编辑',
 
   // ---------- 设置页 ----------
   'settings.title': '设置',
@@ -142,11 +168,11 @@ export const zh = {
   'help.unfocus': '退出聚焦',
   'help.unfocusDesc': '点击整屋地板、面包屑「房屋」，或点空白处',
   'help.move': '移动视角',
-  'help.moveDesc': '键盘方向键或状态栏「视角」按钮平移视角',
+  'help.moveDesc': '键盘方向键 / WASD 平移视角',
   'help.keys': '方向键 / WASD',
   'help.keysDesc': '←/→ 或 A/D 左右平移，↑/↓ 或 W/S 上下平移（输入框聚焦时不生效）',
   'help.resetView': '复位视角',
-  'help.resetViewDesc': '状态栏「复位视角」按钮恢复初始视角',
+  'help.resetViewDesc': '按键盘 R 键恢复初始视角',
   'help.breadcrumb': '层级导航',
   'help.breadcrumbDesc': '底部面包屑可点击跳转到任意层级',
   'help.projects': '保存 / 项目库',
@@ -172,6 +198,7 @@ export const zh = {
 
   // ---------- 属性面板 ----------
   'property.closeTitle': '关闭属性面板',
+  'property.dragTitle': '按住拖拽移动面板位置',
   'property.name': '名称',
   'property.dimSection': '尺寸（米）',
   'property.length': '长',
@@ -278,6 +305,10 @@ export const zh = {
   'error.unknownModel': '未知',
   'error.authFailed': 'API Key 无效或无权限（401/403）',
   'error.modelMissing': 'API 可达，但模型不存在，请检查模型名与 Base URL',
+  'error.boundaryTitle': '出错了',
+  'error.boundaryDesc': '应用遇到意外错误（通常是本地数据损坏）。可以重试，或重置本地数据后重新开始。',
+  'error.boundaryReset': '重置本地数据',
+  'error.boundaryRetry': '重试',
 } as const
 
 export type TKey = keyof typeof zh
@@ -289,10 +320,13 @@ export const en: Record<TKey, string> = {
   'nav.home': 'Home',
   'nav.settings': 'Settings',
   'nav.footer': 'Pure front-end · Data stays local',
+  'nav.label': 'Page navigation',
 
   // ---------- HomePage toolbar ----------
-  'home.loadSample': 'Load sample',
+  'home.loadSample': 'Sample',
+  'home.loadSampleTitle': 'Load the sample house',
   'home.clearScene': 'Clear scene',
+  'home.clearSceneTitle': 'Clear the current scene',
   'home.undo': 'Undo',
   'home.undoTitle': 'Undo (Ctrl+Z)',
   'home.redo': 'Redo',
@@ -303,6 +337,12 @@ export const en: Record<TKey, string> = {
   'home.library': 'Projects',
   'home.share': 'Share',
   'home.help': 'Help',
+  'home.chat': 'Chat',
+  'home.chatExpandTitle': 'Expand chat',
+  'home.chatCollapseTitle': 'Collapse chat',
+  'home.screenshot': 'Screenshot',
+  'home.screenshotTitle': 'Save the current view as a PNG image',
+  'home.screenshotFailed': 'Screenshot failed (not supported in this environment)',
   'home.backToHouse': 'Back to house',
   'home.apiOk': 'API Key configured',
   'home.apiMissing': 'No API Key · Go to Settings',
@@ -320,8 +360,22 @@ export const en: Record<TKey, string> = {
   'chat.generatingBtn': 'Generating… ({elapsed}s)',
   'chat.generateBtn': 'Generate',
   'chat.placeholder': 'e.g. Design a 3×3 m bedroom with a double bed…',
+  'chat.ariaLog': 'Chat log',
+  'chat.apiMissingHint': 'No API Key configured yet — generation is disabled.',
   'chat.generatedModel':
     'Generated "{name}" with {count} modules. Click a module to view/edit dimensions, or use the arrow keys to move the view.',
+
+  // ---------- Empty state ----------
+  'home.emptyTitle': 'Describe your house in one sentence',
+  'home.emptyDesc': 'Describe rooms, style and orientation — the AI builds a 3D model you can refine later. Try one:',
+  'home.emptyFoot': 'All data stays local · Private by design',
+  'home.emptyApiHint': 'No API Key configured yet — try the sample model first:',
+  'home.example1': 'Three bedrooms, one living room, one kitchen, with an ensuite master bedroom',
+  'home.example1Label': '3+1 with kitchen',
+  'home.example2': 'A modern minimalist house, two bedrooms and a living room, south-facing',
+  'home.example2Label': 'Modern minimalist house',
+  'home.example3': 'A study studio with large windows',
+  'home.example3Label': 'Study studio',
 
   // ---------- View toggle ----------
   'home.viewModeAria': 'View mode',
@@ -340,6 +394,7 @@ export const en: Record<TKey, string> = {
   'home.debugEmpty': 'No logs yet (debug mode is on; logs appear when generating or testing connectivity)',
 
   // ---------- Status bar ----------
+  'home.breadcrumbAria': 'Current location',
   'home.viewTitle': 'View',
   'home.panLeftTitle': 'Pan left (←)',
   'home.panRightTitle': 'Pan right (→)',
@@ -358,6 +413,10 @@ export const en: Record<TKey, string> = {
   'home.alertInvalid': 'Project data has an invalid format',
   'home.noApiKey': 'No API Key configured yet. Configure one on the Settings page first.',
   'home.genFailed': 'Generation failed, please try again',
+  'home.genConflictApply':
+    'The scene was edited while generating. Apply the generated result anyway and overwrite your edits? (Choose "Cancel" to keep your edits)',
+  'home.genConflictAborted':
+    'Generated result discarded: the scene changed during generation. Your manual edits were kept',
 
   // ---------- Settings ----------
   'settings.title': 'Settings',
@@ -416,11 +475,11 @@ export const en: Record<TKey, string> = {
   'help.unfocus': 'Exit focus',
   'help.unfocusDesc': 'Click the house floor, the "House" breadcrumb, or empty space',
   'help.move': 'Move view',
-  'help.moveDesc': 'Use the arrow keys or the status-bar view buttons to pan',
+  'help.moveDesc': 'Use the arrow keys / WASD to pan',
   'help.keys': 'Arrow keys / WASD',
   'help.keysDesc': '←/→ or A/D pan horizontally, ↑/↓ or W/S pan vertically (ignored while typing in a field)',
   'help.resetView': 'Reset view',
-  'help.resetViewDesc': 'The status-bar "Reset view" button restores the initial view',
+  'help.resetViewDesc': 'Press R to reset the view',
   'help.breadcrumb': 'Breadcrumb',
   'help.breadcrumbDesc': 'The breadcrumb at the bottom jumps to any level',
   'help.projects': 'Save / Projects',
@@ -449,6 +508,7 @@ export const en: Record<TKey, string> = {
 
   // ---------- Property panel ----------
   'property.closeTitle': 'Close property panel',
+  'property.dragTitle': 'Drag the header to move the panel',
   'property.name': 'Name',
   'property.dimSection': 'Dimensions (m)',
   'property.length': 'Length',
@@ -558,6 +618,11 @@ export const en: Record<TKey, string> = {
   'error.unknownModel': 'unknown',
   'error.authFailed': 'Invalid or unauthorized API Key (401/403)',
   'error.modelMissing': 'API reachable, but the model doesn\'t exist — check the model name and Base URL',
+  'error.boundaryTitle': 'Something went wrong',
+  'error.boundaryDesc':
+    'The app hit an unexpected error (usually corrupted local data). You can retry, or reset local data and start fresh.',
+  'error.boundaryReset': 'Reset local data',
+  'error.boundaryRetry': 'Retry',
 }
 
 /** 翻译：按语言取词典，{key} 插值替换；缺 key 回退 zh，再回退 key 本身 */

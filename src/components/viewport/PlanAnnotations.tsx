@@ -79,16 +79,16 @@ export function PlanAnnotations() {
             {/* 尺寸线主体 */}
             <mesh position={mid}>
               <boxGeometry args={horizontal ? [len, 0.03, 0.03] : [0.03, 0.03, len]} />
-              <meshBasicMaterial color="#ffd93d" />
+              <meshBasicMaterial color="#c8901e" />
             </mesh>
             {/* 端部刻度 */}
             <mesh position={tickA}>
               <boxGeometry args={horizontal ? [0.03, 0.03, 0.2] : [0.2, 0.03, 0.03]} />
-              <meshBasicMaterial color="#ffd93d" />
+              <meshBasicMaterial color="#c8901e" />
             </mesh>
             <mesh position={tickB}>
               <boxGeometry args={horizontal ? [0.03, 0.03, 0.2] : [0.2, 0.03, 0.03]} />
-              <meshBasicMaterial color="#ffd93d" />
+              <meshBasicMaterial color="#c8901e" />
             </mesh>
             {/* 尺寸文案 */}
             <Html position={labelPos} center pointerEvents="none" zIndexRange={[9, 0]}>

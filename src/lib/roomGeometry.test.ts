@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { footprintBounds, rectFootprint } from './footprint'
-import type { RoomNode } from '../types/model'
+import type { RoomNode, SceneModel } from '../types/model'
 import {
   DOOR_WIDTH,
   computeAllWallPlans,
+  computeAllWallPlansCached,
   computeWallPlan,
   doorDirection,
   edgeOf,
@@ -113,14 +114,31 @@ describe('computeWallPlan（分段墙体）', () => {
     expect(rendersWall(cWest)).toBe(true)
   })
 
-  it('两个非走廊房间相邻时由 id 较小者持有（私密-开放之间不开门）', () => {
+  it('两个非走廊房间相邻时由 id 较小者持有（有走廊时私密-开放之间不开门）', () => {
+    // 有走廊的房屋：主卧有走廊可开门，其与客厅的共享墙保持实体（坑 11 语义）
     const a = room('a', '客厅', 0, -1.5, 3, 3)
     const b = room('b', '主卧', 0, 1.5, 3, 3)
-    const plan = computeWallPlan([a, b])
+    const corridor = room('corridor', '走廊', 2, 0, 1, 4)
+    const plan = computeWallPlan([a, b, corridor])
     // a（id 较小）持有共享墙；但私密房间（主卧）不直连开放空间（客厅）→ 墙实体不开门
     const aNorth = edgeOf(plan.get('a')!, 'north')!
     expect(rendersWall(aNorth)).toBe(true)
     expect(hasDoor(aNorth)).toBe(false)
+    // 主卧朝走廊开门（私密房间只连走廊；主卧是共享墙持有方，门在 b 的东墙）
+    expect(hasDoor(edgeOf(plan.get('b')!, 'east'))).toBe(true)
+  })
+
+  it('无走廊的自由布局：私密房间与开放空间直接开门（否则密封不可达）', () => {
+    // 复现用户反馈：custom 布局（无走廊）主卧贴客厅北侧——若沿用"私密只连走廊"规则，
+    // 主卧没有其他邻居将被完全封死，只能从卫生间进出（布局错乱）
+    const a = room('a', '客厅', 0, -2.5, 6, 5)
+    const b = room('b', '主卧', 0, 2, 4.5, 4)
+    const bath = room('bath', '主卧卫生间', 3.25, 2, 2, 1.8)
+    const plan = computeWallPlan([a, b, bath])
+    // 主卧与客厅之间开门（共享墙持有方 a 的北墙渲染门段；客厅是开放空间不设墙）
+    expect(hasDoor(edgeOf(plan.get('a')!, 'north'))).toBe(true)
+    // 主卧与主卧卫生间之间开门（命名归属卫生间规则；b 是持有方，门在 b 的东墙）
+    expect(hasDoor(edgeOf(plan.get('b')!, 'east'))).toBe(true)
   })
 
   it('走廊两侧：封闭房间开门，开放房间与走廊开放连通', () => {
@@ -283,6 +301,48 @@ describe('入户门', () => {
     // 门段应为标准门宽（0.9m），确保渲染为真实门洞而非实心墙
     const doorSeg = livingSouth.segments.find((s) => s.kind === 'door')!
     expect(doorSeg.to - doorSeg.from).toBeCloseTo(DOOR_WIDTH)
+  })
+
+  it('大窗占满入口墙时：窗保持完整一段，入户门改到其他外墙且恒为 0.9m', () => {
+    // 复现用户反馈：单房间南墙开 0.5~4.5 大窗——门与窗互不相让，
+    // 南墙两侧实心段均 < 0.9m 放不下门，入户门按确定性顺序改到东墙，
+    // 大窗不再被门劈成两段（历史：门挤小 / 窗被劈开，两个同根 bug）
+    const study = room('study', '书房工作室', 0, 0, 5, 4)
+    study.windows = [{ edgeIndex: 0, from: 0.5, to: 4.5, width: 4 }]
+    const plan = computeWallPlan([study], { entrance: 'south', entranceRoomId: 'study' })
+    // 南墙：窗保持完整一段（0.5~4.5），未被门分割
+    const south = edgeOf(plan.get('study')!, 'south')!
+    const windows = south.segments.filter((s) => s.kind === 'window')
+    expect(windows).toHaveLength(1)
+    expect(windows[0].from).toBeCloseTo(0.5)
+    expect(windows[0].to).toBeCloseTo(4.5)
+    // 入户门改到东墙（入口方向顺时针第一面放得下 0.9m 的外墙），宽度恒为标准门宽
+    const east = edgeOf(plan.get('study')!, 'east')!
+    const entranceSeg = east.segments.find((s) => s.entrance)!
+    expect(entranceSeg).toBeDefined()
+    expect(entranceSeg.to - entranceSeg.from).toBeCloseTo(DOOR_WIDTH)
+    // 整屋只有一扇门（入户门），无兜底第二扇
+    const doors = plan
+      .get('study')!
+      .edges.flatMap((e) => e.segments.filter((s) => s.kind === 'door'))
+    expect(doors).toHaveLength(1)
+  })
+
+  it('入口墙仍有 ≥0.9m 实心段时，入户门留在入口墙（优先入口方向）', () => {
+    // 南墙窗只占中间一段（0.5~3.5，墙长 5），两侧实心段各 0.5m；
+    // 但窗右侧实心段 [3.5,5] 长 1.5m ≥ 0.9m → 门仍留在南墙（不换墙）
+    const study = room('study', '书房工作室', 0, 0, 5, 4)
+    study.windows = [{ edgeIndex: 0, from: 0.5, to: 3.5, width: 3 }]
+    const plan = computeWallPlan([study], { entrance: 'south', entranceRoomId: 'study' })
+    const south = edgeOf(plan.get('study')!, 'south')!
+    const entranceSeg = south.segments.find((s) => s.entrance)!
+    expect(entranceSeg).toBeDefined()
+    expect(entranceSeg.to - entranceSeg.from).toBeCloseTo(DOOR_WIDTH)
+    // 窗未被劈开：仍是完整一段
+    const windows = south.segments.filter((s) => s.kind === 'window')
+    expect(windows).toHaveLength(1)
+    expect(windows[0].from).toBeCloseTo(0.5)
+    expect(windows[0].to).toBeCloseTo(3.5)
   })
 })
 
@@ -482,10 +542,55 @@ describe('墙段坐标与渲染映射（坑 37/坑 41 回归）', () => {
           // 段必须落在边的覆盖范围（足迹边界）内，不允许漂移出房间
           const coverFrom = e.axis === 'x' ? b.minX : b.minZ
           const coverTo = e.axis === 'x' ? b.maxX : b.maxZ
-          expect(world.from).toBeGreaterThanOrEqual(coverFrom - 1e-6)
-          expect(world.to).toBeLessThanOrEqual(coverTo + 1e-6)
+      expect(world.from).toBeGreaterThanOrEqual(coverFrom - 1e-6)
+      expect(world.to).toBeLessThanOrEqual(coverTo + 1e-6)
         }
       }
     }
+  })
+
+  describe('computeAllWallPlansCached（坑 72 共享缓存）', () => {
+    function scene(): SceneModel {
+      return {
+        version: 3,
+        root: {
+          type: 'house',
+          id: 'h',
+          name: '家',
+          levels: [
+            {
+              id: 'l1',
+              height: 2.8,
+              rooms: [room('living', '客厅', 0, 0, 6, 4), room('master', '主卧', 3.25, 0, 3, 4)],
+            },
+          ],
+          entranceRoomId: 'living',
+          entranceDir: 'south',
+        },
+      }
+    }
+
+    it('同一场景引用只计算一次，返回同一 Map（渲染层三组件共享）', () => {
+      const s = scene()
+      const p1 = computeAllWallPlansCached(s, 'south', 'living')
+      const p2 = computeAllWallPlansCached(s, 'south', 'living')
+      expect(p2).toBe(p1)
+      expect(p1.get('living')?.edges.length).toBeGreaterThan(0)
+    })
+
+    it('不同场景引用重新计算，结果与无缓存版本一致', () => {
+      const s = scene()
+      const cached = computeAllWallPlansCached(s, 'south', 'living')
+      const fresh = computeAllWallPlans(s.root.levels[0].rooms, {
+        entrance: 'south',
+        entranceRoomId: 'living',
+      })
+      expect(cached.get('living')).toEqual(fresh.get('living'))
+      expect(cached).not.toBe(fresh)
+      // 修改场景结构 → 新引用 → 新结果（不命中旧缓存）
+      const changed: SceneModel = { ...s, root: { ...s.root, entranceRoomId: 'master' } }
+      const cached2 = computeAllWallPlansCached(changed, 'south', 'master')
+      expect(cached2).not.toBe(cached)
+    })
   })
 })

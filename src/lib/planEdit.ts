@@ -1,5 +1,5 @@
 import { walkRooms } from './planGeometry'
-import { computeAllWallPlans, type WallSegment } from './roomGeometry'
+import { computeAllWallPlansCached, type WallSegment } from './roomGeometry'
 import { footprintBounds, footprintCenter, rectFootprint, translateFootprint, type Bounds } from './footprint'
 import type { Opening, Point2D, RoomNode, SceneModel } from '../types/model'
 import type { Dir } from '../types/ops'
@@ -500,16 +500,14 @@ export interface WallHitEdge {
   segments: WallSegment[]
 }
 
-/** 收集整屋（含嵌套）可命中的墙边：与渲染用 computeAllWallPlans 同源，段几何一致 */
+/** 收集整屋（含嵌套）可命中的墙边：与渲染用 computeAllWallPlans 同源，段几何一致。
+ *  走共享缓存（坑 72）：渲染层三个组件同场景引用只算一次墙体方案。 */
 export function collectWallHitEdges(
   scene: SceneModel,
   entranceDir: Dir,
   entranceRoomId?: string,
 ): WallHitEdge[] {
-  const plans = computeAllWallPlans(scene.root.levels[0].rooms, {
-    entrance: entranceDir,
-    entranceRoomId,
-  })
+  const plans = computeAllWallPlansCached(scene, entranceDir, entranceRoomId)
   const out: WallHitEdge[] = []
   for (const info of walkRooms(scene.root)) {
     const plan = plans.get(info.node.id)

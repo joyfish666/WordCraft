@@ -144,11 +144,13 @@ function applySetHouse(scene: SceneModel, op: Extract<Op, { op: 'setHouse' }>): 
   if (op.name !== undefined) next.name = op.name
   if (op.style !== undefined) next.style = op.style
   if (op.entranceRoomId !== undefined) {
-    // 入户门位置 = 入口房间（entranceRoomId）的入口方向外墙；目标房间必须存在
-    if (!findRoom(scene, op.entranceRoomId)) {
+    // 入户门位置 = 入口房间（entranceRoomId）的入口方向外墙；目标房间必须存在。
+    // findRoom 支持按名称回退（LLM 常不给 id），落库时存解析后的真实 id
+    const room = findRoom(scene, op.entranceRoomId)
+    if (!room) {
       throw new Error(`入口房间「${op.entranceRoomId}」不存在`)
     }
-    next.entranceRoomId = op.entranceRoomId
+    next.entranceRoomId = room.id
   }
   if (op.entranceDir !== undefined) {
     next.entranceDir = op.entranceDir
@@ -303,27 +305,31 @@ function applyAddRoom(scene: SceneModel, op: Extract<Op, { op: 'addRoom' }>): Sc
 function applyUpdateRoom(scene: SceneModel, op: Extract<Op, { op: 'updateRoom' }>): SceneModel {
   const room = findRoom(scene, op.id)
   if (!room) throw new Error(`房间「${op.id}」不存在`)
+  // 先解析为真实 id（findRoom 支持按名称引用），后续 id-only 变更函数才能命中（坑 71）
+  const roomId = room.id
   const { name, dimensions, footprint } = op.patch
   // side 为布置意图（仅 macro 平铺时生效）；对已平铺房间无几何意义，接受但忽略（坑 22 边界）
   let next: SceneModel = scene
   if (name !== undefined || dimensions !== undefined) {
     next = {
       ...next,
-      root: updateNodeFields(next.root, op.id, { name, dimensions }) as SceneModel['root'],
+      root: updateNodeFields(next.root, roomId, { name, dimensions }) as SceneModel['root'],
     }
   }
   if (footprint) {
-    next = { ...next, root: updateNodeFootprint(next.root, op.id, footprint) as SceneModel['root'] }
+    next = { ...next, root: updateNodeFootprint(next.root, roomId, footprint) as SceneModel['root'] }
   }
   if (next === scene) throw new Error('补丁为空（无 name/dimensions/footprint）')
   return next
 }
 
 function applyRemoveRoom(scene: SceneModel, op: Extract<Op, { op: 'removeRoom' }>): SceneModel {
-  if (!findNodeById(scene.root, op.id)) throw new Error(`房间「${op.id}」不存在`)
-  let root = removeNode(scene.root, op.id) as SceneModel['root']
+  const room = findRoom(scene, op.id)
+  if (!room) throw new Error(`房间「${op.id}」不存在`)
+  const roomId = room.id
+  let root = removeNode(scene.root, roomId) as SceneModel['root']
   // 删除的是入户房间时清空 entranceRoomId，避免大门悬空
-  if (root.entranceRoomId === op.id) {
+  if (root.entranceRoomId === roomId) {
     root = { ...root, entranceRoomId: undefined }
   }
   return { ...scene, root }
@@ -367,8 +373,8 @@ function applyNestRoom(scene: SceneModel, op: Extract<Op, { op: 'nestRoom' }>): 
   if (isDescendantOf(room, parent.id)) {
     throw new Error(`父房间「${op.into}」是「${op.id}」的嵌套子房间，嵌套会成环`)
   }
-  // 从原父容器移除（顶层或已嵌套），再挂到父房间 nestedRooms
-  const removed = { ...scene, root: removeNode(scene.root, op.id) as SceneModel['root'] }
+  // 从原父容器移除（顶层或已嵌套），再挂到父房间 nestedRooms（按真实 id，名称引用已解析，坑 71）
+  const removed = { ...scene, root: removeNode(scene.root, room.id) as SceneModel['root'] }
   const rb = footprintBounds(room.footprint)
   const pb = footprintBounds(parent.footprint)
   const halfX = Math.max(0, (pb.maxX - pb.minX - (rb.maxX - rb.minX)) / 2 - WALL_THICKNESS)
@@ -473,7 +479,8 @@ function applySplitRoom(scene: SceneModel, op: Extract<Op, { op: 'splitRoom' }>)
   }
   const withDoor: RoomNode = { ...owner, doors: [...owner.doors, opening] }
   const parts = ownerIsA ? [withDoor, split.b] : [split.a, withDoor]
-  return replaceRoom(scene, op.id, parts)
+  // replaceRoom 按 id 精确匹配：先解析为真实 id（findRoom 支持按名称引用，坑 71）
+  return replaceRoom(scene, room.id, parts)
 }
 
 /** 按方向找矩形足迹边下标（坑 39 约定：0=南 1=东 2=北 3=西；按几何方向解析） */
@@ -502,12 +509,13 @@ function edgeDirIndex(fp: Point2D[], dir: 'north' | 'south' | 'east' | 'west'): 
  */
 function applyMergeRoom(scene: SceneModel, op: Extract<Op, { op: 'mergeRoom' }>): SceneModel {
   if (op.keep === op.remove) throw new Error('keep 与 remove 不能是同一个房间')
-  let keepId = op.keep
-  let removeId = op.remove
-  let keep = findRoom(scene, keepId)
-  let remove = findRoom(scene, removeId)
-  if (!keep) throw new Error(`房间「${keepId}」不存在`)
-  if (!remove) throw new Error(`房间「${removeId}」不存在`)
+  // keep/remove 均先解析为真实 id（findRoom 支持按名称引用），后续 id-only 变更函数才能命中（坑 71）
+  let keep = findRoom(scene, op.keep)
+  let remove = findRoom(scene, op.remove)
+  if (!keep) throw new Error(`房间「${op.keep}」不存在`)
+  if (!remove) throw new Error(`房间「${op.remove}」不存在`)
+  let keepId = keep.id
+  let removeId = remove.id
   // keep 嵌套在 remove 内：removeNode(remove) 会连 keep 一起删掉，先交换角色
   if (isDescendantOf(remove, keep.id)) {
     const tmp = keep
@@ -544,21 +552,22 @@ function moveAdjacent(
   if (!room) throw new Error(`房间「${id}」不存在`)
   const target = findRoom(scene, relativeTo.roomId)
   if (!target) throw new Error(`relativeTo 房间「${relativeTo.roomId}」不存在`)
-  if (relativeTo.roomId === id) throw new Error('relativeTo 不能指向自身')
+  // 名称引用下字符串可能不相等：按解析后的真实 id 判自引用（坑 71）
+  if (target.id === room.id) throw new Error('relativeTo 不能指向自身')
   const b = footprintBounds(room.footprint)
   const halfL = (b.maxX - b.minX) / 2
   const halfW = (b.maxZ - b.minZ) / 2
   // 嵌套房间 → 提升到顶层（保持世界坐标，追加到顶层末尾），再贴靠
-  const lifted = scene.root.levels[0].rooms.some((r) => r.id === id)
+  const lifted = scene.root.levels[0].rooms.some((r) => r.id === room.id)
     ? scene
     : {
         ...scene,
         root: liftToTopLevel(scene.root, room),
       }
-  const picked = pickFreePlacement(lifted, id, target, relativeTo.dir, b, halfL, halfW)
+  const picked = pickFreePlacement(lifted, room.id, target, relativeTo.dir, b, halfL, halfW)
   return {
     ...lifted,
-    root: updateNodePosition(lifted.root, id, {
+    root: updateNodePosition(lifted.root, room.id, {
       x: picked.x,
       y: room.height / 2,
       z: picked.z,
@@ -767,30 +776,58 @@ function applySetOpenings(scene: SceneModel, op: Extract<Op, { op: 'setOpenings'
 // 树操作辅助
 // ---------------------------------------------------------------------------
 
-/** 递归查找房间（含嵌套） */
-export function findRoom(scene: SceneModel, id: string): RoomNode | null {
-  const dfs = (room: RoomNode): RoomNode | null => {
-    if (room.id === id) return room
-    for (const nested of room.nestedRooms) {
-      const found = dfs(nested)
+/**
+ * 递归查找房间（含嵌套）。ref 优先按 id 精确匹配；LLM 常不给房间 id 而直接用房间名
+ * 引用（如 setOpenings 的 roomId、setHouse 的 entranceRoomId、relativeTo 的 roomId），
+ * 因此 id 未命中时回退按名称匹配（遍历顺序首次命中，确定性）。
+ */
+export function findRoom(scene: SceneModel, ref: string): RoomNode | null {
+  const byId = (() => {
+    const dfs = (room: RoomNode): RoomNode | null => {
+      if (room.id === ref) return room
+      for (const nested of room.nestedRooms) {
+        const found = dfs(nested)
+        if (found) return found
+      }
+      return null
+    }
+    for (const room of scene.root.levels[0].rooms) {
+      const found = dfs(room)
       if (found) return found
     }
     return null
-  }
-  for (const room of scene.root.levels[0].rooms) {
-    const found = dfs(room)
-    if (found) return found
-  }
-  return null
+  })()
+  if (byId) return byId
+  const byName = (() => {
+    const dfs = (room: RoomNode): RoomNode | null => {
+      if (room.name === ref) return room
+      for (const nested of room.nestedRooms) {
+        const found = dfs(nested)
+        if (found) return found
+      }
+      return null
+    }
+    for (const room of scene.root.levels[0].rooms) {
+      const found = dfs(room)
+      if (found) return found
+    }
+    return null
+  })()
+  return byName
 }
 
 /** 不可变更新指定房间（含嵌套），fn 返回新房间 */
 function mapRoom(scene: SceneModel, roomId: string, fn: (r: RoomNode) => RoomNode): SceneModel {
+  let touched = false
   const mapRoomNode = (room: RoomNode): RoomNode => {
-    if (room.id === roomId) return fn(room)
+    // 与 findRoom 同款：id 优先，未命中回退名称（LLM 常用房间名引用）
+    if (room.id === roomId || room.name === roomId) {
+      touched = true
+      return fn(room)
+    }
     return { ...room, nestedRooms: room.nestedRooms.map(mapRoomNode) }
   }
-  return {
+  const next: SceneModel = {
     ...scene,
     root: {
       ...scene.root,
@@ -800,6 +837,8 @@ function mapRoom(scene: SceneModel, roomId: string, fn: (r: RoomNode) => RoomNod
       })),
     },
   }
+  // 调用方均已先用 findRoom 校验存在（id 或名称），未命中仅理论情况：原样返回
+  return touched ? next : scene
 }
 
 /** 刷新楼层高度 = 该层房间最大层高（op 改房间高度后同步） */
@@ -844,6 +883,7 @@ function specToRoomV2(spec: RoomSpec): RoomNodeV2 {
     },
     position: spec.position,
     side: spec.side,
+    relativeTo: spec.relativeTo,
     // 显式足迹透传（custom 模式由 resolveCustom 使用，L 形/U 形直接表达）
     footprint: spec.footprint,
     children: [...furniture, ...(spec.nestedRooms ?? []).map(specToRoomV2)],

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { nodeDims, nodePosition } from '../../lib/footprint'
 import { useT, type TKey } from '../../i18n'
 import { useModelStore } from '../../store/useModelStore'
@@ -122,9 +122,49 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
   const dims = nodeDims(node)
   const pos = nodePosition(node)
 
+  // 面板可拖动（按住头部拖拽移动位置；会话内记住偏移，选中变化不重置）
+  const [panelOffset, setPanelOffset] = useState<{ x: number; y: number } | null>(null)
+  const dragState = useRef<{ baseX: number; baseY: number; startX: number; startY: number } | null>(null)
+  const [dragging, setDragging] = useState(false)
+
+  const startDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    const host = e.currentTarget.closest('.home__viewport') as HTMLElement | null
+    const panel = e.currentTarget.closest('.prop-panel') as HTMLElement | null
+    if (!host || !panel) return
+    const hostRect = host.getBoundingClientRect()
+    const rect = panel.getBoundingClientRect()
+    const base = panelOffset ?? { x: rect.left - hostRect.left, y: rect.top - hostRect.top }
+    dragState.current = { baseX: base.x, baseY: base.y, startX: e.clientX, startY: e.clientY }
+    setDragging(true)
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const moveDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = dragState.current
+    if (!d) return
+    setPanelOffset({ x: d.baseX + e.clientX - d.startX, y: d.baseY + e.clientY - d.startY })
+  }
+  const endDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    dragState.current = null
+    setDragging(false)
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+  }
+
   return (
-    <aside className="prop-panel">
-      <header className="prop-panel__header">
+    <aside
+      className={`prop-panel ${dragging ? 'prop-panel--dragging' : ''}`}
+      style={panelOffset ? { left: panelOffset.x, top: panelOffset.y, right: 'auto' } : undefined}
+    >
+      <header
+        className="prop-panel__header"
+        title={t('property.dragTitle')}
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      >
         <div className="prop-panel__title-wrap">
           <span className="prop-panel__type">{t(TYPE_LABEL[node.type])}</span>
           <h3 className="prop-panel__title">{node.name}</h3>

@@ -1,4 +1,4 @@
-import type { RoomNode } from '../types/model'
+import type { RoomNode, SceneModel } from '../types/model'
 import { footprintCenter } from './footprint'
 
 export type DoorDirection = 'north' | 'south' | 'east' | 'west'
@@ -322,8 +322,8 @@ export function applyOpenings(plan: Map<string, WallPlan>, rooms: RoomNode[]): v
  * - 相邻共用墙只由一方渲染（非走廊优先）；两侧都是开放空间则不设墙。
  * - 部分被相邻房间占用的墙，其余部分按外墙渲染（保证不向外部开口）。
  * - 私密房间（卧室/书房）之间不直接开门，经走廊/卫生间连通。
- * - 外墙始终保留；入口侧外墙居中开入户门。
- * - 显式开洞（RoomNode.doors / windows）覆盖推导结果。
+ * - 外墙始终保留；入口侧外墙居中开入户门（先于显式开洞，窗自动绕开门段不被挤小）。
+ * - 显式开洞（RoomNode.doors / windows）覆盖推导结果（只覆盖实心墙段）。
  */
 export function computeWallPlan(
   rooms: RoomNode[],
@@ -343,6 +343,9 @@ export function computeWallPlan(
   // 优先级：命名归属房间（主卧卫生间 → 主卧）> 走廊 > 邻居中 id 最小者（确定性）；
   // 目标集合为空（无邻居）时该卫生间不参与开门判定。
   const bathroomDoorTargets = new Map<string, Set<string>>()
+  // 房屋是否有走廊：无走廊的自由布局（custom）中，"私密房间只连走廊"的规则前提不存在，
+  // 私密房间与开放空间（客厅/餐厅/厨房）直接开门，否则房间密封不可达
+  const hasCorridor = rooms.some((r) => isCorridorName(r.name))
   for (const R of rooms) {
     if (!isBathroomName(R.name)) continue
     const nbs: RoomNode[] = []
@@ -396,16 +399,23 @@ export function computeWallPlan(
           } else {
             const rPrivate = isPrivateRoom(R.name)
             const nPrivate = isPrivateRoom(N.name)
+            const privateToOpen =
+              (rPrivate && isOpenRoom(N.name)) || (nPrivate && isOpenRoom(R.name))
             if (rPrivate && nPrivate) {
               // 卧室之间不互开门
               hasDoor = false
             } else if (
-              (rPrivate && isOpenRoom(N.name) && !isCorridorName(N.name)) ||
-              (nPrivate && isOpenRoom(R.name) && !isCorridorName(R.name))
+              privateToOpen &&
+              hasCorridor &&
+              // 走廊本身也是"开放空间"（isOpenRoom 词表含走廊），必须排除——
+              // 私密房间只连走廊：与走廊贴靠时保持开门
+              !isCorridorName(R.name) &&
+              !isCorridorName(N.name)
             ) {
-              // 私密房间（卧室/书房）不直连非走廊开放空间（厨房/客厅/餐厅），只连走廊
+              // 有走廊时：私密房间（卧室/书房）不直连非走廊开放空间（厨房/客厅/餐厅），只连走廊
               hasDoor = false
             }
+            // 无走廊的自由布局：私密房间与开放空间直接开门，避免房间密封不可达
           }
           segs = splitSegments(segs, nb.from, nb.to, hasDoor ? 'door' : 'wall')
         } else {
@@ -416,11 +426,20 @@ export function computeWallPlan(
     }
   }
 
-  // 显式开洞覆盖层（含窗段；门段同样影响兜底判定）
+  // 显式开洞覆盖层（窗/门先把墙切开；门段同样影响兜底判定）
   applyOpenings(plan, rooms)
 
+  // 入户门（在显式开洞之后放置：门只开在剩余实心墙段上，宽度恒为 DOOR_WIDTH——
+  // 入口墙放不下（如整面外墙被大窗占满）时按确定性顺序改到其他外墙。
+  // 历史教训（两个同根 bug，勿退回）：
+  // ① 窗先开、门后加 → 门被挤成 < 0.9m 小门；
+  // ② 门先开、窗后加 → 大窗被门劈成两段。
+  // 根治：门与窗互不相让——门永远找得到 ≥ 0.9m 的实心段才落位，绝不劈开窗）
+  addEntranceDoor(plan, rooms, options)
+
   // 完全没有相邻房间的房间：朝整屋中心的墙兜底开门
-  // （避免在私密房间相邻且不开门时，又被兜底强制开一扇门）
+  // （此时 hasAnyDoor 已含入户门——单房间房屋南墙已有入户门时不再开第二扇门；
+  // 也避免在私密房间相邻且不开门时，又被兜底强制开一扇门）
   for (const R of rooms) {
     const p = plan.get(R.id)!
     const hasShared = p.edges.some((e) => e.shared)
@@ -431,11 +450,45 @@ export function computeWallPlan(
     }
   }
 
-  addEntranceDoor(plan, rooms, options)
   return plan
 }
 
-/** 在入口房间（或入口侧边界房间）的外墙居中开入户门 */
+/**
+ * 在一条外墙的实心墙段上开入户门：取「最接近墙中心且长度 ≥ DOOR_WIDTH」的实心段，
+ * 门宽恒为 DOOR_WIDTH（绝不缩窄成小门、绝不劈开窗段）；找不到可容纳的门段返回 false。
+ * 注意：本函数在显式开洞（applyOpenings）之后调用，edge.segments 已反映真实剩余实心段。
+ */
+function placeEntranceDoorOnEdge(edge: WallEdge): boolean {
+  const center = edge.length / 2
+  let best: WallSegment | null = null
+  let bestDist = Infinity
+  for (const s of edge.segments) {
+    if (s.kind !== 'wall') continue
+    if (s.to - s.from < DOOR_WIDTH - 1e-6) continue
+    const d = Math.abs((s.from + s.to) / 2 - center)
+    if (d < bestDist) {
+      bestDist = d
+      best = s
+    }
+  }
+  if (!best) return false
+  const mid = (best.from + best.to) / 2
+  const d0 = mid - DOOR_WIDTH / 2
+  const d1 = mid + DOOR_WIDTH / 2
+  edge.segments = edge.segments.flatMap((s) => {
+    if (s !== best) return [s]
+    const out: WallSegment[] = []
+    if (s.from < d0) out.push({ ...s, to: d0 })
+    out.push({ from: d0, to: d1, kind: 'door', entrance: true })
+    if (d1 < s.to) out.push({ ...s, from: d1 })
+    return out
+  })
+  return true
+}
+
+/** 在入口房间（或入口侧边界房间）的外墙开入户门：
+ *  入口方向优先（保持"大门在入口外墙"惯例），入口墙放不下 0.9m 门时
+ *  按确定性顺序（入口方向 → east → north/west 顺时针旋转）换其他外墙 */
 function addEntranceDoor(
   plan: Map<string, WallPlan>,
   rooms: RoomNode[],
@@ -451,7 +504,8 @@ function addEntranceDoor(
 
   let target: RoomNode | undefined
   if (entranceRoomId) {
-    target = rooms.find((r) => r.id === entranceRoomId)
+    // id 优先，未命中回退名称（LLM 常用房间名引用，executor.findRoom 同款）
+    target = rooms.find((r) => r.id === entranceRoomId) ?? rooms.find((r) => r.name === entranceRoomId)
   }
   if (!target) {
     const lines = rooms.map(lineOf).filter((l): l is number => l !== null)
@@ -468,9 +522,18 @@ function addEntranceDoor(
       candidates[0]
   }
   if (!target) return
-  const edge = edgeOf(plan.get(target.id)!, entrance)
-  if (!edge) return
-  addDoorOnFace(edge, 0, edge.length, true)
+  const rotation: Record<DoorDirection, DoorDirection[]> = {
+    south: ['south', 'east', 'north', 'west'],
+    north: ['north', 'east', 'south', 'west'],
+    east: ['east', 'north', 'west', 'south'],
+    west: ['west', 'north', 'east', 'south'],
+  }
+  for (const dir of rotation[entrance]) {
+    const edge = edgeOf(plan.get(target.id)!, dir)
+    if (!edge) continue
+    if (placeEntranceDoorOnEdge(edge)) return
+  }
+  // 所有外墙都放不下 0.9m 门（如整屋被窗占满）：静默省略（与"无外墙"同语义）
 }
 
 /**
@@ -592,6 +655,28 @@ export function computeAllWallPlans(
     }
   }
   for (const r of rooms) applyNested(r)
+  return plan
+}
+
+/**
+ * 带缓存的 computeAllWallPlans：渲染层三个组件（Viewport3D / PlanEnhancements /
+ * PlanEditLayer 的 collectWallHitEdges）在同一场景引用上各算一份墙体方案，
+ * 拖拽预览每帧产生新场景引用时每帧重复 3 次。缓存以场景对象引用为键（WeakMap，
+ * 场景被替换后自动可回收，无内存泄漏），同一引用只算一次（坑 72）。
+ * 注意：结果 Map 为共享只读对象，调用方不得修改。
+ */
+const allWallPlanCache = new WeakMap<SceneModel, Map<string, WallPlan>>()
+
+export function computeAllWallPlansCached(
+  scene: SceneModel,
+  entrance: DoorDirection,
+  entranceRoomId?: string,
+): Map<string, WallPlan> {
+  let plan = allWallPlanCache.get(scene)
+  if (!plan) {
+    plan = computeAllWallPlans(scene.root.levels[0]?.rooms ?? [], { entrance, entranceRoomId })
+    allWallPlanCache.set(scene, plan)
+  }
   return plan
 }
 

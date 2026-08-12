@@ -34,11 +34,11 @@ export function buildSystemPrompt(): string {
 2. 没有固定模板：用户怎么描述就怎么设计，不要套用固定布局。只有当用户不关心具体布局、或要求整体重新规划时，才用 macro（macro 会清空并重建整屋布局）。
 3. 操作白名单（未列出的字段不要输出；所有可选字段可按需省略）：
    - {"op":"setHouse","name":"新名字"} —— 修改整屋名称（name/style 可选）；{"op":"setHouse","entranceRoomId":"房间id","entranceDir":"south|east|west|north"} —— 改入户门所在的房间与方向（默认 south 南墙，见规则 7）
-   - {"op":"macro","name":"corridor|living|custom","params":{...}} —— 整体布局，params.rooms 为房间规格数组（语义见 addRoom）：
+   - {"op":"macro","name":"corridor|living|custom","params":{...}} —— 整体布局；**name 是布局类型（corridor/living/custom），不是整屋名**，整屋名称填在 params.name；params.rooms 为房间规格数组（语义见 addRoom）：
      · corridor（走廊型，常规多房间住宅）：params={"name":"整屋名","corridor":{"width":1.2,"entranceRoomId":"客厅id"},"rooms":[...]}
        走廊沿东西向（X 轴）贯穿；入口房间自动置于走廊南侧并生成入户大门；每个房间规格填 "side":"left"（南侧）或 "right"（北侧），children 顺序即沿走廊从入户端向内的排列；两侧尽量均衡分布。
      · living（客厅居中/厅堂式）：params={"name":"整屋名","centerRoomId":"客厅id","rooms":[...]}，其他房间规格填 "side":"north"|"south"|"east"|"west"（相对客厅）
-     · custom（自由布局）：params={"name":"整屋名","rooms":[...]}，房间可用 "position"（绝对坐标，y 为层高一半）或 "footprint"（正交多边形顶点环，L 形/U 形直接表达）指定位置
+     · custom（自由布局）：params={"name":"整屋名","rooms":[...]}，房间可用 "position"（绝对坐标，y 为层高一半）、"footprint"（正交多边形顶点环，L 形/U 形直接表达）或 "relativeTo"（贴靠到前文已列出的房间的 dir 侧，无缝共墙；房间引用用 id，没给 id 也可用名称）指定位置
    - {"op":"addRoom","id":"可选","name":"房间名","dimensions":{"length","width","height"},"relativeTo":{"roomId":"已有房间id","dir":"north|south|east|west"},"side":"可选","furniture":[家具规格...],"nestedRooms":[房间规格...]}
      · relativeTo：新房间贴到指定房间的 dir 一侧（无缝共墙）。**新增房间尽量提供 relativeTo**；不提供时执行器排到整屋东侧。
    - {"op":"updateRoom","id":"房间id","patch":{"name":...,"dimensions":{...},"footprint":[...]}} —— 修改名称/尺寸/足迹；未提及的字段保持不变
@@ -48,14 +48,14 @@ export function buildSystemPrompt(): string {
    - {"op":"addFurniture","roomId":"房间id","id":"可选","name":"家具名","dimensions":{"length","width","height"},"position":{"x","y","z"}}
    - {"op":"updateFurniture","roomId":...,"id":...,"patch":{"name":...,"dimensions":{...},"position":{...}}}
    - {"op":"removeFurniture","roomId":...,"id":...}
-    - {"op":"setOpenings","roomId":...,"side":"north|south|east|west","kind":"door|window","from":"可选","to":"可选","remove":"可选(true)"} —— 在房间某面墙开洞；不填 from/to 时居中开标准大小（门 0.9m、窗 1.5m）；**"remove":true 删除该边同种开洞**（用户要求去掉门/窗时用）
+    - {"op":"setOpenings","roomId":...,"side":"north|south|east|west","kind":"door|window","from":"可选","to":"可选","remove":"可选(true)"} —— 在房间某面墙开洞；不填 from/to 时居中开标准大小（门 0.9m、窗 1.5m）；**"remove":true 删除该边同种开洞**（用户要求去掉门/窗时用）；**开窗/开门避开入户门所在的墙段**——入户门与窗互不相让：窗占满外墙时入户门会自动改到其他外墙（窗保持完整一段），但同一面墙既要大窗又要大门不现实，优先让窗避开入口墙
     - {"op":"splitRoom","id":"房间id","axis":"x|z","position":"世界坐标","name":"可选新房间名"} —— 把**矩形**房间沿轴线切成两间（axis x=竖切、z=横切；position 为世界坐标，两侧需各 ≥ 1m），共墙自动开一扇门；拆出来的新房间默认叫「原名2」
     - {"op":"mergeRoom","keep":"保留的房间id","remove":"被合并的房间id"} —— 合并两个相邻房间（并集必须是矩形），keep 保留名称与 id
     - {"op":"addAdjacency","roomId":...,"neighborId":...,"side":"..."} —— 把 neighborId 房间移到 roomId 的 side 侧相邻
-4. id 规则：所有节点 id 全局唯一；**修改已有对象时必须复用其 id**（见「当前房屋状态」）；多轮对话中保持已有 id 不变，不要删除无关对象。修改布局意图时优先用 moveRoom/addRoom（带 relativeTo）局部调整；只有整体重排才用 macro。
+4. id 规则：所有节点 id 全局唯一；**修改已有对象时必须复用其 id**（见「当前房屋状态」）；多轮对话中保持已有 id 不变，不要删除无关对象。修改布局意图时优先用 moveRoom/addRoom（带 relativeTo）局部调整；只有整体重排才用 macro。**引用房间：优先用 id；若没有 id（新建房间未指定 id 时）可直接用房间名**。
 5. 尺寸约定（单位：米）：length 为东西向，width 为南北向，height 为层高（默认 2.8）。相邻房间的墙应贴合（间隙为 0）。
 6. 家具：**每个房间必须包含该房间常见且合理的家具，不要留空房间**——客厅：沙发/茶几/电视柜；卧室：床/衣柜（主卧再加床头柜等）；餐厅：餐桌/餐椅；厨房：橱柜/冰箱/灶台；卫生间：马桶/洗手池等（每类至少配 1-2 件）。家具 position 相对所在房间中心：x/z 为相对中心偏移，y 为家具高度的一半（底面贴房间地面）。摆放应合理（床靠墙、衣柜贴墙、桌椅避开通道、中间留活动空间），只以所在房间为框架考虑、无需考虑整屋布局；家具不得超出房间范围、不得嵌入墙体、不得堵住门洞。
-7. 惯例与墙体：客厅/餐厅/厨房为开放空间，与走廊之间不设墙（开放连通）；卧室/书房/卫生间等保留墙体与门；卧室与卧室之间不直接开门（经走廊/卫生间连通）；**卫生间默认只开一扇门**（命名归属的如"主卧卫生间"朝所属房间开门；公共/普通卫生间朝走廊开门，不向相邻房间开门）——用户要求卫生间开第二扇门时才用 setOpenings 添加。房屋外墙由系统自动保留（除入户门外不与外部相通），入户大门自动生成在**入口房间**（entranceRoomId）的**入口方向外墙**（entranceDir 指定，默认 south 南墙）居中合理位置——用户要求移动入户门/改朝向时，用 setHouse 的 entranceRoomId（换房间）与 entranceDir（换方向，south/east/west/north），**不要用 setOpenings**（它只能在已有实心墙上开洞，移动不了入户门；开在开放/共享墙上没有效果）；入户门必须落在入口房间朝向入口方向的外墙（走廊等内部空间没有外墙时，选它最外沿的方向，如走廊东端用 east）。custom 布局除户外门会自动兜底。
+7. 惯例与墙体：客厅/餐厅/厨房为开放空间，与走廊之间不设墙（开放连通）；卧室/书房/卫生间等保留墙体与门；卧室与卧室之间不直接开门（经走廊/卫生间连通）；**卫生间默认只开一扇门**（命名归属的如"主卧卫生间"朝所属房间开门；公共/普通卫生间朝走廊开门，不向相邻房间开门）——用户要求卫生间开第二扇门时才用 setOpenings 添加。**多房间住宅（含卧室/书房等私密房间）优先用 corridor 模板**：卧室经走廊进入，不会出现"卧室只能从卫生间进出"的死胡同；custom 自由布局没有走廊，卧室/书房与客厅等开放空间之间会自动开门（系统兜底，保证房间可达）。房屋外墙由系统自动保留（除入户门外不与外部相通），入户大门自动生成在**入口房间**（entranceRoomId）的**入口方向外墙**（entranceDir 指定，默认 south 南墙）居中合理位置——用户要求移动入户门/改朝向时，用 setHouse 的 entranceRoomId（换房间）与 entranceDir（换方向，south/east/west/north），**不要用 setOpenings**（它只能在已有实心墙上开洞，移动不了入户门；开在开放/共享墙上没有效果）；入户门必须落在入口房间朝向入口方向的外墙（走廊等内部空间没有外墙时，选它最外沿的方向，如走廊东端用 east）。custom 布局除户外门会自动兜底。
 8. 多轮修改：最新一条用户消息是对当前房屋的修改要求。你必须基于「当前房屋状态」与「手动编辑历史」（若有）修改：只输出必要的操作，未提及的对象不要重复输出、不要无意义地删除重建（会丢失用户改动）；手动编辑历史中的操作已是现状，不要原样重复输出。"卫生间移到卧室北部" → moveRoom {"id":"卫生间id","relativeTo":{"roomId":"卧室id","dir":"north"}}；"客厅再大一点" → updateRoom 改 dimensions。
 9. 合理推断默认尺寸；用户未明确时可补充常见家具尺寸（如双人床约 2×1.5m、衣柜约 1.2×0.6m、沙发约 2×0.9m）。`
 }
@@ -407,7 +407,8 @@ function parseOps(raw: unknown): Op[] {
   if (array.length === 0) return []
   const ops: Op[] = []
   for (const item of array) {
-    const parsed = opSchema.safeParse(item)
+    // 先做容错修复（macro.name 常见错填整屋名），再严格校验
+    const parsed = opSchema.safeParse(repairMacroName(item))
     if (parsed.success) ops.push(parsed.data)
     else {
       logDebug(
@@ -421,6 +422,45 @@ function parseOps(raw: unknown): Op[] {
     }
   }
   return ops
+}
+
+/** macro 布局类型白名单（macro.name 的合法取值） */
+const MACRO_LAYOUTS = ['corridor', 'living', 'custom'] as const
+
+/**
+ * LLM 容错修复：macro 的 name 必须是布局类型（corridor/living/custom），
+ * 但模型经常把整屋名填进 name（整屋名应放在 params.name），导致整条 macro 被校验拒绝、
+ * 模型输出"全部无效"。修复：name 非法时按 params 推断布局类型——
+ * 有 corridor → corridor；有 centerRoomId → living；有 rooms → custom；
+ * 并把原 name 移到 params.name（若 params.name 未填，保住整屋名）。
+ */
+function repairMacroName(item: unknown): unknown {
+  if (typeof item !== 'object' || item === null) return item
+  const raw = item as Record<string, unknown>
+  if (raw.op !== 'macro') return item
+  if (typeof raw.name === 'string' && (MACRO_LAYOUTS as readonly string[]).includes(raw.name)) {
+    return item
+  }
+  const params =
+    typeof raw.params === 'object' && raw.params !== null
+      ? (raw.params as Record<string, unknown>)
+      : {}
+  let layout: string | null = null
+  if (params.corridor !== undefined) layout = 'corridor'
+  else if (params.centerRoomId !== undefined) layout = 'living'
+  else if (Array.isArray(params.rooms)) layout = 'custom'
+  if (!layout) return item
+  logDebug(
+    'macro.name 不是布局类型，已按 params 推断并修复',
+    { name: raw.name ?? '(缺省)', layout },
+    'warn',
+  )
+  const paramsOut = { ...params }
+  const houseName = typeof raw.name === 'string' && raw.name.trim() ? raw.name : null
+  if (houseName && (typeof paramsOut.name !== 'string' || !paramsOut.name.trim())) {
+    paramsOut.name = houseName
+  }
+  return { ...raw, name: layout, params: paramsOut }
 }
 
 function describeSchemaIssues(raw: unknown): string {

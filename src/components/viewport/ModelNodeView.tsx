@@ -253,7 +253,7 @@ function RoomShell({
       {isSelected && !screenshotMode && (
         <mesh raycast={() => null} position={[cx, baseY + (FLOOR_THICKNESS + H) / 2, cz]}>
           <boxGeometry args={[bw, FLOOR_THICKNESS + H, bd]} />
-          <meshBasicMaterial color="#ffd93d" wireframe transparent opacity={0.7} />
+          <meshBasicMaterial color="#3d7a48" wireframe transparent opacity={0.7} />
         </mesh>
       )}
     </>
@@ -324,7 +324,7 @@ export function ModelNodeView({
           {!screenshotMode && level && (
             <mesh raycast={() => null} position={[dims.cx, dims.height / 2, dims.cz]}>
               <boxGeometry args={[dims.width, dims.height, dims.depth]} />
-              <meshBasicMaterial color="#8a93a5" wireframe transparent opacity={0.12} />
+              <meshBasicMaterial color="#6f6858" wireframe transparent opacity={0.25} />
             </mesh>
           )}
           {level?.rooms.map((child, i) => (
@@ -356,9 +356,9 @@ export function ModelNodeView({
       }
     } else if (ghosted) {
       material = {
-        color: '#2f3542',
+        color: '#cfc8b8',
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.4,
         depthWrite: false,
         wireframe: wireframeEnabled,
       }
@@ -495,7 +495,7 @@ export function ModelNodeView({
         <mesh position={outlineCenter} raycast={() => null}>
           <boxGeometry args={outlineSize} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-          <Edges color={isSelected ? '#ffd93d' : '#8a93a5'} />
+          <Edges color={isSelected ? '#3d7a48' : '#8f8877'} />
         </mesh>
       )}
     </group>
