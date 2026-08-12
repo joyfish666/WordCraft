@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import { BACK_AXIS, facingFromRoom, furnitureKind } from '../../lib/furniturePresets'
 import { roomCenter, roomDims } from '../../lib/footprint'
 import { ENTRANCE_DOOR_COLOR, FURNITURE_PART_INK } from '../../lib/palette'
-import { computeAllWallPlans, type WallPlan } from '../../lib/roomGeometry'
+import { computeAllWallPlansCached, type WallPlan } from '../../lib/roomGeometry'
 import {
   doorArcPoints,
   doorLeafLine,
@@ -23,11 +23,11 @@ const SYMBOL_Y = 0.25
 /** 房间尺寸线高度（最高层，标签/刻度不与被标物重叠） */
 const DIM_Y = 0.35
 
-const DOOR_SYMBOL_COLOR = '#8a93a5'
+const DOOR_SYMBOL_COLOR = '#8d8370'
 const WINDOW_SYMBOL_COLOR = '#5bc0de'
-const FOOTPRINT_FILL = '#e6e9f0'
-const FOOTPRINT_LINE = '#7d8798'
-const SELECTED_LINE = '#ffd93d'
+const FOOTPRINT_FILL = '#f0ebdf'
+const FOOTPRINT_LINE = '#8f8877'
+const SELECTED_LINE = '#3d7a48'
 
 /** 家具名称 → 足迹内部的朝向标记线（床画床头板、其余画背侧贴墙线） */
 function orientationMarker(
@@ -159,13 +159,11 @@ export function PlanEnhancements() {
   const screenshotMode = useModelStore((s) => s.screenshotMode)
 
   const rooms = useMemo(() => (scene ? walkRooms(scene.root) : []), [scene])
+  // 与 3D 视图共享缓存（坑 72）：同场景引用只算一次墙体方案
   const wallPlans = useMemo(() => {
     if (!scene) return new Map<string, WallPlan>()
     const house = scene.root as SceneModel['root']
-    return computeAllWallPlans(house.levels[0]?.rooms ?? [], {
-      entrance: house.entranceDir ?? 'south',
-      entranceRoomId: house.entranceRoomId,
-    })
+    return computeAllWallPlansCached(scene, house.entranceDir ?? 'south', house.entranceRoomId)
   }, [scene])
 
   if (!scene || screenshotMode) return null

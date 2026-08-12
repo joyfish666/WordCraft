@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { LanguageToggle } from '../components/ui/LanguageToggle'
@@ -67,7 +68,12 @@ export function SettingsPage() {
   return (
     <div className="settings">
       <div className="settings__header">
-        <h2 className="page-title">{t('settings.title')}</h2>
+        <div className="settings__header-left">
+          <Link to="/" className="settings__back">
+            ← {t('nav.home')}
+          </Link>
+          <h2 className="page-title">{t('settings.title')}</h2>
+        </div>
         <LanguageToggle />
       </div>
 

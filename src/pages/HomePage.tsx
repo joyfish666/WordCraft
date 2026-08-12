@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { ChatDrawer, type ChatDrawerHandle } from '../components/ui/ChatDrawer'
+import { EmptyStateCard } from '../components/ui/EmptyStateCard'
 import { HelpDialog } from '../components/ui/HelpDialog'
 import { Button } from '../components/ui/Button'
-import { LanguageToggle } from '../components/ui/LanguageToggle'
+import { HomeToolbar } from '../components/ui/HomeToolbar'
 import { ProjectLibraryDialog } from '../components/ui/ProjectLibraryDialog'
 import { ShareDialog } from '../components/ui/ShareDialog'
 import { PropertyPanel } from '../components/viewport/PropertyPanel'
@@ -14,10 +15,10 @@ import { encodeShareCode } from '../lib/compression'
 import { clearDebug, useDebugEntries, type DebugEntry } from '../lib/debugLog'
 import { nodeDims, nodePosition } from '../lib/footprint'
 import { migrateModel } from '../lib/migration'
-import { countNodes, getPathToNode, isContainer } from '../lib/modelTree'
+import { getPathToNode, isContainer } from '../lib/modelTree'
 import { createSampleModel } from '../lib/sampleModel'
 import { withWatermark } from '../lib/watermark'
-import { toChatHistory, useChatStore, type ChatMessageItem } from '../store/useChatStore'
+import { toChatHistory, useChatStore } from '../store/useChatStore'
 import { useModelStore, type PlanTool } from '../store/useModelStore'
 import { useProjectStore } from '../store/useProjectStore'
 import { useShareStore } from '../store/useShareStore'
@@ -71,15 +72,6 @@ function downloadDebug(entries: DebugEntry[]): void {
 }
 
 /** 助手消息的展示文本：携带模型时显示摘要，否则显示回复（跳过纯 JSON） */
-function assistantDisplay(m: ChatMessageItem, t: ReturnType<typeof useT>): string {
-  if (m.model) {
-    return t('chat.generatedModel', { name: m.model.root.name, count: countNodes(m.model.root) })
-  }
-  const content = m.content.trim()
-  if (content && !content.startsWith('{')) return content
-  return ''
-}
-
 export function HomePage() {
   const scene = useModelStore((s) => s.scene)
   const selectedId = useModelStore((s) => s.selectedId)
@@ -115,15 +107,19 @@ export function HomePage() {
   const planMode = viewMode === 'plan'
   const mobileCompact = useMobileCompact()
   const [planToolsOpen, setPlanToolsOpen] = useState(false)
+  const [chatCollapsed, setChatCollapsed] = useState(true)
   const planTool = useModelStore((s) => s.planTool)
   const openingKind = useModelStore((s) => s.openingKind)
   const showPlanDims = useModelStore((s) => s.showPlanDims)
   const setPlanTool = useModelStore((s) => s.setPlanTool)
   const setOpeningKind = useModelStore((s) => s.setOpeningKind)
   const setShowPlanDims = useModelStore((s) => s.setShowPlanDims)
-  const logRef = useRef<HTMLDivElement>(null)
   const debugRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<SceneViewerHandle>(null)
+  const chatRef = useRef<ChatDrawerHandle>(null)
+  // 生成基线场景引用：发送时快照，返回时若 scene 已变（生成期间手动编辑/打开项目/加载示例）
+  // 说明生成结果是基于旧版本的——提示用户确认覆盖，避免静默丢弃手动编辑（P0-1）
+  const generationBaseRef = useRef<SceneModel | null>(null)
 
   const t = useT()
   const projectDirty = useProjectStore((s) => s.dirty)
@@ -157,17 +153,6 @@ export function HomePage() {
     [scene, selectedId],
   )
 
-  useEffect(() => {
-    const el = logRef.current
-    if (el && typeof el.scrollTo === 'function') {
-      try {
-        el.scrollTo({ top: el.scrollHeight })
-      } catch {
-        // 部分环境（如 jsdom）不支持元素 scrollTo，静默忽略
-      }
-    }
-  }, [messages, isGenerating])
-
   // 生成计时：避免长时间等待时误以为界面卡死
   useEffect(() => {
     if (!isGenerating) {
@@ -184,7 +169,7 @@ export function HomePage() {
     if (el) el.scrollTop = el.scrollHeight
   }, [debugEntries])
 
-  // 键盘：方向键/WASD 平移视角；Ctrl+Z 撤销、Ctrl+Shift+Z / Ctrl+Y 重做。
+  // 键盘：方向键/WASD 平移视角；R 复位视角；Ctrl+Z 撤销、Ctrl+Shift+Z / Ctrl+Y 重做。
   // 输入框/文本框聚焦时不拦截，让位给原生文本编辑（含原生撤销）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -204,6 +189,13 @@ export function HomePage() {
           useModelStore.getState().redo()
           return
         }
+      }
+
+      // 不带修饰键的 R 才复位视角；Ctrl/Cmd+R 留给浏览器刷新（P0-5）
+      if (!mod && e.key.toLowerCase() === 'r') {
+        e.preventDefault()
+        viewportRef.current?.resetView()
+        return
       }
 
       const controls = viewportRef.current
@@ -241,16 +233,22 @@ export function HomePage() {
   const send = async () => {
     const input = draft.trim()
     if (!input || isGenerating) return
+    // 发送时展开抽屉，让用户看到请求与回复（含生成中状态与错误消息）
+    setChatCollapsed(false)
     const config = getActiveApiConfig(useSettingsStore.getState())
-    setDraft('')
     if (!config) {
+      // 无 key 时保留草稿，避免用户辛苦输入的需求被清空
       addMessage({ role: 'error', content: t('home.noApiKey') })
       return
     }
+    setDraft('')
     // 先快照历史，避免把即将新增的用户消息重复发送
     const history = toChatHistory(useChatStore.getState().messages)
     addMessage({ role: 'user', content: input })
     setIsGenerating(true)
+    // 快照生成基线：生成期间场景被编辑/替换时据此检测冲突
+    const baseScene = useModelStore.getState().scene
+    generationBaseRef.current = baseScene
     try {
       const { reply, model } = await generateModelFromChat({
         apiKey: config.key,
@@ -259,10 +257,19 @@ export function HomePage() {
         thinking: config.thinking,
         history,
         userInput: input,
-        currentScene: useModelStore.getState().scene,
+        currentScene: baseScene,
         // P3 双向同步：手动编辑日志随上下文喂给 LLM，让 AI 基于用户改过的版本继续
         editOps: useChatStore.getState().editOps,
       })
+      // 生成期间场景已变化（手动编辑/打开项目/加载示例/撤销等）→ 提示冲突，避免静默覆盖
+      const latestScene = useModelStore.getState().scene
+      if (latestScene !== baseScene) {
+        const apply = window.confirm(t('home.genConflictApply'))
+        if (!apply) {
+          addMessage({ role: 'error', content: t('home.genConflictAborted') })
+          return
+        }
+      }
       addMessage({ role: 'assistant', content: reply, model })
       // 记录生成前的场景，供「撤销生成」回退
       const prevScene = useModelStore.getState().scene
@@ -359,6 +366,19 @@ export function HomePage() {
     setShareOpen(true)
   }
 
+  /** 独立截图：直接下载当前视角高清 PNG（不含水印/口令，与分享对话框的带水印截图不同） */
+  const handleScreenshot = async () => {
+    const shot = await viewportRef.current?.captureScreenshot?.()
+    if (!shot) {
+      window.alert(t('home.screenshotFailed'))
+      return
+    }
+    const a = document.createElement('a')
+    a.href = shot
+    a.download = `wordcraft-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`
+    a.click()
+  }
+
   /** 从分享口令还原模型：未保存守卫 → setScene，成为游离场景（不属于任何项目） */
   const restoreFromShare = (model: SceneModel) => {
     if (!confirmDiscardUnsaved(true)) return
@@ -375,156 +395,58 @@ export function HomePage() {
     setScene(prev)
   }
 
+  /** 空态示例标签：填入输入框并展开抽屉聚焦 */
+  const applyExample = (text: string) => {
+    setDraft(text)
+    setChatCollapsed(false)
+    chatRef.current?.focusInput()
+  }
+
+  /** 加载示例模型（顶栏按钮与空态卡共用）：未保存守卫 → 解绑项目 → setScene */
+  const loadSample = () => {
+    if (!confirmDiscardUnsaved(true)) return
+    useProjectStore.getState().clearProject()
+    useChatStore.getState().clearGenerationHistory()
+    lastSavedJsonRef.current = null
+    setScene(createSampleModel())
+  }
+
   return (
     <div className="home">
-      <header className="home__toolbar">
-        <div className="home__toolbar-left">
-          <Button
-            variant="ghost"
-            onClick={() => {
-              if (!confirmDiscardUnsaved(true)) return
-              useProjectStore.getState().clearProject()
-              useChatStore.getState().clearGenerationHistory()
-              lastSavedJsonRef.current = null
-              setScene(createSampleModel())
-            }}
-          >
-            {t('home.loadSample')}
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              if (!confirmDiscardUnsaved(false)) return
-              useProjectStore.getState().clearProject()
-              useChatStore.getState().clearGenerationHistory()
-              lastSavedJsonRef.current = null
-              resetScene()
-            }}
-            disabled={!scene}
-          >
-            {t('home.clearScene')}
-          </Button>
-          <span className="toolbar-sep" />
-          <Button variant="ghost" onClick={undo} disabled={!canUndo} title={t('home.undoTitle')}>
-            {t('home.undo')}
-          </Button>
-          <Button variant="ghost" onClick={redo} disabled={!canRedo} title={t('home.redoTitle')}>
-            {t('home.redo')}
-          </Button>
-          <span className="toolbar-sep" />
-          <Button
-            variant="ghost"
-            onClick={() => void handleSave()}
-            disabled={!scene}
-            title={projectDirty ? t('home.saveTitleDirty') : t('home.saveTitle')}
-          >
-            {t('home.save')}
-          </Button>
-          <Button variant="ghost" onClick={() => setProjectDialogOpen(true)}>
-            {t('home.library')}
-          </Button>
-          <Button variant="ghost" onClick={() => void handleShare()} title={t('share.title')}>
-            {t('home.share')}
-          </Button>
-          <Button variant="ghost" onClick={() => setHelpOpen(true)}>
-            {t('home.help')}
-          </Button>
-        </div>
-        <div className="home__toolbar-right">
-          <LanguageToggle />
-          {focusId && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setFocus(null)
-                selectNode(null)
-              }}
-            >
-              {t('home.backToHouse')}
-            </Button>
-          )}
-          {hasApiKey ? (
-            <span className="badge badge--ok">{t('home.apiOk')}</span>
-          ) : (
-            <Link to="/settings" className="badge badge--warn">
-              {t('home.apiMissing')}
-            </Link>
-          )}
-        </div>
-      </header>
+      <HomeToolbar
+        canClear={scene !== null}
+        canSave={scene !== null}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        undoTitle={t('home.undoTitle')}
+        redoTitle={t('home.redoTitle')}
+        saveTitle={projectDirty ? t('home.saveTitleDirty') : t('home.saveTitle')}
+        chatCollapsed={chatCollapsed}
+        hasApiKey={hasApiKey}
+        onLoadSample={loadSample}
+        onClearScene={() => {
+          if (!confirmDiscardUnsaved(false)) return
+          useProjectStore.getState().clearProject()
+          useChatStore.getState().clearGenerationHistory()
+          lastSavedJsonRef.current = null
+          resetScene()
+        }}
+        onUndo={undo}
+        onRedo={redo}
+        onSave={() => void handleSave()}
+        onOpenLibrary={() => setProjectDialogOpen(true)}
+        onShare={() => void handleShare()}
+        onScreenshot={() => void handleScreenshot()}
+        onHelp={() => setHelpOpen(true)}
+        onToggleChat={() => setChatCollapsed((c) => !c)}
+      />
 
       <div className="home__body">
-        <section className="panel home__chat">
-          <div className="home__chat-header">
-            <h2 className="panel__title">{t('chat.title')}</h2>
-            <Button
-              variant="ghost"
-              onClick={undoGeneration}
-              disabled={!canUndoGeneration}
-              title={t('chat.undoGenTitle')}
-            >
-              {t('chat.undoGen')}
-            </Button>
-            <Button variant="ghost" onClick={clearConversation} disabled={messages.length === 0}>
-              {t('chat.clear')}
-            </Button>
-          </div>
-          <div className="chat-log" ref={logRef}>
-            {messages.length === 0 && !isGenerating ? (
-              <p className="chat-log__hint">{t('chat.hint')}</p>
-            ) : (
-              <ul className="chat-log__list">
-                {messages.map((m) => (
-                  <li key={m.id} className={`chat-msg chat-msg--${m.role}`}>
-                    <span className="chat-msg__label">
-                      {m.role === 'user'
-                        ? t('chat.roleMe')
-                        : m.role === 'assistant'
-                          ? t('chat.roleAssistant')
-                          : t('chat.roleError')}
-                    </span>
-                    <div className="chat-msg__body">
-                      {m.role === 'assistant' ? assistantDisplay(m, t) : m.content}
-                    </div>
-                  </li>
-                ))}
-                {isGenerating && (
-                  <li className="chat-msg chat-msg--assistant">
-                    <span className="chat-msg__label">{t('chat.roleAssistant')}</span>
-                    <div className="chat-msg__body">{t('chat.generating', { elapsed })}</div>
-                  </li>
-                )}
-              </ul>
-            )}
-          </div>
-          <div className="chat-input">
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  void send()
-                }
-              }}
-              placeholder={t('chat.placeholder')}
-              rows={3}
-            />
-            <Button onClick={() => void send()} disabled={!draft.trim() || isGenerating}>
-              {isGenerating ? t('chat.generatingBtn', { elapsed }) : t('chat.generateBtn')}
-            </Button>
-          </div>
-        </section>
-
-        <section className="panel home__viewport">
-          <div
-            className="view-mode-toggle segmented"
-            role="group"
-            aria-label={t('home.viewModeAria')}
-          >
+        <section className="home__viewport">
+          <div className="view-toggle" role="group" aria-label={t('home.viewModeAria')}>
             <button
               type="button"
-              className={`segmented__btn ${!planMode ? 'segmented__btn--active' : ''}`}
+              className={`view-toggle__btn ${!planMode ? 'view-toggle__btn--active' : ''}`}
               onClick={() => {
                 setPlanToolsOpen(false)
                 setViewMode('3d')
@@ -534,7 +456,7 @@ export function HomePage() {
             </button>
             <button
               type="button"
-              className={`segmented__btn ${planMode ? 'segmented__btn--active' : ''}`}
+              className={`view-toggle__btn ${planMode ? 'view-toggle__btn--active' : ''}`}
               onClick={() => {
                 setPlanToolsOpen(false)
                 setViewMode('plan')
@@ -544,6 +466,7 @@ export function HomePage() {
               {t('home.viewPlan')}
             </button>
           </div>
+
           {planMode && (
             <div className="plan-toolbar">
               {mobileCompact ? (
@@ -714,7 +637,9 @@ export function HomePage() {
               )}
             </div>
           )}
+
           <SceneViewer ref={viewportRef} planMode={planMode} />
+          {!scene && <EmptyStateCard hasApiKey={hasApiKey} onExample={applyExample} onLoadSample={loadSample} />}
           {selected && <PropertyPanel node={selected} />}
         </section>
       </div>
@@ -767,9 +692,26 @@ export function HomePage() {
         </section>
       )}
 
-      <footer className="home__statusbar">
+      <ChatDrawer
+        ref={chatRef}
+        collapsed={chatCollapsed}
+        messages={messages}
+        isGenerating={isGenerating}
+        elapsed={elapsed}
+        canUndoGeneration={canUndoGeneration}
+        canClear={messages.length > 0}
+        hasApiKey={hasApiKey}
+        draft={draft}
+        onDraftChange={setDraft}
+        onSend={() => void send()}
+        onToggle={() => setChatCollapsed((c) => !c)}
+        onUndoGeneration={undoGeneration}
+        onClearConversation={clearConversation}
+      />
+
+      <footer className="statusbar">
         {crumbs.length > 0 && (
-          <nav className="breadcrumb">
+          <nav className="breadcrumb" aria-label={t('home.breadcrumbAria')}>
             {crumbs.map((node, i) => (
               <span key={node.id}>
                 {i > 0 && <span className="breadcrumb__sep">/</span>}
@@ -781,44 +723,20 @@ export function HomePage() {
           </nav>
         )}
 
-        <div className="move-controls">
-          <span className="move-controls__title">{t('home.viewTitle')}</span>
-          <Button
-            variant="ghost"
-            className="move-controls__btn"
-            title={t('home.panLeftTitle')}
-            onClick={() => viewportRef.current?.pan(-PAN_STEP, 0)}
+        {focusId && (
+          <button
+            type="button"
+            className="breadcrumb__link"
+            onClick={() => {
+              setFocus(null)
+              selectNode(null)
+            }}
           >
-            ◀
-          </Button>
-          <Button
-            variant="ghost"
-            className="move-controls__btn"
-            title={t('home.panRightTitle')}
-            onClick={() => viewportRef.current?.pan(PAN_STEP, 0)}
-          >
-            ▶
-          </Button>
-          <Button
-            variant="ghost"
-            className="move-controls__btn"
-            title={t('home.panUpTitle')}
-            onClick={() => viewportRef.current?.pan(0, PAN_STEP)}
-          >
-            ▲
-          </Button>
-          <Button
-            variant="ghost"
-            className="move-controls__btn"
-            title={t('home.panDownTitle')}
-            onClick={() => viewportRef.current?.pan(0, -PAN_STEP)}
-          >
-            ▼
-          </Button>
-          <Button variant="ghost" onClick={() => viewportRef.current?.resetView()}>
-            {t('home.resetView')}
-          </Button>
-        </div>
+            ↩ {t('home.backToHouse')}
+          </button>
+        )}
+
+        <span className="statusbar__sep" />
 
         <span className="dim-info">
           {selected
@@ -845,6 +763,10 @@ export function HomePage() {
               ? t('home.focusedHint')
               : t('home.selectHint')}
         </span>
+
+        <div className="statusbar__right">
+          <span>v1.5.0</span>
+        </div>
       </footer>
 
       <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />

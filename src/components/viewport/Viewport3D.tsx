@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
-import { computeAllWallPlans, type WallPlan } from '../../lib/roomGeometry'
+import { computeAllWallPlansCached, type WallPlan } from '../../lib/roomGeometry'
 import { useModelStore } from '../../store/useModelStore'
-import type { RoomNode, SceneModel } from '../../types/model'
+import type { SceneModel } from '../../types/model'
 import { ModelNodeView } from './ModelNodeView'
 
 /** 入口方向（默认南侧/地图下方）；入户门开在入口房间该方向的外墙（setHouse.entranceDir 可改） */
@@ -17,20 +17,17 @@ export function Viewport3D({ planMode = false }: { planMode?: boolean }) {
 
   // 计算整屋所有房间（含嵌套）的墙体方案：共享墙去重、开放空间不设墙、入口方向外墙入户门；
   // 嵌套子房间（如卧室内卫生间）由其分割墙方案独立渲染，与父墙共线处不再重复渲染。
+  // 走共享缓存（坑 72）：与 PlanEnhancements / PlanEditLayer 同场景引用只算一次。
   const wallPlan = useMemo(() => {
     if (!scene) return new Map<string, WallPlan>()
-    const rooms: RoomNode[] = scene.root.levels[0]?.rooms ?? []
     const house = scene.root as SceneModel['root']
-    return computeAllWallPlans(rooms, {
-      entrance: entranceDirection(house),
-      entranceRoomId: house.entranceRoomId,
-    })
+    return computeAllWallPlansCached(scene, entranceDirection(house), house.entranceRoomId)
   }, [scene])
 
   return (
     <>
-      <color attach="background" args={['#14161b']} />
-      {!screenshotMode && <gridHelper args={[20, 20, '#3a3f4b', '#272b34']} />}
+      <color attach="background" args={['#d6cfbf']} />
+      {!screenshotMode && <gridHelper args={[20, 20, '#a9a290', '#c8c1ac']} />}
       {!screenshotMode && <axesHelper args={[5]} />}
       {scene && <ModelNodeView node={scene.root} wallPlan={wallPlan} planMode={planMode} />}
     </>

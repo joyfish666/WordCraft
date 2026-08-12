@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { houseLevelsBounds, roomCenter } from './footprint'
+import { doorZoneRect } from './furniturePlacement'
 import { findNodeById, isContainer, walk } from './modelTree'
 import { resolveLayout } from './layout'
-import { computeAllWallPlans, computeWallPlan, edgeOf } from './roomGeometry'
+import { computeAllWallPlans, computeDoorZones, computeWallPlan, edgeOf } from './roomGeometry'
 import type { FurnitureNode, RoomNode, RoomNodeV2, SceneModelV2 } from '../types/model'
 
 function roomV2(
@@ -189,7 +190,7 @@ describe('resolveLayout - living 客厅居中型', () => {
 describe('resolveLayout - custom 自由型', () => {
   it('家具相对房间中心偏移为绝对坐标', () => {
     // 用独立家具（茶几）测相对→绝对转换，避免被家具常理贴墙逻辑挪动；
-    // z 取 0 落在南北两个门口通道（入户门 + 兜底门）之间，normalizeContainment 不会推出堵门家具
+    // z 取 0 避开南墙入户门通道，normalizeContainment 不会推出堵门家具
     const model = resolveLayout(
       scene({
         children: [
@@ -365,8 +366,127 @@ describe('resolveLayout - 两卫生间布局', () => {
     }
   })
 
-  it('嵌套卫生间按 side 靠边放置（side:north → 卧室北侧）', () => {
+  it('主卧带内卫：家具常理摆放后互不重叠（复现用户反馈：衣柜与床重叠）', () => {
     const v2: SceneModelV2 = {
+      version: 2,
+      root: {
+        id: 'h',
+        type: 'house',
+        name: '三室一厅一厨',
+        dimensions: { length: 12, width: 8, height: 2.8 },
+        position: { x: 0, y: 0, z: 0 },
+        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        children: [
+          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 6, width: 4.5, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'master',
+            type: 'room',
+            name: '主卧',
+            dimensions: { length: 4.5, width: 3.5, height: 2.8 },
+            side: 'right',
+            children: [
+              { id: 'bed', type: 'furniture', name: '双人床', dimensions: { length: 2, width: 1.5, height: 0.5 }, position: { x: -1, y: 0.25, z: -0.8 } },
+              { id: 'wardrobe', type: 'furniture', name: '衣柜', dimensions: { length: 1.8, width: 0.6, height: 2.4 }, position: { x: 1.2, y: 1.2, z: -1.2 } },
+              { id: 'nb1', type: 'furniture', name: '床头柜', dimensions: { length: 0.5, width: 0.4, height: 0.5 }, position: { x: -2, y: 0.25, z: -0.8 } },
+              { id: 'nb2', type: 'furniture', name: '床头柜', dimensions: { length: 0.5, width: 0.4, height: 0.5 }, position: { x: 0, y: 0.25, z: -0.8 } },
+              {
+                id: 'bath',
+                type: 'room',
+                name: '主卧卫生间',
+                dimensions: { length: 2, width: 1.8, height: 2.8 },
+                position: { x: 1.2, y: 1.4, z: 1.2 },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    }
+    const model = resolveLayout(v2)
+    const master = findNodeById(model.root, 'master') as RoomNode
+    expect(master).toBeDefined()
+    const furn = master.furniture as FurnitureNode[]
+    // 家具两两不重叠（历史 bug：衣柜滑上北墙与床重叠、床头柜被夹进门区与床重叠）
+    for (let i = 0; i < furn.length; i++) {
+      for (let j = i + 1; j < furn.length; j++) {
+        const a = furn[i]
+        const b = furn[j]
+        const overlap =
+          a.position.x + a.dimensions.length / 2 > b.position.x - b.dimensions.length / 2 + 1e-6 &&
+          a.position.x - a.dimensions.length / 2 < b.position.x + b.dimensions.length / 2 - 1e-6 &&
+          a.position.z + a.dimensions.width / 2 > b.position.z - b.dimensions.width / 2 + 1e-6 &&
+          a.position.z - a.dimensions.width / 2 < b.position.z + b.dimensions.width / 2 - 1e-6
+        expect(overlap).toBe(false)
+      }
+    }
+    // 家具不落入内卫占地（坑 15：嵌套房间禁入）
+    const bath = master.nestedRooms[0]
+    const bb = roomBoundsOf(bath)
+    for (const f of furn) {
+      const overlap =
+        f.position.x + f.dimensions.length / 2 > bb.minX + 1e-6 &&
+        f.position.x - f.dimensions.length / 2 < bb.maxX - 1e-6 &&
+        f.position.z + f.dimensions.width / 2 > bb.minZ + 1e-6 &&
+        f.position.z - f.dimensions.width / 2 < bb.maxZ - 1e-6
+      expect(overlap).toBe(false)
+    }
+  })
+
+    it('嵌套卫生间默认东北角，但避开父房间门口禁区（坑 47 的 macro 路径）', () => {
+    // 复现用户反馈：主卧（左侧，朝走廊开门）内卫无 side → 常理东北角，
+    // 恰好压在主卧朝走廊的门正下方（门后无墙）；应确定性改到第一个不压门区的角
+    const v2: SceneModelV2 = {
+      version: 2,
+      root: {
+        id: 'h',
+        type: 'house',
+        name: '小屋',
+        dimensions: { length: 10, width: 8, height: 2.8 },
+        position: { x: 0, y: 0, z: 0 },
+        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        children: [
+          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 5, width: 4, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'master',
+            type: 'room',
+            name: '主卧',
+            dimensions: { length: 4, width: 3.5, height: 2.8 },
+            side: 'left',
+            children: [
+              {
+                id: 'bath',
+                type: 'room',
+                name: '主卧卫生间',
+                dimensions: { length: 2, width: 1.8, height: 2.8 },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    }
+    const model = resolveLayout(v2)
+    const master = findNodeById(model.root, 'master') as RoomNode
+    const bath = findNodeById(model.root, 'bath') as RoomNode
+    expect(master).toBeDefined()
+    expect(bath).toBeDefined()
+    // 内卫仍在父房间内部
+    expect(master.nestedRooms.some((c) => c.id === 'bath')).toBe(true)
+    // 与渲染同源的门区：主卧朝走廊的门（含入户门）
+    const zones = computeDoorZones(topRooms(model), { entrance: 'south', entranceRoomId: 'living_room' })
+    const rects = (zones.get(master.id) ?? []).map((z) => doorZoneRect(master, z))
+    expect(rects.length).toBeGreaterThan(0)
+    const bb = roomBoundsOf(bath)
+    for (const r of rects) {
+      const overlap =
+        bb.minX < r.maxX - 1e-6 && bb.maxX > r.minX + 1e-6 && bb.minZ < r.maxZ - 1e-6 && bb.maxZ > r.minZ + 1e-6
+      expect(overlap).toBe(false)
+    }
+    // 内卫门朝父房间中心开（nestedDoorDirection 语义不变）
+    expect(roomCenter(bath).x).toBeGreaterThanOrEqual(roomBoundsOf(master).minX)
+  })
+
+  it('嵌套卫生间按 side 靠边放置（side:north → 卧室北侧）', () => {    const v2: SceneModelV2 = {
       version: 2,
       root: {
         id: 'h',

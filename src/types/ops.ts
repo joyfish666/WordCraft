@@ -19,6 +19,8 @@ export interface RoomSpec {
   footprint?: Point2D[]
   /** custom 模式的绝对位置（房间中心） */
   position?: Position
+  /** 贴靠到前文已列出的房间的 dir 侧（custom 模式，无缝共墙；roomId 可用 id 或名称） */
+  relativeTo?: { roomId: string; dir: Dir }
   furniture?: FurnitureSpec[]
   nestedRooms?: RoomSpec[]
 }

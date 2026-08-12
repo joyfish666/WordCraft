@@ -67,7 +67,7 @@
 
 ---
 
-## 第三代：契约动词化 + 足迹几何 + 双向同步（v3 实施中）
+## 第三代：契约动词化 + 足迹几何 + 双向同步（v3 已实施完成）
 
 **形态**（详见 [design.md](design.md)，决策已评审）：
 
@@ -147,6 +147,41 @@ README 路线图「移动端基础适配」以**横屏限定**方式落地（验
 - **统一兜底**：`normalizeContainment` 把与渲染同源的门口禁区（`computeDoorZones` + `doorZoneRect`，含入户门，深 `DOOR_CLEARANCE=1m` × 门宽 0.9m）并入 `pushOutOfRects`——手动编辑与 LLM 生成（custom 显式坐标堵门同样兜底）走同一约束路径，与生成路径常理摆放（`applyFurnitureConventions`）行为一致；
 - **`pushOutOfRects` 候选扩展**：候选对**所有**禁区生成（此前只对当前重叠禁区取候选——家具推出嵌套卫生间时恰好撞进门区，重叠数不变被"无改进"拒绝而原地不动，几何有解却找不到）；选择全局重叠最少的落点，确定性不变；
 - **已知边界**（已记入坑 15）：嵌套房间（如卫生间）内部的门区不参与避让（`computeDoorZones` 只遍历顶层，与 `furniturePlacement` 一致）；被门区/嵌套夹到只剩唯一安全位的家具，越界拖拽会回弹原位（编辑日志 diff 为空不记 op，坑 18 语义）。
+
+### 全新 UI 改版（2026-08-12，基于 ui-preview.html 落地）
+
+以 `docs/ui-preview.html` 视觉稿为基准的**全面换肤与布局重构**（验收：388 用例全绿，HomePage 新增空态卡 3 用例）：
+
+- **暖色浅色主题**：全局 CSS 变量由深色切换为米纸暖色系（`#e2dccb` 底、绿色强调），3D 渲染同步换肤——场景背景/网格线/家具与走廊中性色（`palette.ts` 按浅底可辨性重调）/选中高亮/门窗符号/平面图标注与罗盘；
+- **移除侧边栏**：品牌「言筑 WordCraft」入顶栏左侧，首页/设置导航入顶栏右侧图标（NavLink + tooltip）；设置页顶部加「← 首页」返回入口；
+- **顶栏分组**：场景（示例/清空场景）、编辑（撤销/重做）、对话/分享/截图/帮助、右侧 保存/项目库/导航/语言/API 徽章（未配置 → 链接设置）；「清空」改名「清空场景」；
+- **底部对话抽屉**（push 布局）：取代左侧 320px 聊天面板——折叠仅剩输入条、展开最大 55vh；顶栏「对话」按钮联动高亮；生成动画圆点 + 耗时；撤销生成/清空对话按钮行；API Key 未配置黄色提示条；发送自动展开；
+- **空态引导卡**：无场景时画布中央"用一句话，生成你的房子" + 3 个示例标签（点击填入输入框）+ **未配置 API Key 时提示可先加载示例模型**；
+- **独立「截图」按钮**：直接下载无水印 PNG（分享对话框保留带水印截图 + 口令流程）；**属性面板可拖动**（按住头部拖拽，会话内记住偏移）；**R 键复位视角**（状态栏视角按钮组移除，键盘平移保留）。
+
+### 生成链路与几何确定性补强（2026-08-12，全部按 notes §2 原则 7"挖根因"落地）
+
+用户反馈驱动的六处根治（验收：388 用例全绿，新增/重写 13 用例）：
+
+- **`macro.name` 容错修复**：模型把整屋名填进布局类型字段（`"name":"三室一厅一厨"`），Zod 拒绝整条 macro → 输出"全部无效"。`parseOps` 前过 `repairMacroName`——按 params 确定性推断布局类型（有 corridor → corridor；有 centerRoomId → living；有 rooms → custom），并把原 name 移入 params.name 保住整屋名；
+- **房间引用支持名称**：LLM 不给房间 id 直接用房间名引用（`setOpenings`/`setHouse`/`relativeTo`）时全部失效。`findRoom`/`mapRoom`/`addEntranceDoor` 按 id 优先、名称回退（确定性首次匹配）；`setHouse.entranceRoomId` 落库解析后的真实 id；
+- **`macro` custom 房间支持 `relativeTo`**：schema 悄悄丢弃导致所有房间落原点"全塞一块"。`RoomSpec` 补 `relativeTo`，`resolveCustom` 按列表顺序贴靠（引用可用 id 或名称）；
+- **无走廊自由布局直接开门**：custom 无走廊时"私密只连走廊"规则把卧室封死（只能从卫生间进出，布局"错乱"）。`computeWallPlan` 按 `hasCorridor` 门控——无走廊时私密房间与开放空间直接开门（坑 11 修正）；
+- **入户门与显式开洞互让**：门与窗在同一面墙上互不相让——先窗后门门被挤小、先门后窗大窗被劈成两段（坑 65）。`applyOpenings` 先切墙、`addEntranceDoor` 后放置：门只开在 ≥0.9m 实心段、入口墙放不下按确定性顺序换外墙，窗保持完整一段；
+- **家具常理摆放修复**（坑 66）：① auto 分支去掉"先 normalize 再摆放"（床被推出门口后北上墙，占掉衣柜的墙面导致重叠）；② `slideAlongWall` 改迭代滑动 + visited 震荡防护（"避开卫生间却撞上已放家具"）；③ 重叠判定必须逐禁区判断；④ **嵌套房间避开父房间门口禁区**（坑 47 的 macro 路径版本：`avoidNestedDoorZones` 布局后统一检查，内卫默认东北角不再压门）。
+
+### 代码审查修复批次（2026-08-13，坑 70-73 + 工程化，版本标记 v1.5.0）
+
+全面代码审查后的缺陷修复批次（验收：403 用例全绿，新增 15 用例；全部是"静默"类缺陷——不报错、不崩溃，但行为与用户预期/契约不符）：
+
+- **生成竞态防护**（坑 70）：发送时快照场景引用（`generationBaseRef`），返回后场景已变（生成期间手动编辑/打开项目/加载示例）则 `confirm` 是否覆盖，取消保留用户编辑；**无 API Key 不再清空输入草稿**；
+- **名称引用契约修复**（坑 71）：`findRoom` 支持按名称回退但 modelTree/planEdit 的变更函数只按 id 匹配——按名称的 `updateRoom`/`removeRoom`/`splitRoom`/`mergeRoom`/`moveRoom`/`nestRoom` 全部"静默成功但零变更"。executor 各 apply 函数先解析真实 `room.id` 再变更，`moveAdjacent` 自引用判定/`pickFreePlacement` 排除同改；新增 7 条回归测试；
+- **项目库房间数恒 0**：`ProjectLibraryDialog` 读 `root.children`（v1 结构），v3 房间在 `root.levels[0].rooms`——修正并补测试；
+- **Ctrl/Cmd+R 被劫持**：键盘监听无 `mod` 守卫拦截浏览器刷新快捷键——加 `if (mod) return`；
+- **墙体方案共享缓存**（坑 72）：`computeAllWallPlansCached`（WeakMap 按场景引用）——渲染层三个组件（Viewport3D/PlanEnhancements/PlanEditLayer）同场景引用只算一次，拖拽预览每帧省 2/3 重复计算；缓存 Map 只读约定写入注释；
+- **PlanRig 取景依赖 scene 引用**（坑 73）：拖拽预览每帧新 scene → 每帧重取景并 `saveState()`（视图跳变、复位基准被覆盖）——改依赖 `houseBounds` 数值签名；
+- **CI 补质量门**：新增 `.github/workflows/ci.yml`（PR + main 推送跑 lint/format:check/typecheck/test），`package.json` 补 `typecheck` 脚本——此前唯一 CI 只 build 部署、从不跑测试；
+- **顶层 ErrorBoundary**：渲染异常（如持久化数据损坏）不再白屏，展示兜底页 + 「重置本地数据」（清 localStorage 重载）与「重试」入口。
 
 **演进规律**：三代迭代的共同线索是**逐步把"不可控"移出 LLM、把"表达力"还给用户**——
 

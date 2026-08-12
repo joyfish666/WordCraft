@@ -426,6 +426,66 @@ describe('generateModelFromChat', () => {
     expect(rooms).toContain('b')
   })
 
+  it('macro.name 填了整屋名时按 params 推断布局类型（容错修复，复现用户反馈）', async () => {
+    // 模型把整屋名「三室一厅一厨」填进 macro.name（应为 corridor），params.corridor 仍在
+    respondWith(
+      JSON.stringify({
+        version: 3,
+        ops: [
+          {
+            op: 'macro',
+            name: '三室一厅一厨',
+            params: {
+              name: '三室一厅一厨',
+              corridor: { width: 1.2, entranceRoomId: '客厅' },
+              rooms: [
+                { id: '客厅', name: '客厅', dimensions: { length: 5, width: 4, height: 2.8 }, side: 'left' },
+                { id: '次卧', name: '次卧', dimensions: { length: 3.5, width: 3, height: 2.8 }, side: 'right' },
+              ],
+            },
+          },
+        ],
+      }),
+    )
+    const result = await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: '三室一厅一厨，主卧带卫生间',
+    })
+    // 修复后按 corridor 平铺：整屋名保留、出现走廊与客厅
+    expect(result.model.root.name).toBe('三室一厅一厨')
+    expect(result.model.root.levels[0].rooms.some((r) => r.name === '走廊')).toBe(true)
+    expect(result.model.root.levels[0].rooms.some((r) => r.name === '客厅')).toBe(true)
+  })
+
+  it('macro.name 缺省但 params 含 corridor 时也能推断布局类型', async () => {
+    respondWith(
+      JSON.stringify({
+        ops: [
+          {
+            op: 'macro',
+            params: {
+              corridor: { width: 1.2 },
+              rooms: [
+                { id: 'a', name: '房A', dimensions: { length: 4, width: 3, height: 2.8 }, side: 'left' },
+                { id: 'b', name: '房B', dimensions: { length: 4, width: 3, height: 2.8 }, side: 'right' },
+              ],
+            },
+          },
+        ],
+      }),
+    )
+    const result = await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: '两室',
+    })
+    // 推断为 corridor 后正常平铺：出现走廊与两间房
+    expect(result.model.root.levels[0].rooms.some((r) => r.name === '走廊')).toBe(true)
+    expect(result.model.root.levels[0].rooms.some((r) => r.name === '房A')).toBe(true)
+    expect(result.model.root.levels[0].rooms.some((r) => r.name === '房B')).toBe(true)
+  })
+
   it('未找到 JSON 时抛出 no-json 错误', async () => {
     respondWith('抱歉，我无法完成')
     await expect(

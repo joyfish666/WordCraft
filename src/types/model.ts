@@ -127,6 +127,8 @@ export interface RoomNodeV2 {
   position?: Position
   /** 自定义足迹顶点环（仅 custom 模式生效：L 形/U 形直接表达；世界坐标，整屋居中时随整体平移） */
   footprint?: Point2D[]
+  /** custom 模式贴靠：贴到目标房间 dir 侧（无缝共墙；roomId 可用 id 或名称） */
+  relativeTo?: { roomId: string; dir: 'north' | 'south' | 'east' | 'west' }
   /** 布置意图：corridor 模板为 'left'|'right'；living 模板为 'north'|'south'|'east'|'west' */
   side?: string
   /** 子节点：家具，或嵌套的子房间（如卧室内的卫生间，布局时自动拍平） */

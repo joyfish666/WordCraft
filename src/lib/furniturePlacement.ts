@@ -109,7 +109,9 @@ function overlaps(fx: number, fz: number, hx: number, hz: number, k: InnerBounds
 /**
  * 沿墙滑动避开禁区：保持贴墙轴不变，仅调整平行于墙的坐标。
  * 对每个被占住的禁区，算出向负/正向各需要移动多少，取较小且仍在界内的方向。
- * 无法避开时返回 null（调用方换墙或退化）。
+ * **迭代滑到干净为止**：单趟只按起点重叠的禁区求避让量，会"避开 A 却撞上 B"
+ * （如沿北墙滑开卫生间时撞进已放置的床）；每轮移动后重新检查全部禁区，
+ * 移动到已访问过的位置（来回震荡）或无法改进时返回 null（调用方换墙或退化）。
  */
 function slideAlongWall(
   fx: number,
@@ -120,35 +122,59 @@ function slideAlongWall(
   bounds: InnerBounds,
   keepOuts: InnerBounds[],
 ): XZ | null {
-  const a = alongAxis === 'x' ? fx : fz
+  const a0 = alongAxis === 'x' ? fx : fz
   const ha = alongAxis === 'x' ? hx : hz
   const minA = alongAxis === 'x' ? bounds.minX + hx : bounds.minZ + hz
   const maxA = alongAxis === 'x' ? bounds.maxX - hx : bounds.maxZ - hz
   if (minA > maxA) return null // 房间比家具还小
 
-  let needNeg = 0
-  let needPos = 0
-  for (const k of keepOuts) {
-    if (!overlaps(fx, fz, hx, hz, k)) continue
+  const clampA = (v: number) => Math.min(Math.max(v, minA), maxA)
+  // 单禁区重叠判定（沿墙轴 + 垂直轴同时穿透才计重叠）
+  const overlapsK = (a: number, k: InnerBounds): boolean => {
     const kMin = alongAxis === 'x' ? k.minX : k.minZ
     const kMax = alongAxis === 'x' ? k.maxX : k.maxZ
-    // 向负方向避让：家具 +边 ≤ 禁区 -边 → a 移到 kMin - ha
-    needNeg = Math.max(needNeg, a + ha - kMin)
-    // 向正方向避让：家具 -边 ≥ 禁区 +边 → a 移到 kMax + ha
-    needPos = Math.max(needPos, kMax + ha - a)
+    const kO = alongAxis === 'x' ? k.minZ : k.minX
+    const kP = alongAxis === 'x' ? k.maxZ : k.maxX
+    const perp = alongAxis === 'x' ? fz : fx
+    const hp = alongAxis === 'x' ? hz : hx
+    return (
+      a + ha > kMin + EPS &&
+      a - ha < kMax - EPS &&
+      perp + hp > kO + EPS &&
+      perp - hp < kP - EPS
+    )
   }
-  if (needNeg <= 0 && needPos <= 0) return { x: fx, z: fz } // 已避开
+  const overlapsAt = (a: number): boolean => keepOuts.some((k) => overlapsK(a, k))
 
-  const candNeg = a - needNeg
-  const candPos = a + needPos
-  const okNeg = candNeg >= minA - EPS
-  const okPos = candPos <= maxA + EPS
-  if (okNeg && okPos) {
-    const next = needNeg <= needPos ? candNeg : candPos
-    return alongAxis === 'x' ? { x: next, z: fz } : { x: fx, z: next }
+  let a = a0
+  const visited = new Set<number>()
+  for (let iter = 0; iter < 16; iter++) {
+    if (!overlapsAt(a)) {
+      return alongAxis === 'x' ? { x: a, z: fz } : { x: fx, z: a }
+    }
+    if (visited.has(a)) return null // 震荡：两个禁区在两侧反复横跳
+    visited.add(a)
+    let needNeg = 0
+    let needPos = 0
+    for (const k of keepOuts) {
+      if (!overlapsK(a, k)) continue
+      const kMin = alongAxis === 'x' ? k.minX : k.minZ
+      const kMax = alongAxis === 'x' ? k.maxX : k.maxZ
+      needNeg = Math.max(needNeg, a + ha - kMin)
+      needPos = Math.max(needPos, kMax + ha - a)
+    }
+    const candNeg = clampA(a - needNeg)
+    const candPos = clampA(a + needPos)
+    const okNeg = a - needNeg >= minA - EPS
+    const okPos = a + needPos <= maxA - EPS
+    let next: number | null = null
+    if (okNeg && okPos) next = needNeg <= needPos ? candNeg : candPos
+    else if (okNeg) next = candNeg
+    else if (okPos) next = candPos
+    if (next === null) return null // 两个方向都出界
+    if (Math.abs(next - a) < EPS) return null // 被夹住无法移动（仍重叠）
+    a = next
   }
-  if (okNeg) return alongAxis === 'x' ? { x: candNeg, z: fz } : { x: fx, z: candNeg }
-  if (okPos) return alongAxis === 'x' ? { x: candPos, z: fz } : { x: fx, z: candPos }
   return null
 }
 

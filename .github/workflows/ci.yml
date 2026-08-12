@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      # 注意：format:check 暂未纳入 CI——仓库存在既有格式漂移（55 个文件，
+      # 多为 prettier 版本差异，与本次改动无关），先跑会直接红灯。
+      # 待全仓 `npm run format` 收敛后再加入此门。
+      - name: Type check
+        run: npm run typecheck
+      - name: Test
+        run: npm test
