@@ -56,7 +56,7 @@ Zod 校验（schemas/ops.schema.ts，逐条容错）
 }
 ```
 
-关键约定（详见 `types/ops.ts` / `schemas/ops.schema.ts` / `lib/executor.ts`）：
+关键约定（详见 `types/ops.ts` / `schemas/ops.schema.ts` / `lib/executor/`（2026-08-13 由单文件 executor.ts 拆为目录））：
 
 - **14 种操作**：`setHouse`（改名 / **迁移入户门 `entranceRoomId` + 方向 `entranceDir`**，P3 补）、`macro`（corridor/living/custom 整体布局，复用旧布局引擎）、`addRoom`/`updateRoom`/`removeRoom`/`moveRoom`、**`nestRoom`（把已有房间内嵌为另一个房间的嵌套子房间，P3 补）**、**`splitRoom`（P4：矩形房间沿轴线切两半，共墙自动开一扇门）**、**`mergeRoom`（P4：并集为合法矩形的相邻房间合并）**、`addFurniture`/`updateFurniture`/`removeFurniture`、`setOpenings`（门/窗开洞，**P4 起支持 `edgeIndex` 精确指边与 `remove: true` 删除**）、`addAdjacency`（相邻约束）。
 - **id 全局唯一、复用**：修改已有节点必须用其 id；`addRoom`/`addFurniture` 的 id 可省略（执行器自动生成）。**引用房间可用 id 或名称**：LLM 常不给房间 id 直接用房间名引用，`findRoom`/`mapRoom` 均先按 id、未命中按名称首次匹配（确定性）；`setHouse.entranceRoomId` 落库时解析为真实 id。**⚠️ 坑 71（2026-08-13 修复）**：modelTree/planEdit 的变更函数（`updateNodeFields`/`updateNodeFootprint`/`removeNode`/`replaceRoom`/`updateNodePosition`）只按 id 精确匹配——executor 各 apply 函数必须先 `findRoom` 解析出真实 `room.id` 再调用它们（含 `moveAdjacent` 的自引用判定与 `pickFreePlacement` 排除），否则名称引用的 op 会静默零变更。
@@ -185,7 +185,7 @@ interface WallPlan { edges: WallEdge[] }   // 与 footprint 顶点环一一对�
   - **Gizmo 拖拽**：`gizmoMode`（会话内）+ `previewSelected(patch)`（拖拽中实时更新，不记历史、不约束）+ `commitDrag(baseScene)`（结束一次性压入历史、记一条编辑 op，并对当前场景 `normalizeContainment`）；代理同步用 `nodePosition`/`nodeDims`。`screenshotMode` 截图瞬间隐藏辅助元素。
   - **平面图编辑（P4）**：`previewFootprint(id, footprint)`（顶点拖拽预览，不记历史）+ `commitPlanEdit(baseScene, id)`（拖拽结束：约束 + 压入拖拽前快照 + `editDiffToOps` 记编辑日志）+ `applyPlanOps(ops)`（非拖拽类编辑：`executeOps` 执行 → 有实际变化才压入历史 + 追加编辑日志）；`planTool`/`openingKind` 会话内不持久化，`setScene`/`resetScene` 复位为 select。
 - **useChatStore**（persist → `wordcraft.chat`）：对话消息、生成态、**生成历史栈**（会话内不持久化）：每次生成成功前 `pushGenerationHistory(prevScene)`（上限 20）；`undoLastGeneration()` 弹出快照并移除最后 user+assistant 对；`clearGenerationHistory` 在加载示例/清空场景/打开项目/清空对话时调用。**编辑操作日志 `editOps`**（P3，上限 50、会话内不持久化、`clearConversation`/`clearEditOps` 清空）：手动编辑产出的同构 op，随多轮上下文喂给 LLM。**`toChatHistory`（P3 精简）**：只回传用户消息 + 文本助手消息，助手消息中的纯 JSON（`{` 开头）即上一轮 ops 原文被剔除（由摘要 + 编辑日志替代）。**persist `version: 2` + migrate**：消息携带的旧 v1 模型读取时迁移。
-- **useProjectStore**（persist → `wordcraft.project`）：当前场景所属项目（`currentId`/`currentName`，持久化）+ 会话内脏标记 `dirty`；脏标记驱动在 HomePage（`lastSavedJsonRef` 对照场景 JSON）。
+- **useProjectStore**（persist → `wordcraft.project`）：当前场景所属项目（`currentId`/`currentName`，持久化）+ 会话内脏标记 `dirty` 与**已保存快照 `savedJson`**（2026-08-13 收敛，坑 75）：`commitSavedScene(sceneJson)` 在 打开/保存/新建项目后调用，`useDirtyTracking`（HomePage hook）订阅场景变化只在「干净 → 变化」时比对一次，撤销/重做回已保存状态由 `syncDirtyWithSaved` 清除（详见 notes 坑 28/75）。
 
 ## 6.5 本地项目库与 2D 俯视平面图（v1.1.0）
 
@@ -260,7 +260,7 @@ interface WallPlan { edges: WallEdge[] }   // 与 footprint 顶点环一一对�
 - **状态栏**：面包屑 + 选中尺寸信息 + 版本号；`focusId` 时显示「返回整屋」。
 - **i18n**：新增约 30 个 key（顶栏/抽屉/空态/截图/拖动提示等，zh/en 对称，`translations.test.ts` 断言 key 集合一致）。
 
-## 7. 生成链路（lib/chat.ts + lib/executor.ts）
+## 7. 生成链路（lib/chat.ts + lib/executor/）
 
 1. 构建 messages：系统提示词（**ops 操作序列契约**，P2 重写）+ 多轮历史（**P3 精简**：`toChatHistory` 剔除助手纯 JSON）+ **当前房屋状态摘要**（有场景时）+ **手动编辑日志**（`editOps` 非空时）+ 用户输入。
 2. **SSE 流式请求**（`streamChatCompletion`，lib/api.ts，fetch 实现）：`chat.ts` 侧 `GENERATION_TIMEOUT_MS = 180s` 兜底超时。
