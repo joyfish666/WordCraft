@@ -343,12 +343,16 @@ export function computeWallPlan(
   }
 
   // 卫生间唯一门预扫描：每间卫生间至多一扇推导门（用户显式 setOpenings 可另加）。
-  // 优先级：命名归属房间（主卧卫生间 → 主卧）> 走廊 > 邻居中 id 最小者（确定性）；
-  // 目标集合为空（无邻居）时该卫生间不参与开门判定。
+  // 优先级：命名归属房间（主卧卫生间 → 主卧，用户明确指示）> 走廊 > 开放空间（仅全屋唯一
+  // 卫生间时，公共语义）> 邻居中 id 最小者（确定性）；目标集合为空（无邻居）时该卫生间不参与开门判定。
   const bathroomDoorTargets = new Map<string, Set<string>>()
   // 房屋是否有走廊：无走廊的自由布局（custom）中，"私密房间只连走廊"的规则前提不存在，
   // 私密房间与开放空间（客厅/餐厅/厨房）直接开门，否则房间密封不可达
   const hasCorridor = rooms.some((r) => isCorridorName(r.name))
+  // 顶层卫生间数量（嵌套在卧室内的卫生间是专属的，不参与"全屋唯一"判定）：
+  // 全屋唯一且无命名归属的卫生间按**公共卫生间**处理——门开向公共区域
+  // （走廊 > 开放空间），而不是落到某个私密房间变成"某卧室专属"（坑 86）。
+  const bathroomCount = rooms.filter((r) => isBathroomName(r.name)).length
   for (const R of rooms) {
     if (!isBathroomName(R.name)) continue
     const nbs: RoomNode[] = []
@@ -365,8 +369,19 @@ export function computeWallPlan(
       targets = owned
     } else {
       const corridor = nbs.filter((x) => isCorridorName(x.name))
-      targets =
-        corridor.length > 0 ? corridor : [...nbs].sort((a, b) => (a.id < b.id ? -1 : 1)).slice(0, 1)
+      if (corridor.length > 0) {
+        targets = corridor
+      } else if (bathroomCount === 1) {
+        // 全屋唯一卫生间 → 公共卫生间：无走廊时优先开向开放空间（客厅/餐厅/厨房），
+        // 全体住户共用；实在只有私密邻居时才退化为邻居 id 最小（确定性兜底）
+        const open = nbs.filter((x) => isOpenRoom(x.name) && !isCorridorName(x.name))
+        targets =
+          open.length > 0
+            ? [...open].sort((a, b) => (a.id < b.id ? -1 : 1)).slice(0, 1)
+            : [...nbs].sort((a, b) => (a.id < b.id ? -1 : 1)).slice(0, 1)
+      } else {
+        targets = [...nbs].sort((a, b) => (a.id < b.id ? -1 : 1)).slice(0, 1)
+      }
     }
     bathroomDoorTargets.set(R.id, new Set(targets.map((t) => t.id)))
   }

@@ -90,6 +90,17 @@ describe('useChatStore 编辑操作日志（P3 双向同步）', () => {
     const persisted = JSON.parse(localStorage.getItem('wordcraft.chat') ?? '{}')
     expect(persisted.state.editOps).toBeUndefined()
   })
+
+  it('持久化消息不携带 model（多轮场景快照不再落盘，避免 5MB 配额与全量重序列化）', () => {
+    useChatStore.getState().addMessage({ role: 'user', content: '设计一个房子' })
+    useChatStore.getState().addMessage({ role: 'assistant', content: 'ok', model: modelA })
+    const persisted = JSON.parse(localStorage.getItem('wordcraft.chat') ?? '{}')
+    expect(persisted.version).toBe(3)
+    expect(persisted.state.messages).toHaveLength(2)
+    for (const m of persisted.state.messages) expect(m.model).toBeUndefined()
+    // 内存中 model 仍保留（撤销生成依赖），持久化剥离不影响运行时
+    expect(useChatStore.getState().messages[1].model).toBe(modelA)
+  })
 })
 
 describe('toChatHistory（P3 上下文精简：整段 ops JSON 不再回传）', () => {

@@ -456,7 +456,8 @@ export const en: Record<TKey, string> = {
   'settings.showWireframe': 'Show wireframe',
   'settings.wireframeWidth': 'Wireframe width',
   'settings.showShadows': 'Real-time shadows',
-  'settings.showShadowsHint': 'Soft shadows under furniture and walls; turn off on low-end devices.',
+  'settings.showShadowsHint':
+    'Soft shadows under furniture and walls; turn off on low-end devices.',
   'settings.debugSection': 'Debug',
   'settings.debugMode': 'Enable debug mode',
   'settings.debugHint':

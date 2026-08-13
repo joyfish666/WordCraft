@@ -260,6 +260,50 @@ describe('入户门', () => {
     expect(north.segments.some((s) => s.kind === 'wall')).toBe(true)
   })
 
+  it('全屋唯一卫生间（无走廊、无归属名）按公共卫生间：门开向客厅而非主卧（坑 86）', () => {
+    // 复现用户反馈：custom 自由布局单卫生间同时邻客厅与主卧，旧规则按 id 最小（a_master）
+    // 会把门开向主卧——卫生间变成"主卧专属"。唯一卫生间应视为公共卫生间，开向开放空间。
+    const living = room('living', '客厅', -1.5, -1.5, 3, 3)
+    const master = room('a_master', '主卧', 1.5, -1.5, 3, 3)
+    const bath = room('bathroom1', '卫生间', 0, 1.0, 2, 2)
+    const plan = computeWallPlan([master, living, bath])
+    const bathPlan = plan.get('bathroom1')!
+    // 单门且开向客厅（南墙的客厅段），不开向主卧（南墙主卧段为实心墙）
+    const doorEdges = bathPlan.edges.filter((e) => e.segments.some((s) => s.kind === 'door'))
+    expect(doorEdges).toHaveLength(1)
+    expect(hasDoor(edgeOf(bathPlan, 'south'))).toBe(true)
+    expect(hasDoor(edgeOf(plan.get('a_master')!, 'north'))).toBe(false)
+    expect(hasDoor(edgeOf(bathPlan, 'north'))).toBe(false) // 北墙外墙无门
+  })
+
+  it('全屋唯一卫生间只邻私密房间时退化为邻居 id 最小（确定性兜底）', () => {
+    const master = room('master', '主卧', -1.5, 1.0, 3, 3)
+    const study = room('study', '书房', 1.5, 1.0, 3, 3)
+    const bath = room('bathroom1', '卫生间', 0, -1.5, 2, 2)
+    const plan = computeWallPlan([master, study, bath])
+    const bathPlan = plan.get('bathroom1')!
+    const doorEdges = bathPlan.edges.filter((e) => e.segments.some((s) => s.kind === 'door'))
+    expect(doorEdges).toHaveLength(1)
+    // 北墙邻两个私密房间：与 id 较小者（master）开门；书房侧为实心墙
+    expect(hasDoor(edgeOf(bathPlan, 'north'))).toBe(true)
+    expect(hasDoor(edgeOf(plan.get('study')!, 'south'))).toBe(false)
+  })
+
+  it('多个无归属卫生间（无走廊）维持旧规则：邻居 id 最小，不做公共特判（坑 86 边界）', () => {
+    // 两个卫生间时"全屋唯一"前提不成立：bathA 同时邻客厅与卧室，门仍按旧确定性规则
+    // 开向 id 最小的邻居（a_bedroom），而不是开向开放空间
+    const living = room('living', '客厅', 0, -1.5, 4, 3)
+    const bedroom = room('a_bedroom', '卧室', -3.6, -1.5, 2.8, 3)
+    const bathA = room('bathroom_a', '卫生间', -2, 1.0, 2, 2)
+    const bathB = room('bathroom_b', '卫生间', 2.3, 1.0, 2, 2)
+    const plan = computeWallPlan([living, bedroom, bathA, bathB])
+    // bathA 南墙邻 a_bedroom（id 最小者持有方）与 living：门在 a_bedroom 北墙
+    expect(hasDoor(edgeOf(plan.get('a_bedroom')!, 'north'))).toBe(true)
+    expect(hasDoor(edgeOf(plan.get('bathroom_a')!, 'south'))).toBe(false)
+    // bathB 只邻 living：门开向 living
+    expect(hasDoor(edgeOf(plan.get('bathroom_b')!, 'south'))).toBe(true)
+  })
+
   it('入户门开在指定房间的南外墙（居中）并标记为入户', () => {
     const living = room('living', '客厅', 0, -2, 3, 3)
     const master = room('master', '主卧', 0, 2, 3, 3)

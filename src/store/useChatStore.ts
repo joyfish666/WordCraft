@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { ChatMessage } from '../lib/api'
 import { createId } from '../lib/id'
-import { migrateModel } from '../lib/migration'
 import type { SceneModel } from '../types/model'
 import type { Op } from '../types/ops'
 
@@ -101,17 +100,31 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: STORAGE_KEY,
-      // 仅持久化对话记录；生成状态与历史栈均无需保存
-      partialize: (state) => ({ messages: state.messages }),
-      // v3 数据模型：旧持久化消息携带的 v1 模型读取时迁移
-      version: 2,
+      // 仅持久化对话记录；生成状态与历史栈均无需保存。
+      // ⚠️ 消息内嵌的 model（整场景快照）不落盘（2026-08-13 审查批次后续，坑 75 姊妹）：
+      // 多轮对话每轮各带一份完整 SceneModel，持久化会以每次 addMessage 全量重序列化的代价
+      // 快速逼近 localStorage 5MB 配额；model 仅供会话内「撤销生成」使用（generationStack
+      // 已覆盖），刷新后由场景摘要 + 编辑日志替代，无需还原。
+      partialize: (state) => ({
+        messages: state.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          createdAt: m.createdAt,
+        })),
+      }),
+      // v3 持久化格式：消息不再携带 model（v2 存档在迁移时一并剥离，避免继续写回）
+      version: 3,
       migrate: (persisted) => {
-        const state = persisted as { messages?: { model?: unknown }[] }
+        const state = persisted as { messages?: ChatMessageItem[] }
         return {
           ...state,
-          messages: (state.messages ?? []).map((m) =>
-            m.model ? { ...m, model: migrateModel(m.model) } : m,
-          ),
+          messages: (state.messages ?? []).map((m) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            createdAt: m.createdAt,
+          })),
         }
       },
     },

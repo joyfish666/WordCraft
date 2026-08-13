@@ -259,9 +259,10 @@ function buildBedParts(L: number, H: number, W: number, facing: FacingDir): Furn
   const mattressH = clamp(H * 0.38, 0.05, 0.24)
   const frameY = yFromFloor(frameH / 2, H)
   const mattressY = yFromFloor(frameH + mattressH / 2, H)
-  // 床头板：深色、高度近整盒、内凹 2cm 避与床架前脸共面
+  // 床头板：深色、高度近整盒、内凹 2cm 避与床架前脸共面；
+  // 底面抬高 3mm——床头板底面与床架底面同法向共面（低角度看床底互掐，坑 88）
   const headboardH = Math.min(H, clamp(H * 0.95, 0.25, 0.7))
-  const headboardY = yFromFloor(headboardH / 2, H)
+  const headboardY = yFromFloor(headboardH / 2 + 0.003, H)
   const pillowTh = clamp(mattressH * 0.5, 0.05, 0.1)
   const pillowY = yFromFloor(frameH + mattressH - 0.02 + pillowTh / 2, H)
 
@@ -338,7 +339,8 @@ function deskParts(L: number, H: number, W: number): FurniturePart[] {
 function sofaParts(L: number, H: number, W: number): FurniturePart[] {
   const backH = clamp(H * 0.6, 0.3, 0.55)
   const backTh = clamp(W * 0.1, 0.05, 0.09)
-  const backY = yFromFloor(backH / 2, H)
+  // 靠背底面抬高 3mm（坑 88）：与底座底面同法向共面（低看沙发底互掐）
+  const backY = yFromFloor(backH / 2 + 0.003, H)
   const seatTop = clamp(H * 0.5, 0.3, 0.45)
   const seatH = clamp(H * 0.16, 0.08, 0.14)
   const baseH = seatTop - seatH
@@ -347,15 +349,35 @@ function sofaParts(L: number, H: number, W: number): FurniturePart[] {
   const seatY = yFromFloor(seatTop - seatH / 2, H)
   const seatZ = W / 2 - backTh - seatD / 2
   const armTh = clamp(L * 0.06, 0.06, 0.12)
-  const armH = clamp(H * 0.5, 0.25, 0.45)
-  const armY = yFromFloor(armH / 2, H)
+  // 扶手顶面比座面顶面低 2cm（坑 88）：座面/扶手顶面与底座顶面共面且 x/z 重叠——
+  // 沙发两侧（扶手与座面交接带）z-fighting 闪烁；真实沙发坐垫也高于扶手。
+  // 高度受 seatTop 钳制（大沙发时不能为压低顶面而让底面穿地板）
+  const armH = Math.min(clamp(H * 0.5, 0.25, 0.45), seatTop - 0.02)
+  // 底面抬 6mm 且与靠背底（3mm）错开：扶手/靠背/底座三底面同法向共面会互掐（坑 88）。
+  // 大沙发时 armH 被钳到 seatTop-0.02，扶手底本会与靠背底同高，用 max 下限强制错位
+  const armBottom = Math.max(0.006, seatTop - 0.02 - armH + 0.003)
+  const armY = yFromFloor(armBottom + armH / 2, H)
   return [
     { center: [0, baseY, 0], size: [L, baseH, W], shade: 'base' },
-    // 靠背/扶手内凹 3cm，避免与底座前脸/侧面共面（z-fighting）
-    { center: [0, backY, W / 2 - 0.03 - backTh / 2], size: [L, backH, backTh], shade: 'base' },
+    // 靠背/扶手内凹 3cm，避免与底座前脸/侧面共面（z-fighting）；
+    // 靠背两端各内收 6cm——端盖避开底座端盖与扶手外端面（沙发两侧端面互掐，坑 88）
+    {
+      center: [0, backY, W / 2 - 0.03 - backTh / 2],
+      size: [L - 0.12, backH, backTh],
+      shade: 'base',
+    },
     { center: [0, seatY, seatZ], size: [L * 0.94, seatH, seatD], shade: 'secondary' },
-    { center: [L / 2 - 0.03 - armTh / 2, armY, 0], size: [armTh, armH, W * 0.9], shade: 'base' },
-    { center: [-L / 2 + 0.03 + armTh / 2, armY, 0], size: [armTh, armH, W * 0.9], shade: 'base' },
+    // 扶手深度比靠背前脸浅 1cm（坑 88）：扶手前脸与靠背前脸同平面且 x 重叠——沙发前角互掐
+    {
+      center: [L / 2 - 0.03 - armTh / 2, armY, 0],
+      size: [armTh, armH, W * 0.9 - 0.01],
+      shade: 'base',
+    },
+    {
+      center: [-L / 2 + 0.03 + armTh / 2, armY, 0],
+      size: [armTh, armH, W * 0.9 - 0.01],
+      shade: 'base',
+    },
   ]
 }
 
@@ -386,7 +408,8 @@ function chairParts(L: number, H: number, W: number): FurniturePart[] {
 function toiletParts(L: number, H: number, W: number): FurniturePart[] {
   const tankH = clamp(H * 0.5, 0.3, 0.45)
   const tankTh = clamp(W * 0.16, 0.1, 0.16)
-  const tankY = yFromFloor(tankH / 2, H)
+  // 水箱底面抬高 3mm（坑 88）：与底座底面同法向共面（低看马桶底部互掐）
+  const tankY = yFromFloor(tankH / 2 + 0.003, H)
   const baseH = clamp(H * 0.45, 0.28, 0.4)
   const baseY = yFromFloor(baseH / 2, H)
   const baseD = clamp(W * 0.55, 0.32, 0.45)
@@ -452,7 +475,8 @@ function tvCabinetParts(L: number, H: number, W: number): FurniturePart[] {
   // 屏幕宽钳制 ≤ L（东/西朝向交换长宽后 L 可能很小，防越足迹）
   const screenW = Math.min(clamp(L * 0.7, 0.5, 1.2), L)
   const screenH = clamp(H * 1.4, 0.5, 0.65)
-  const screenY = yFromFloor(cabH + screenH / 2, H)
+  // 屏底面比柜顶高 2mm（坑 88）：屏底面与底脚底面同高同法向共面（低看互掐）
+  const screenY = yFromFloor(cabH + screenH / 2 + 0.002, H)
   const footH = clamp(H * 0.15, 0.04, 0.08)
   const footY = yFromFloor(cabH + footH / 2, H)
   return [
@@ -515,7 +539,14 @@ function bookcaseParts(L: number, H: number, W: number): FurniturePart[] {
   return [
     { center: [-L / 2 + sideTh / 2, shellY, 0], size: [sideTh, shellH, W], shade: 'base' },
     { center: [L / 2 - sideTh / 2, shellY, 0], size: [sideTh, shellH, W], shade: 'base' },
-    { center: [0, shellY, -W / 2 + backTh / 2], size: [L, shellH, backTh], shade: 'base' },
+    // 背板宽 = L - 2×侧板厚 + 1cm 搭接、顶面低 3mm、底面抬 3mm、
+    // 背板向柜内移 3mm（坑 88）：旧实现背板通铺整宽且顶/底面与侧板同高、
+    // 背面与侧板背面同平面——书架背面两端、顶面、底面、背面互掐
+    {
+      center: [0, yFromFloor(shellH / 2, H), -W / 2 + backTh / 2 + 0.003],
+      size: [L - sideTh * 2 + 0.01, shellH - 0.006, backTh],
+      shade: 'base',
+    },
     ...shelves,
   ]
 }
@@ -547,7 +578,8 @@ function buildBathtubParts(L: number, H: number, W: number, facing: FacingDir): 
   const tubH = clamp(H * 0.55, 0.35, 0.6)
   const tubY = yFromFloor(tubH / 2, H)
   const innerH = clamp(H * 0.14, 0.05, 0.12)
-  const innerY = yFromFloor(tubH - innerH / 2, H)
+  // 内胆顶面比缸沿低 5mm（坑 88）：旧实现内胆顶面与缸体顶面同高同法向重叠——缸沿一圈互掐
+  const innerY = yFromFloor(tubH - innerH / 2 - 0.005, H)
   const longIsX = L >= W
   const long = Math.max(L, W)
   const short = Math.min(L, W)
@@ -561,7 +593,8 @@ function buildBathtubParts(L: number, H: number, W: number, facing: FacingDir): 
   const faucetX = faucetAlongX !== 0 ? faucetAlongX * (long / 2 - inset) : 0
   const faucetZ = faucetAlongZ !== 0 ? faucetAlongZ * (long / 2 - inset) : 0
   const faucetH = clamp(H * 0.8, 0.3, 0.6)
-  const faucetY = yFromFloor(faucetH / 2, H)
+  // 龙头底面抬高 3mm（坑 88）：与缸体底面同法向共面（低看缸底互掐）
+  const faucetY = yFromFloor(faucetH / 2 + 0.003, H)
   const faucetSize: [number, number, number] = longIsX
     ? [0.06, faucetH, short * 0.35]
     : [short * 0.35, faucetH, 0.06]
@@ -602,10 +635,13 @@ function dressingTableParts(L: number, H: number, W: number): FurniturePart[] {
   const legX = L / 2 - legTh / 2 - 0.02
   const legZ = W / 2 - legTh / 2 - 0.02
   const mirrorH = clamp(H * 1.1, 0.4, 0.7)
-  const mirrorY = yFromFloor(H - topTh + mirrorH / 2, H)
+  // 镜面底面嵌入桌面 2mm、背面内收 3mm、宽度留 1cm 端缝（坑 88）：
+  // 旧实现镜面底面与桌面底面同高、背面与桌面后缘同平面、小桌面时镜面满宽
+  // 端盖与桌面端盖同平面——低看/后看/侧看互掐
+  const mirrorY = yFromFloor(H - topTh + mirrorH / 2 + 0.002, H)
   const mirrorTh = clamp(W * 0.06, 0.02, 0.04)
-  const mirrorZ = W / 2 - mirrorTh / 2
-  const mirrorW = Math.min(clamp(L * 0.8, 0.4, 0.9), L)
+  const mirrorZ = W / 2 - mirrorTh / 2 - 0.003
+  const mirrorW = Math.min(clamp(L * 0.8, 0.4, 0.9), L - 0.01)
   return [
     { center: [0, topY, 0], size: [L, topTh, W], shade: 'base' },
     { center: [legX, legY, legZ], size: [legTh, legH, legTh], shade: 'secondary' },
@@ -638,14 +674,16 @@ function shoeCabinetParts(L: number, H: number, W: number): FurniturePart[] {
   ]
 }
 
-/** 灶台：柜体（主色）+ 台面（副色）+ 四个炉头（深色圆柱）+ 前缘控制条（深色，贴前脸） */
+/** 灶台：柜体（主色）+ 台面（副色）+ 四个炉头（深色圆柱，嵌在台面上沿）+ 前缘控制条（深色，贴前脸） */
 function stoveParts(L: number, H: number, W: number): FurniturePart[] {
   const bodyH = H * 0.85
   const bodyY = yFromFloor(bodyH / 2, H)
   const topTh = clamp(H * 0.07, 0.03, 0.05)
   const topY = yFromFloor(H - topTh / 2, H)
   const burnerR = clamp(Math.min(L, W) * 0.12, 0.04, 0.08)
-  const burnerY = yFromFloor(H - topTh - 0.005, H)
+  // 炉头顶面高出台面 1.9cm、底面嵌入 1mm（坑 88）：旧实现整个炉头埋进台面内部
+  // （topTh 厚 3~5cm，炉头 2cm 高永远被埋）——不可见且无意义
+  const burnerY = yFromFloor(H + 0.009, H)
   const qx = L / 4
   const qz = W / 4
   const burners: FurniturePart[] = (
@@ -662,9 +700,11 @@ function stoveParts(L: number, H: number, W: number): FurniturePart[] {
     shade: 'dark',
   }))
   const ctrlH = clamp(H * 0.12, 0.04, 0.08)
-  const ctrlY = yFromFloor(bodyH - ctrlH / 2, H)
+  // 控制条顶面比柜体顶面低 1.5cm、前脸内收 1.5cm（坑 88）：
+  // 旧实现控制条顶面与柜体顶面同高、前脸与柜体前脸同平面——灶台正面两条共面互掐
+  const ctrlY = yFromFloor(bodyH - 0.015 - ctrlH / 2, H)
   const ctrlTh = clamp(W * 0.08, 0.03, 0.05)
-  const ctrlZ = -W / 2 + ctrlTh / 2
+  const ctrlZ = -W / 2 + ctrlTh / 2 + 0.015
   const ctrlW = Math.min(clamp(L * 0.7, 0.3, 0.8), L)
   return [
     { center: [0, bodyY, 0], size: [L, bodyH, W], shade: 'base' },

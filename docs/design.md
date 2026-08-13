@@ -21,6 +21,12 @@
 > **代码审查修复批次**（2026-08-13 完成，坑 70-73 + 工程化，全部为"静默"类缺陷）：**生成竞态防护**（发送时快照场景引用，返回时场景已变则 confirm 是否覆盖，无 API Key 不清空草稿）、**名称引用契约修复**（executor 先 `findRoom` 解析真实 id 再走 id-only 变更函数，坑 71）、**项目库房间数读取修正**（`root.levels[0].rooms`）、**Ctrl/Cmd+R 不再被劫持**、**墙体方案共享缓存**（`computeAllWallPlansCached`，坑 72）、**PlanRig 取景按包围盒签名失效**（坑 73）、**CI 补 lint/format/typecheck/test**、**顶层 ErrorBoundary**。验收：403 用例全绿（新增 15 用例）。
 >
 > **房屋造型材质层**（2026-08-13 完成，解决"各房间仅颜色不同、无材质纹理"的观感问题；纯前端零外部资源，数据模型/ops 契约/分享码零改动）：**程序化纹理**（`lib/materials.ts`，6 张 Canvas 贴图全局缓存，周期函数生成天然无缝平铺，`RepeatWrapping` + 世界坐标 UV 按米对齐板缝）；**材质分类**（地板按房间名匹配——卫生间/厨房瓷砖、走廊木地板、阳台防腐木、其余木地板，中性灰纹理 × 房间识别色淡化 tint——**识别色保留在地板、墙身中性化**；家具按（种类, 明度档）匹配 木纹/织物/金属/陶瓷/玻璃/塑料；色盲模式统一中性灰靠明度/图案区分）；**造型细节**（彩色踢脚线、门套、实体窗框替换线框示意、外墙六面多材质、外墙基座勒脚——`WallEdge.shared=false` 判定，聚焦/虚化/线框/截图全兼容）；**写实化**（ACES 色调映射 + PCFSoft 软阴影 + drei 程序化天空/地平线雾 + `RoomEnvironment` 环境反射供玻璃/金属、重配光，全部零外部资源）；**室外地面**（草地 + 入户石板小径，小径按真实门段对齐门洞中心）；**屋顶已移除**（一层户型檐口遮挡内部视野，见 §7/§8 决策 9）；**渲染缺陷修复**（UV 双重缩放 tile² 修复、同法向共面 z-fighting 逐一错位，坑 77/78）。验收：490 用例全绿。
+>
+> **审查批次后续（坑 80-84 + 工程化，2026-08-13 晚完成，批 A/B/C）**：**性能热路径**——**拖拽预览不再逐帧写 localStorage**（persist 走 `previewAwareStorage` 存储层开关，坑 75 的姊妹问题：脏检查不再每帧 stringify，但 persist 每次 setState 仍同步序列化全场景写入）、**对话消息不再持久化场景快照**（`useChatStore` partialize/migrate 剥离 `model`，persist 升 v3——多轮对话每轮一份完整 SceneModel 逼近 5MB 配额）、**RoomShell 地板几何按内容签名 memo**（拖拽预览每帧新 WallPlan 引用但内容不变，Shape/ExtrudeGeometry 不再每帧重建，坑 84）；**契约漂移**——**`addRoom.position` 三层贯通**（提示词/`RoomSpec` 有、op 类型/schema/执行器无：v2 快照按 position 布局的新房间全部落"排东侧"兜底，静默几何错误；落点优先级 footprint > position > relativeTo > 东侧，坑 82）、**`setOpenings.side` 改为可选**（edgeIndex-only 合法、schema 与执行器一致，UI 不再 `as Op` 绕过校验，坑 83）、**快照 diff 全字段透传**（含此前丢失的家具 rotationY/description）；**工程化**——format 门修复（HEAD 上 6 文件未格式化，CI 实际是红的）、CI 补 build 门、deploy 补测试门、`three-stdlib` 声明为直接依赖、`npm audit` 清零 high（nanoid 链）、zustand persist `getStorage` → `createJSONStorage`。验收：497 用例全绿（新增 7 用例）。
+>
+> **用户反馈修复批次（坑 86-87，2026-08-13 晚完成）**：**全屋唯一卫生间按公共卫生间处理**——`bathroomDoorTargets` 预扫描（roomGeometry.ts）对无命名归属的卫生间"走廊优先、无走廊时邻居 id 最小"，无走廊自由布局里单卫生间可能落到主卧专属（门只开向主卧）；现顶层卫生间计数为 1 时目标优先级改为 **走廊 > 开放空间（客厅/餐厅/厨房）> 邻居 id 最小**，嵌套卫生间不参与"唯一"计数（嵌在卧室内的显然是专属），命名归属与多卫生间场景不变（坑 86）；**家具常配套件自动补全**——新增 `lib/furnitureCompleteness.ts`（书桌/梳妆台→椅、餐桌/圆桌→餐椅×2、床→床头柜×2、沙发→茶几），挂进 `applyFurnitureConventions`（auto 模板与快照路径，custom 自由布局与手动编辑不侵入），用户明确不要时在房间任一家具 `description` 写"不要X"即整房间跳过（用户要求优先，坑 87）；提示词第 6/7 条同步。验收：513 用例全绿（新增 16 用例）。
+>
+> **渲染共面审计批次（坑 88，2026-08-13 晚完成）**：用户反馈示例模型**墙转角**与**灶台/沙发两侧**仍闪烁（停止移动相机后一段时间才消失——互掐面多为端盖/顶面的细条带，转动相机时最明显）。坑 77 只修了"底面/外侧面"错位，**端盖与顶面**漏网：① **墙转角**——踢脚线/勒脚端盖与墙盒端盖同法向共面（每处转角三面互掐），踢脚线/勒脚长度两端各内收 2mm（`END_CLEAR`）；② **家具部件同高顶面/端盖/底面**（furniturePresets）——沙发扶手顶面=座面顶面、三底面同落地板、靠背/扶手/底座端盖与侧脸多对共面；灶台控制条顶面/前脸=柜体顶面/前脸（**顺带修复炉头整体埋在台面内不可见**）；浴缸内胆顶面=缸沿；书架背板通铺整宽（朝向旋转后 3 处共面）；梳妆镜底面/背面/满宽端盖；床头板/水箱/龙头/电视屏底面——全部逐对分配错位（顶面低 2cm~5mm、端盖内收 3cm~1cm、底面抬 3~6mm 递增错开）；③ **共面审计回归防线**——`furniturePresets.test.ts` 61 用例（全种类 × 全档尺寸 × 四朝向枚举所有 box 面，断言无「同法向 + 同平面 + 区间重叠」）。验收：574 用例全绿（新增 61 用例）。
 
 本文档描述言筑下一代的完整设计方案：在不推翻"语义/几何分离"这一已验证核心的前提下，让用户能够**自由输入、自由布局、自由编辑**，真正设计出自己心中的房屋。
 
@@ -139,7 +145,7 @@ LLM 不再输出整屋快照，而是输出一组操作（Zod union 白名单 + 
 type Op =
   | { op: 'setHouse', name?, style?, entranceRoomId?, entranceDir? }   // entranceRoomId/entranceDir：迁移入户门与方向（P3 补）
   | { op: 'addRoom', id?, name, dimensions?, side?, relativeTo?: { roomId, dir },
-      footprint?, furniture?: FurnitureSpec[], nestedRooms?: RoomSpec[] }
+      position?, footprint?, furniture?: FurnitureSpec[], nestedRooms?: RoomSpec[] }  // position：绝对位置（坑 82 补，优先级 footprint > position > relativeTo）
   | { op: 'updateRoom', id, patch: { name?, dimensions?, side?, footprint? } }
   | { op: 'removeRoom', id }
   | { op: 'moveRoom', id, relativeTo?: { roomId, dir } }
@@ -147,8 +153,8 @@ type Op =
   | { op: 'splitRoom', id, axis: 'x' | 'z', position, name? }          // 矩形房间沿轴线切两半，共墙自动开门（P4 补）
   | { op: 'mergeRoom', keep, remove }                                  // 并集为合法矩形的相邻房间合并（P4 补）
   | { op: 'addFurniture' | 'updateFurniture' | 'removeFurniture', ... }
-  | { op: 'setOpenings', roomId, side, kind: 'door' | 'window', from?, to?,
-      edgeIndex?, remove? }        // edgeIndex 精确指边、remove 删除开洞（P4 补）
+  | { op: 'setOpenings', roomId, side?, kind: 'door' | 'window', from?, to?,
+      edgeIndex?, remove? }        // side（坑 83 起可选，LLM 语义）与 edgeIndex（P4 UI 精确指边）至少其一；remove 删除开洞（P4 补）
   | { op: 'addAdjacency', roomId, neighborId, side }
   | { op: 'macro', name: 'corridor' | 'living' | 'custom', params? }   // 复用旧布局引擎
 ```
@@ -254,6 +260,9 @@ type Op =
 | ~~全面审查与重构批次~~ ✅（2026-08-13，坑 74-76） | 数据入口校验（v3 schema）+ 几何共享模块 + executor 拆分 + 脏标记收敛（消除拖拽每帧 stringify）+ SSE 测试补齐 + 数组输出提取 + 对话框 a11y + i18n 补漏与死代码清理 + 文档同步 | 安全/可维护性/a11y/文档全维度提升（**已完成**，468 用例，新增 23 用例） |
 | ~~房屋造型材质层~~ ✅（2026-08-13） | 程序化纹理 + 地板/墙/家具材质分类 + 踢脚线/门套/窗框 + 室外地面/入户小径 + 半球光/实时阴影 | 房间不再"只有颜色"；外立面完整；聚焦室内/平面图/截图/色盲/线框全部兼容（**已完成**，488 用例，新增 20 用例） |
 | ~~材质层写实化与修复批次~~ ✅（2026-08-13 晚，坑 77-79） | 写实化（ACES/软阴影/程序化天空/雾/环境反射/重配光）+ UV 双重缩放修复 + 色板层次 + 纹理重绘 + 基座勒脚 + 反射玻璃 + 门横杠移除 + 小路对齐门洞 + **屋顶移除**（用户决策）+ 同法向共面 z-fighting 修复 | 观感达到"写实建筑"基调、连接处不再闪烁、一层户型内部无遮挡（**已完成**，490 用例，新增 2 用例） |
+| ~~审查批次后续：批 A/B/C~~ ✅（2026-08-13 晚，坑 80-85） | 性能热路径（拖拽预览抑制 persist 写入 + 对话消息剥离场景快照持久化 + 地板几何内容签名 memo）+ 契约漂移（addRoom.position 三层贯通 + setOpenings.side 可选 + 快照 diff 全字段透传）+ 工程化（format 门修复/CI build 门/deploy 测试门/three-stdlib 声明/audit 清零） | 拖拽与多轮对话不再全量序列化、快照容错路径无静默几何错误、契约三层一致、CI 全绿可验证（**已完成**，497 用例，新增 7 用例） |
+| ~~用户反馈修复批次~~ ✅（2026-08-13 晚，坑 86-87） | 全屋唯一卫生间公共语义（走廊 > 开放空间 > 邻居 id 最小）+ 家具常配套件自动补全（书桌→椅/餐桌→餐椅/床→床头柜/沙发→茶几，description 排除通道） | 单卫生间不再变"某卧室专属"、生成房间不再缺常配套件、用户明确不要不补（**已完成**，513 用例，新增 16 用例） |
+| ~~渲染共面审计批次~~ ✅（2026-08-13 晚，坑 88） | 墙转角端盖互掐（踢脚线/勒脚端内收 `END_CLEAR`）+ 家具部件同高顶面/端盖/底面逐对错位（沙发/灶台/浴缸/书架/梳妆镜/床头板等）+ 灶台炉头可见化 + 共面审计 61 用例回归防线 | 转角与家具细条带互掐消除、炉头可见、后续改部件几何有审计兜底（**已完成**，574 用例，新增 61 用例） |
 | P5（可选） | 约束图/楼层/风格系统 | — |
 
 每阶段独立上线：`npm test` 全绿 + 手工回归清单通过后才进入下一阶段。

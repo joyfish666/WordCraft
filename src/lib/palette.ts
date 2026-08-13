@@ -79,7 +79,10 @@ function parseHex(hex: string): [number, number, number] {
 }
 
 function toHex(r: number, g: number, b: number): string {
-  const c = (v: number) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0')
+  const c = (v: number) =>
+    Math.round(Math.min(255, Math.max(0, v)))
+      .toString(16)
+      .padStart(2, '0')
   return `#${c(r)}${c(g)}${c(b)}`
 }
 
