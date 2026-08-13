@@ -17,7 +17,7 @@ import type {
 // 按 id diff 成 ops 再执行——改动半径与手写 ops 相同
 // ---------------------------------------------------------------------------
 
-/** 由 v2 房间构造 addRoom 可用的 RoomSpec（含嵌套与家具） */
+/** 由 v2 房间构造 addRoom 可用的 RoomSpec（含嵌套与家具，全字段透传不丢数据） */
 function roomSpecFromV2(room: RoomNodeV2): RoomSpec {
   return {
     id: room.id,
@@ -28,7 +28,14 @@ function roomSpecFromV2(room: RoomNodeV2): RoomSpec {
     footprint: room.footprint,
     furniture: room.children
       .filter((c) => c.type !== 'room')
-      .map((f) => ({ id: f.id, name: f.name, dimensions: f.dimensions, position: f.position })),
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        dimensions: f.dimensions,
+        position: f.position,
+        rotationY: f.rotationY,
+        description: f.description,
+      })),
     nestedRooms: room.children.filter((c) => c.type === 'room').map(roomSpecFromV2),
   }
 }
@@ -114,6 +121,8 @@ function diffRooms(currentRooms: RoomNode[], targetRooms: RoomNodeV2[]): Op[] {
   for (const t of targetRooms) {
     if (!currentRooms.some((c) => c.id === t.id)) {
       const spec = roomSpecFromV2(t)
+      // position/footprint/relativeTo 全量透传（历史坑：缺 position 时按 position 布局的
+      // custom 快照房间全部落到"排东侧"兜底，静默几何错误；addRoom op 需显式携带）
       ops.push({
         op: 'addRoom',
         id: spec.id,
@@ -121,6 +130,7 @@ function diffRooms(currentRooms: RoomNode[], targetRooms: RoomNodeV2[]): Op[] {
         dimensions: spec.dimensions,
         side: spec.side,
         footprint: spec.footprint,
+        position: spec.position,
         furniture: spec.furniture,
         nestedRooms: spec.nestedRooms,
       })

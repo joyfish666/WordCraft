@@ -54,10 +54,16 @@ export function applySetOpenings(
 ): SceneModel {
   const room = findRoom(scene, op.roomId)
   if (!room) throw new Error(`房间「${op.roomId}」不存在`)
-  // P4：UI 提供精确边下标（edgeIndex）；LLM 沿用 side（取该方向最长边，确定性）
-  const edge =
-    op.edgeIndex !== undefined ? edgeByIndex(room, op.edgeIndex) : findEdgeBySide(room, op.side)
-  if (!edge) throw new Error(`房间「${op.roomId}」没有 ${op.side} 向边`)
+  // P4：UI 提供精确边下标（edgeIndex）；LLM 沿用 side（取该方向最长边，确定性）。
+  // 跨字段约束「至少其一」在此兜底（schema 无法表达 refine，见 ops.schema 注释）
+  let edge: { edgeIndex: number; length: number } | null = null
+  if (op.edgeIndex !== undefined) edge = edgeByIndex(room, op.edgeIndex)
+  else if (op.side !== undefined) edge = findEdgeBySide(room, op.side)
+  else throw new Error('setOpenings 必须提供 side 或 edgeIndex 之一')
+  if (!edge) {
+    const via = op.edgeIndex !== undefined ? `边下标 ${op.edgeIndex}` : `${op.side} 向`
+    throw new Error(`房间「${op.roomId}」没有 ${via}边`)
+  }
 
   if (op.remove) {
     // P4 删除开洞：同边同种；from/to 给定时只删与之重叠的开洞，省略则整边清除

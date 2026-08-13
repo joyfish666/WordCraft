@@ -126,52 +126,52 @@ describe('buildFurnitureParts', () => {
   })
 })
 
-describe('包围盒约束（四朝向）', () => {
-  // 每类只保留最小/最大两档（覆盖钳制上下限），去掉中间档避免重复
-  const SIZES: Array<[string, FurnitureKind, number, number, number]> = [
-    ['小床', 'bed', 0.8, 0.2, 0.6],
-    ['大床', 'bed', 2.4, 0.6, 1.8],
-    ['小衣柜', 'wardrobe', 0.5, 1.2, 0.4],
-    ['大衣柜', 'wardrobe', 2, 2.4, 0.7],
-    ['小书桌', 'desk', 0.6, 0.5, 0.4],
-    ['大书桌', 'desk', 1.8, 0.8, 0.7],
-    ['小沙发', 'sofa', 1.2, 0.5, 0.6],
-    ['大沙发', 'sofa', 2.8, 1.0, 1.2],
-    ['小椅子', 'chair', 0.4, 0.6, 0.4],
-    ['高椅子', 'chair', 0.5, 1.0, 0.55],
-    ['小马桶', 'toilet', 0.4, 0.6, 0.5],
-    ['大马桶', 'toilet', 0.6, 0.85, 0.8],
-    ['小洗手池', 'sink', 0.5, 0.6, 0.4],
-    ['大洗手池', 'sink', 0.9, 0.9, 0.55],
-    ['小冰箱', 'fridge', 0.5, 1.4, 0.5],
-    ['大冰箱', 'fridge', 0.7, 1.8, 0.65],
-    ['小电视柜', 'tvCabinet', 1.2, 0.4, 0.4],
-    ['大电视柜', 'tvCabinet', 2, 0.5, 0.45],
-    ['小餐桌', 'table', 0.8, 0.5, 0.5],
-    ['大餐桌', 'table', 1.5, 0.75, 0.8],
-    ['小圆桌', 'roundTable', 0.8, 0.5, 0.8],
-    ['大圆桌', 'roundTable', 1.5, 0.75, 1.5],
-    ['小书架', 'bookcase', 0.6, 1.2, 0.3],
-    ['大书架', 'bookcase', 1.5, 2.0, 0.4],
-    ['小洗衣机', 'washer', 0.5, 0.7, 0.5],
-    ['大洗衣机', 'washer', 0.65, 0.9, 0.65],
-    ['小浴缸', 'bathtub', 1.2, 0.5, 0.7],
-    ['大浴缸', 'bathtub', 1.8, 0.7, 0.9],
-    ['竖浴缸', 'bathtub', 0.7, 0.6, 1.6], // 长轴沿 z
-    ['小床头柜', 'nightstand', 0.4, 0.4, 0.4],
-    ['大床头柜', 'nightstand', 0.6, 0.6, 0.6],
-    ['小梳妆台', 'dressingTable', 0.6, 0.5, 0.4],
-    ['大梳妆台', 'dressingTable', 1.2, 0.75, 0.5],
-    ['小鞋柜', 'shoeCabinet', 0.6, 0.8, 0.3],
-    ['大鞋柜', 'shoeCabinet', 1.2, 1.1, 0.4],
-    ['小灶台', 'stove', 0.6, 0.8, 0.5],
-    ['大灶台', 'stove', 0.9, 0.85, 0.6],
-    ['小烤箱', 'oven', 0.5, 0.5, 0.5],
-    ['大烤箱', 'oven', 0.6, 0.6, 0.55],
-    ['小微波炉', 'microwave', 0.45, 0.28, 0.3],
-    ['大微波炉', 'microwave', 0.65, 0.32, 0.4],
-  ]
+/** 每类只保留最小/最大两档（覆盖钳制上下限），去掉中间档避免重复（包围盒约束与共面审计共用） */
+const SIZES: Array<[string, FurnitureKind, number, number, number]> = [
+  ['小床', 'bed', 0.8, 0.2, 0.6],
+  ['大床', 'bed', 2.4, 0.6, 1.8],
+  ['小衣柜', 'wardrobe', 0.5, 1.2, 0.4],
+  ['大衣柜', 'wardrobe', 2, 2.4, 0.7],
+  ['小书桌', 'desk', 0.6, 0.5, 0.4],
+  ['大书桌', 'desk', 1.8, 0.8, 0.7],
+  ['小沙发', 'sofa', 1.2, 0.5, 0.6],
+  ['大沙发', 'sofa', 2.8, 1.0, 1.2],
+  ['小椅子', 'chair', 0.4, 0.6, 0.4],
+  ['高椅子', 'chair', 0.5, 1.0, 0.55],
+  ['小马桶', 'toilet', 0.4, 0.6, 0.5],
+  ['大马桶', 'toilet', 0.6, 0.85, 0.8],
+  ['小洗手池', 'sink', 0.5, 0.6, 0.4],
+  ['大洗手池', 'sink', 0.9, 0.9, 0.55],
+  ['小冰箱', 'fridge', 0.5, 1.4, 0.5],
+  ['大冰箱', 'fridge', 0.7, 1.8, 0.65],
+  ['小电视柜', 'tvCabinet', 1.2, 0.4, 0.4],
+  ['大电视柜', 'tvCabinet', 2, 0.5, 0.45],
+  ['小餐桌', 'table', 0.8, 0.5, 0.5],
+  ['大餐桌', 'table', 1.5, 0.75, 0.8],
+  ['小圆桌', 'roundTable', 0.8, 0.5, 0.8],
+  ['大圆桌', 'roundTable', 1.5, 0.75, 1.5],
+  ['小书架', 'bookcase', 0.6, 1.2, 0.3],
+  ['大书架', 'bookcase', 1.5, 2.0, 0.4],
+  ['小洗衣机', 'washer', 0.5, 0.7, 0.5],
+  ['大洗衣机', 'washer', 0.65, 0.9, 0.65],
+  ['小浴缸', 'bathtub', 1.2, 0.5, 0.7],
+  ['大浴缸', 'bathtub', 1.8, 0.7, 0.9],
+  ['竖浴缸', 'bathtub', 0.7, 0.6, 1.6], // 长轴沿 z
+  ['小床头柜', 'nightstand', 0.4, 0.4, 0.4],
+  ['大床头柜', 'nightstand', 0.6, 0.6, 0.6],
+  ['小梳妆台', 'dressingTable', 0.6, 0.5, 0.4],
+  ['大梳妆台', 'dressingTable', 1.2, 0.75, 0.5],
+  ['小鞋柜', 'shoeCabinet', 0.6, 0.8, 0.3],
+  ['大鞋柜', 'shoeCabinet', 1.2, 1.1, 0.4],
+  ['小灶台', 'stove', 0.6, 0.8, 0.5],
+  ['大灶台', 'stove', 0.9, 0.85, 0.6],
+  ['小烤箱', 'oven', 0.5, 0.5, 0.5],
+  ['大烤箱', 'oven', 0.6, 0.6, 0.55],
+  ['小微波炉', 'microwave', 0.45, 0.28, 0.3],
+  ['大微波炉', 'microwave', 0.65, 0.32, 0.4],
+]
 
+describe('包围盒约束（四朝向）', () => {
   it.each(SIZES)(
     '%s：四朝向部件水平均在足迹内、底面贴地、顶部允许向上悬挑',
     (_label, kind, L, H, W) => {
@@ -194,6 +194,73 @@ describe('包围盒约束（四朝向）', () => {
           expect(p.center[1] + p.size[1] / 2, `facing=${facing}`).toBeLessThanOrEqual(
             H / 2 + 2 * H + 1e-6,
           )
+        }
+      }
+    },
+  )
+})
+
+describe('共面审计（坑 88：z-fighting 只发生在「同法向 + 共面 + 重叠」的面之间）', () => {
+  // 每类 × 全档尺寸 × 四朝向：任意两个部件的任意两个 box 面不得
+  // 「同法向 + 同一平面 + 面内区间重叠」——否则渲染时互掐闪烁。
+  // 圆柱部件无平面，跳过。
+  interface Face {
+    n: [number, number, number]
+    plane: number
+    a: [number, number]
+    b: [number, number]
+  }
+  function facesOf(p: FurniturePart): Face[] {
+    if (p.shape === 'cylinder') return []
+    const [sx, sy, sz] = p.size
+    const [cx, cy, cz] = p.center
+    const hx = sx / 2
+    const hy = sy / 2
+    const hz = sz / 2
+    return [
+      { n: [1, 0, 0], plane: cx + hx, a: [cy - hy, cy + hy], b: [cz - hz, cz + hz] },
+      { n: [-1, 0, 0], plane: cx - hx, a: [cy - hy, cy + hy], b: [cz - hz, cz + hz] },
+      { n: [0, 1, 0], plane: cy + hy, a: [cx - hx, cx + hx], b: [cz - hz, cz + hz] },
+      { n: [0, -1, 0], plane: cy - hy, a: [cx - hx, cx + hx], b: [cz - hz, cz + hz] },
+      { n: [0, 0, 1], plane: cz + hz, a: [cx - hx, cx + hx], b: [cy - hy, cy + hy] },
+      { n: [0, 0, -1], plane: cz - hz, a: [cx - hx, cx + hx], b: [cy - hy, cy + hy] },
+    ]
+  }
+  const sameNormal = (x: Face, y: Face): boolean =>
+    x.n[0] === y.n[0] && x.n[1] === y.n[1] && x.n[2] === y.n[2]
+  const overlap = (x: [number, number], y: [number, number]): boolean =>
+    Math.min(x[1], y[1]) - Math.max(x[0], y[0]) > 1e-6
+
+  const COMBOS: Array<[string, FurnitureKind, number, number, number]> = [
+    ...SIZES,
+    // 全种类 × 默认尺寸（覆盖 SIZES 未列的档位与钳制分支）
+    ...ALL_KINDS.map(
+      (k) => [`默认-${k}`, k, 1.2, 0.75, 0.6] as [string, FurnitureKind, number, number, number],
+    ),
+  ]
+
+  it.each(COMBOS)(
+    '%s：部件间无「同法向 + 共面 + 重叠」的面（z-fighting 审计）',
+    (_label, kind, L, H, W) => {
+      const facings = ['north', 'south', 'east', 'west'] as const
+      for (const facing of facings) {
+        const parts = buildFurnitureParts(kind, L, H, W, facing)
+        const all: Array<{ part: string; face: Face }> = []
+        parts.forEach((p, i) => {
+          for (const f of facesOf(p)) all.push({ part: `${i}:${p.shade}`, face: f })
+        })
+        for (let i = 0; i < all.length; i++) {
+          for (let j = i + 1; j < all.length; j++) {
+            const a = all[i]
+            const b = all[j]
+            if (!sameNormal(a.face, b.face)) continue
+            if (Math.abs(a.face.plane - b.face.plane) > 1e-7) continue
+            if (overlap(a.face.a, b.face.a) && overlap(a.face.b, b.face.b)) {
+              throw new Error(
+                `facing=${facing} ${kind} 部件 ${a.part} 与 ${b.part} 的面共面重叠（法向 ${a.face.n}、平面 ${a.face.plane}）——z-fighting`,
+              )
+            }
+          }
         }
       }
     },

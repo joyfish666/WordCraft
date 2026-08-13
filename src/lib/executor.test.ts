@@ -8,6 +8,7 @@ import {
 } from './footprint'
 import { doorZoneRect } from './furniturePlacement'
 import { diffSceneV2, emptyScene, executeOps, findRoom } from './executor'
+import { opSchema } from '../schemas/ops.schema'
 import { findNodeById } from './modelTree'
 import {
   DOOR_WIDTH,
@@ -345,6 +346,71 @@ describe('executeOps - 房间增删改', () => {
     ])
     const result = executeOps(base, [{ op: 'addRoom', id: 'a', name: '重复' }])
     expect(result.skipped.length).toBe(1)
+  })
+
+  it('addRoom position 指定绝对位置（房间中心，优先级高于 relativeTo）', () => {
+    const base = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'a',
+              name: '房A',
+              dimensions: { length: 3, width: 3, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+            },
+          ],
+        },
+      },
+    ])
+    // position 与 relativeTo 同时给出时 position 生效（更显式，与 macro custom 语义一致）
+    const scene = run(
+      [
+        {
+          op: 'addRoom',
+          id: 'p',
+          name: '定位房',
+          dimensions: { length: 2, width: 2, height: 2.8 },
+          position: { x: 6, y: 1.4, z: 2 },
+          relativeTo: { roomId: 'a', dir: 'east' },
+        },
+      ],
+      base,
+    )
+    const p = findNodeById(scene.root, 'p') as RoomNode
+    expect(roomCenter(p).x).toBeCloseTo(6, 5)
+    expect(roomCenter(p).z).toBeCloseTo(2, 5)
+  })
+
+  it('addRoom 显式 footprint 优先于 position（以顶点环为准）', () => {
+    const base = run([
+      { op: 'macro', name: 'custom', params: { rooms: [{ id: 'a', name: '房A' }] } },
+    ])
+    const scene = run(
+      [
+        {
+          op: 'addRoom',
+          id: 'f',
+          name: '足迹房',
+          position: { x: 99, y: 1.4, z: 99 },
+          footprint: [
+            { x: 1, z: 1 },
+            { x: 3, z: 1 },
+            { x: 3, z: 3 },
+            { x: 1, z: 3 },
+          ],
+        },
+      ],
+      base,
+    )
+    const f = findNodeById(scene.root, 'f') as RoomNode
+    const b = footprintBounds(f.footprint)
+    expect(b.minX).toBeCloseTo(1, 5)
+    expect(b.minZ).toBeCloseTo(1, 5)
+    expect(b.maxX).toBeCloseTo(3, 5)
+    expect(b.maxZ).toBeCloseTo(3, 5)
   })
 
   it('updateRoom 修改名称与尺寸（房间被缩放、高度更新）', () => {
@@ -1222,6 +1288,50 @@ describe('executeOps - 开洞（setOpenings）', () => {
     expect(room.doors[0].edgeIndex).toBe(2) // 精确命中东段南墙而非最长的西段南墙
   })
 
+  it('setOpenings 可只给 edgeIndex 不给 side（契约可选化后 schema 放行、执行器正常）', () => {
+    const base = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'r',
+              name: '卧室',
+              dimensions: { length: 4, width: 3, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+            },
+          ],
+        },
+      },
+    ])
+    // zod 校验层：edgeIndex-only 合法（此前 schema 强索 side，UI 只能 as Op 绕过）
+    expect(
+      opSchema.safeParse({ op: 'setOpenings', roomId: 'r', kind: 'door', edgeIndex: 1 }).success,
+    ).toBe(true)
+    const scene = executeOps(base, [
+      { op: 'setOpenings', roomId: 'r', kind: 'door', edgeIndex: 1 },
+    ]).scene
+    const room = findNodeById(scene.root, 'r') as RoomNode
+    expect(room.doors).toHaveLength(1)
+    expect(room.doors[0].edgeIndex).toBe(1) // 东墙
+    // 删除路径同样支持 edgeIndex-only
+    const s1 = executeOps(scene, [
+      { op: 'setOpenings', roomId: 'r', kind: 'door', edgeIndex: 1, remove: true },
+    ]).scene
+    expect((findNodeById(s1.root, 'r') as RoomNode).doors).toHaveLength(0)
+  })
+
+  it('setOpenings side 与 edgeIndex 均缺省时该条失败跳过（跨字段兜底在执行器）', () => {
+    const base = run([
+      { op: 'macro', name: 'custom', params: { rooms: [{ id: 'r', name: '卧室' }] } },
+    ])
+    const result = executeOps(base, [{ op: 'setOpenings', roomId: 'r', kind: 'door' as const }])
+    expect(result.applied).toBe(0)
+    expect(result.skipped.length).toBe(1)
+    expect(result.skipped[0]).toContain('side 或 edgeIndex')
+  })
+
   it('P4 remove: true 删除同边同种开洞（可只删重叠区间）', () => {
     const base = run([
       {
@@ -1953,6 +2063,59 @@ describe('diffSceneV2 - 快照容错路径', () => {
     const target = v2Scene([roomV2('a', '房A')])
     const ops = diffSceneV2(base, target)
     expect(ops).toEqual([])
+  })
+
+  it('快照新增房间时 addRoom 透传 position（修复按 position 布局的 custom 快照全部落到东侧）', () => {
+    const base = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          rooms: [
+            {
+              id: 'a',
+              name: '房A',
+              dimensions: { length: 3, width: 3, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+            },
+          ],
+        },
+      },
+    ])
+    // v2 快照中新房间带显式 position（custom 布局）
+    const target = v2Scene([
+      roomV2('a', '房A'),
+      {
+        id: 'b',
+        type: 'room',
+        name: '房B',
+        dimensions: { length: 2, width: 2, height: 2.8 },
+        position: { x: 5, y: 1.4, z: 3 },
+        children: [
+          {
+            id: 'bf',
+            type: 'furniture',
+            name: '柜子',
+            dimensions: { length: 1, width: 0.5, height: 1 },
+            position: { x: 0.4, y: 0.5, z: 0 },
+            rotationY: 90,
+            description: '高柜',
+          },
+        ],
+      },
+    ])
+    const ops = diffSceneV2(base, target)
+    const add = ops.find((o) => o.op === 'addRoom' && o.id === 'b')
+    expect(add && add.op === 'addRoom' && add.position).toEqual({ x: 5, y: 1.4, z: 3 })
+    // 家具规格全字段透传（此前 rotationY/description 在快照路径静默丢失）
+    expect(add && add.op === 'addRoom' && add.furniture).toEqual([
+      expect.objectContaining({ id: 'bf', rotationY: 90, description: '高柜' }),
+    ])
+    const scene = executeOps(base, ops).scene
+    const b = findNodeById(scene.root, 'b') as RoomNode
+    expect(roomCenter(b).x).toBeCloseTo(5, 5)
+    expect(roomCenter(b).z).toBeCloseTo(3, 5)
+    expect((b.furniture[0] as FurnitureNode).rotationY).toBe(90)
   })
 })
 

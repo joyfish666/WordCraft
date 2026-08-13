@@ -1,4 +1,5 @@
 import { Edges } from '@react-three/drei'
+import { useMemo } from 'react'
 import * as THREE from 'three'
 import {
   BACK_AXIS,
@@ -92,6 +93,12 @@ const POST_CLEAR = 0.0015
 const PLINTH_CLEAR = 0.0025
 /** 勒脚内侧面比踢脚线外侧面再深 0.5mm，两者不与墙面、也不互相共面 */
 const PLINTH_INNER_CLEAR = 0.0015
+/**
+ * 踢脚线/勒脚端盖内收量（坑 88）：踢脚线与勒脚沿墙线通铺，其**端盖**与墙盒端盖
+ * 在同一平面（同法向 + 共面 + 重叠）→ 每处墙转角三面互掐闪烁。端部各内收 2mm，
+ * 端盖平面离开墙端平面，转角处不再共面（2mm 端缝是标准伸缩缝观感）。
+ */
+const END_CLEAR = 0.002
 
 /**
  * 渲染沿局部 X 轴的一段墙。
@@ -172,7 +179,7 @@ function WallSegmentBox({
           )}
         </mesh>
         {/* 基座勒脚：外墙底部深色压边，外凸墙面（门段留空）；
-            底面 +2.5mm、内侧面深 1.5mm——与墙底/踢脚线外侧面均不共面 */}
+            底面 +2.5mm、内侧面深 1.5mm、端部内收 2mm——与墙底/踢脚线外侧面/墙端盖均不共面 */}
         {exterior && (
           <mesh
             position={[
@@ -183,13 +190,17 @@ function WallSegmentBox({
             castShadow
           >
             <boxGeometry
-              args={[len, PLINTH_H, thickness + PLINTH_PROTRUDE - PLINTH_INNER_CLEAR]}
+              args={[
+                len - END_CLEAR * 2,
+                PLINTH_H,
+                thickness + PLINTH_PROTRUDE - PLINTH_INNER_CLEAR,
+              ]}
             />
             <meshStandardMaterial color={PLINTH_COLOR} roughness={0.9} {...trim} />
           </mesh>
         )}
         {/* 踢脚线：贴墙内侧，色 = 房间识别色加深；
-            底面 +1mm、外侧面内收 1mm——不与墙底/墙面/勒脚共面 */}
+            底面 +1mm、外侧面内收 1mm、端部内收 2mm——不与墙底/墙面/勒脚/墙端盖共面 */}
         <mesh
           position={[
             center,
@@ -198,7 +209,7 @@ function WallSegmentBox({
           ]}
           castShadow
         >
-          <boxGeometry args={[len, SKIRTING_H, 0.02]} />
+          <boxGeometry args={[len - END_CLEAR * 2, SKIRTING_H, 0.02]} />
           <meshStandardMaterial
             {...skirtingParams}
             color={ghosted ? '#a29a88' : skirtingParams.color}
@@ -217,7 +228,7 @@ function WallSegmentBox({
     const frameW = 0.04
     return (
       <>
-        {/* 基座勒脚延续（窗台下）；底面 +2.5mm、内侧面深 1.5mm 不共面 */}
+        {/* 基座勒脚延续（窗台下）；底面 +2.5mm、内侧面深 1.5mm、端部内收 2mm 不共面 */}
         {exterior && (
           <mesh
             position={[
@@ -228,7 +239,11 @@ function WallSegmentBox({
             castShadow
           >
             <boxGeometry
-              args={[len, PLINTH_H, thickness + PLINTH_PROTRUDE - PLINTH_INNER_CLEAR]}
+              args={[
+                len - END_CLEAR * 2,
+                PLINTH_H,
+                thickness + PLINTH_PROTRUDE - PLINTH_INNER_CLEAR,
+              ]}
             />
             <meshStandardMaterial color={PLINTH_COLOR} roughness={0.9} {...trim} />
           </mesh>
@@ -317,7 +332,7 @@ function WallSegmentBox({
             <boxGeometry args={[sideLen, height, thickness]} />
             <meshStandardMaterial {...wallMaterial} />
           </mesh>
-          {/* 门洞两侧墙段也带踢脚线（贴室内侧）；底面 +1mm、外侧面内收 1mm 不共面 */}
+          {/* 门洞两侧墙段也带踢脚线（贴室内侧）；底面 +1mm、外侧面内收 1mm、端部内收 2mm 不共面 */}
           <mesh
             position={[
               from + sideLen / 2,
@@ -325,7 +340,7 @@ function WallSegmentBox({
               inward * (thickness / 2 - 0.01 - BASE_CLEARANCE),
             ]}
           >
-            <boxGeometry args={[sideLen, SKIRTING_H, 0.02]} />
+            <boxGeometry args={[sideLen - END_CLEAR * 2, SKIRTING_H, 0.02]} />
             <meshStandardMaterial
               {...skirtingParams}
               color={ghosted ? '#a29a88' : skirtingParams.color}
@@ -339,7 +354,7 @@ function WallSegmentBox({
               inward * (thickness / 2 - 0.01 - BASE_CLEARANCE),
             ]}
           >
-            <boxGeometry args={[sideLen, SKIRTING_H, 0.02]} />
+            <boxGeometry args={[sideLen - END_CLEAR * 2, SKIRTING_H, 0.02]} />
             <meshStandardMaterial
               {...skirtingParams}
               color={ghosted ? '#a29a88' : skirtingParams.color}
@@ -386,6 +401,22 @@ function floorPolygon(room: RoomNode, plan: WallPlan): { x: number; z: number }[
   return pts.length >= 3 ? pts : room.footprint
 }
 
+/**
+ * 墙体方案内容签名（按 WeakMap 缓存字符串实例）：
+ * 拖拽预览每帧产生新场景引用 → 新 WallPlan 引用，但内容（共享标记/墙线/方向）不变。
+ * floorShape 的 useMemo 若直接依赖 plan 引用会每帧重建地板几何；按内容签名命中则稳定。
+ * 签名只取 floorPolygon 实际消费的字段（axis/line/shared/dir），语义变化必反映在签名中。
+ */
+const planKeyCache = new WeakMap<WallPlan, string>()
+function wallPlanKey(plan: WallPlan): string {
+  let key = planKeyCache.get(plan)
+  if (!key) {
+    key = plan.edges.map((e) => `${e.axis}@${e.line}@${e.shared ? 1 : 0}@${e.dir}`).join('|')
+    planKeyCache.set(plan, key)
+  }
+  return key
+}
+
 interface RoomShellProps {
   room: RoomNode
   material: ShellMaterial
@@ -429,9 +460,13 @@ function RoomShell({
   const wallBaseY = baseY + FLOOR_TOP_Y
   const floorLift = nested ? 0.012 : 0
 
-  // 地板形状：Shape 位于 XY 平面，经 -90° X 旋转铺平到 XZ（shape 坐标 y = -世界 z）
-  const floorShape = new THREE.Shape(
-    floorPolygon(room, plan).map((p) => new THREE.Vector2(p.x, -p.z)),
+  // 地板形状：Shape 位于 XY 平面，经 -90° X 旋转铺平到 XZ（shape 坐标 y = -世界 z）。
+  // memo 依赖为 footprint 引用 + 墙体方案内容签名：拖拽家具预览每帧产生新 scene/新 plan
+  // 引用，但足迹与墙线内容不变——形状与 ExtrudeGeometry 不重建（否则每帧每房间分配 + GC）。
+  // 依赖故意只取 floorPolygon 实际消费的内容（wallPlanKey），非 plan/room 引用本身。
+  const floorShape = useMemo(
+    () => new THREE.Shape(floorPolygon(room, plan).map((p) => new THREE.Vector2(p.x, -p.z))),
+    [room.footprint, wallPlanKey(plan)], // eslint-disable-line react-hooks/exhaustive-deps
   )
   // 地板材质：按房间类型匹配 木纹/瓷砖/混凝土，乘房间识别色淡化 tint
   const floor = roomFloorMaterial(room.name, colorMode, siblingIndex)

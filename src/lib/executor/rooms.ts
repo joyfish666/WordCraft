@@ -181,30 +181,34 @@ export function applyAddRoom(scene: SceneModel, op: Extract<Op, { op: 'addRoom' 
     dimensions: op.dimensions,
     side: op.side,
     footprint: op.footprint,
+    position: op.position,
     furniture: op.furniture,
     nestedRooms: op.nestedRooms,
   }
-  // 显式 footprint 时以顶点环为准（世界坐标），placement 仅影响家具锚点推导
+  // 落点优先级：显式 footprint（世界坐标顶点环，placement 仅作锚点推导）>
+  // position（绝对位置，与 macro custom 房间规格同语义）> relativeTo 贴靠 > 东侧兜底
   const placement = spec.footprint
     ? { x: 0, z: 0 }
-    : op.relativeTo
-      ? (() => {
-          const parent = findRoom(scene, op.relativeTo.roomId)
-          if (!parent) throw new Error(`relativeTo 房间「${op.relativeTo.roomId}」不存在`)
-          const halfL = (op.dimensions?.length ?? DEFAULT_ROOM_DIMS.length) / 2
-          const halfW = (op.dimensions?.width ?? DEFAULT_ROOM_DIMS.width) / 2
-          // 与 moveRoom 同款：走廊边线对齐 + 与其他房间重叠时选空侧（坑 46/48）
-          return pickFreePlacement(
-            scene,
-            '',
-            parent,
-            op.relativeTo.dir,
-            { minX: -halfL, maxX: halfL, minZ: -halfW, maxZ: halfW },
-            halfL,
-            halfW,
-          )
-        })()
-      : defaultPlacement(scene, spec)
+    : op.position
+      ? { x: op.position.x, z: op.position.z }
+      : op.relativeTo
+        ? (() => {
+            const parent = findRoom(scene, op.relativeTo.roomId)
+            if (!parent) throw new Error(`relativeTo 房间「${op.relativeTo.roomId}」不存在`)
+            const halfL = (op.dimensions?.length ?? DEFAULT_ROOM_DIMS.length) / 2
+            const halfW = (op.dimensions?.width ?? DEFAULT_ROOM_DIMS.width) / 2
+            // 与 moveRoom 同款：走廊边线对齐 + 与其他房间重叠时选空侧（坑 46/48）
+            return pickFreePlacement(
+              scene,
+              '',
+              parent,
+              op.relativeTo.dir,
+              { minX: -halfL, maxX: halfL, minZ: -halfW, maxZ: halfW },
+              halfL,
+              halfW,
+            )
+          })()
+        : defaultPlacement(scene, spec)
   const room = makeRoom(specToRoomV2(spec), placement.x, placement.z, spec.footprint)
   const level = scene.root.levels[0]
   return {

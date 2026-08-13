@@ -1,4 +1,5 @@
 import { footprintBounds } from './footprint'
+import { completeRoomFurniture } from './furnitureCompleteness'
 import { furnitureKind } from './furniturePresets'
 import { EPSILON } from './constants'
 import { halfRectOverlaps } from './geometry'
@@ -286,7 +287,9 @@ function visitRoom(node: RoomNode, doorZones: Map<string, DoorZoneInfo[]>): Room
   const bounds = innerBounds(node)
   const roomDoors = (doorZones.get(node.id) ?? []).map((z) => doorZoneRect(node, z))
   const placedBoxes: InnerBounds[] = []
-  const furniture = node.furniture.map((child) => {
+  // 常配套件补全（坑 87）：书桌→椅、餐桌→餐椅、床→床头柜、沙发→茶几；
+  // 用户明确排除（description 含"不要"等）或已有同类时跳过；幂等
+  const furniture = completeRoomFurniture(node).map((child) => {
     const f = child
     const keep = [...placedBoxes, ...keepOuts, ...roomDoors]
     const { pos, swapDims } = isWallAnchored(f.name)

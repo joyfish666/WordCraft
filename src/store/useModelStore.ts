@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import type { StateStorage } from 'zustand/middleware'
 import { editDiffToOps } from '../lib/editOps'
 import { executeOps } from '../lib/executor'
 import { nodePosition } from '../lib/footprint'
@@ -17,6 +18,32 @@ import type { ModelNode, Point2D, Position, SceneModel } from '../types/model'
 import type { Op } from '../types/ops'
 import { useChatStore } from './useChatStore'
 import { syncDirtyWithSaved } from './useProjectStore'
+
+/**
+ * 拖拽预览抑制持久化（坑 75 姊妹问题，2026-08-13 审查批次后续）：
+ * `previewSelected`/`previewFootprint` 拖拽期间每帧产生新场景引用，zustand persist 在每次
+ * `setState` 后同步 JSON.stringify 全场景写 localStorage（100KB+ × 60fps）。通过存储层开关
+ * 在预览期间跳过写入（预览态是瞬态，中途刷新丢失可接受）；提交（commitDrag/commitPlanEdit）
+ * 时恢复。⚠️ 改 persist 配置时别去掉这个开关，也别用「partialize 返回 undefined」实现——
+ * zustand v4 对 undefined 仍会写 `{"state":...}`，会清掉已持久化的场景。
+ */
+const persistEnabled = { current: true }
+const previewAwareStorage: StateStorage = {
+  getItem: (name) => localStorage.getItem(name),
+  setItem: (name, value) => {
+    if (persistEnabled.current) localStorage.setItem(name, value)
+  },
+  removeItem: (name) => localStorage.removeItem(name),
+}
+/** 预览期间调用：set 更新场景但不触发 localStorage 写入；支持嵌套调用（配对使用） */
+function withoutPersist(fn: () => void): void {
+  persistEnabled.current = false
+  try {
+    fn()
+  } finally {
+    persistEnabled.current = true
+  }
+}
 
 /** 以不可变方式更新场景中某节点位置；root 恒为整屋，故在此收窄类型 */
 function withUpdatedPosition(scene: SceneModel, id: string, position: Position): SceneModel {
@@ -203,29 +230,33 @@ export const useModelStore = create<ModelState>()(
         }),
 
       previewSelected: (patch) =>
-        set((state) => {
-          if (!state.scene || !state.selectedId) return state
-          const nextRoot = updateNodeFields(
-            state.scene.root,
-            state.selectedId,
-            patch,
-          ) as SceneModel['root']
-          if (nextRoot === state.scene.root) return state // 无实际变化，不产生新引用
-          // 拖拽中不约束、不记历史（结束时由 commitDrag 统一约束 + 记一次历史）
-          return { scene: { ...state.scene, root: nextRoot } }
+        withoutPersist(() => {
+          set((state) => {
+            if (!state.scene || !state.selectedId) return state
+            const nextRoot = updateNodeFields(
+              state.scene.root,
+              state.selectedId,
+              patch,
+            ) as SceneModel['root']
+            if (nextRoot === state.scene.root) return state // 无实际变化，不产生新引用
+            // 拖拽中不约束、不记历史（结束时由 commitDrag 统一约束 + 记一次历史）
+            return { scene: { ...state.scene, root: nextRoot } }
+          })
         }),
 
       previewFootprint: (id, footprint) =>
-        set((state) => {
-          if (!state.scene) return state
-          const nextRoot = updateNodeFootprint(
-            state.scene.root,
-            id,
-            footprint,
-          ) as SceneModel['root']
-          if (nextRoot === state.scene.root) return state
-          // 顶点拖拽中不约束、不记历史（结束时由 commitPlanEdit 统一处理）
-          return { scene: { ...state.scene, root: nextRoot } }
+        withoutPersist(() => {
+          set((state) => {
+            if (!state.scene) return state
+            const nextRoot = updateNodeFootprint(
+              state.scene.root,
+              id,
+              footprint,
+            ) as SceneModel['root']
+            if (nextRoot === state.scene.root) return state
+            // 顶点拖拽中不约束、不记历史（结束时由 commitPlanEdit 统一处理）
+            return { scene: { ...state.scene, root: nextRoot } }
+          })
         }),
 
       commitDrag: (baseScene) =>
@@ -281,6 +312,8 @@ export const useModelStore = create<ModelState>()(
     }),
     {
       name: 'wordcraft.model',
+      // 拖拽预览期间经 previewAwareStorage 抑制写入（见文件顶部说明）
+      storage: createJSONStorage(() => previewAwareStorage),
       // 只持久化场景；历史栈为会话内状态，刷新后清空
       partialize: (state) => ({ scene: state.scene }),
       // v3 数据模型：旧持久化数据（v1 盒子模型）读取时迁移（notes §5.2 迁移必须幂等）

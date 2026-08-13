@@ -91,6 +91,8 @@ export const addRoomOpSchema = z.object({
   dimensions: dimensionsPatchSchema.optional(),
   side: z.string().optional(),
   footprint: z.array(point2dSchema).min(4).optional(),
+  // 绝对位置（房间中心，与 macro custom 房间规格 position 同语义；优先级高于 relativeTo）
+  position: positionSchema.optional(),
   relativeTo: relativeToSchema.optional(),
   furniture: z.array(furnitureSpecSchema).optional(),
   nestedRooms: z.array(z.lazy(() => roomSpecSchema)).optional(),
@@ -159,11 +161,12 @@ export const removeFurnitureOpSchema = z.object({
 export const setOpeningsOpSchema = z.object({
   op: z.literal('setOpenings'),
   roomId: z.string().min(1),
-  side: dirSchema,
+  // side（LLM 语义：取该方向最长边）与 edgeIndex（P4 UI 精确指边，坑 39 约定）至少其一，
+  // 跨字段约束由执行器校验（discriminatedUnion 不接受 refine 包装，此处不做 .refine）
+  side: dirSchema.optional(),
   kind: z.enum(['door', 'window']),
   from: z.number().optional(),
   to: z.number().optional(),
-  // P4：精确指定 footprint 边下标（坑 39 约定），省略时按 side 取该方向最长边
   edgeIndex: z.number().int().nonnegative().optional(),
   // P4：删除同边同种开洞（给定 from/to 只删重叠者）
   remove: z.boolean().optional(),

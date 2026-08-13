@@ -55,6 +55,32 @@ describe('useModelStore', () => {
     expect(moved.y).toBe(original.y)
   })
 
+  it('拖拽预览不写 localStorage；提交类操作写回（坑 75 姊妹：预览每帧全场景序列化）', () => {
+    useModelStore.getState().setScene(createSampleModel())
+    useModelStore.getState().selectNode('bed-master')
+    // 提交类操作（translateSelected）→ 持久化
+    useModelStore.getState().translateSelected(0.5, 0, 0)
+    const committed = furnitureById('bed-master').position
+    const persisted = (
+      JSON.parse(localStorage.getItem('wordcraft.model')!).state as {
+        scene: { root: { name: string } }
+      }
+    ).scene
+    expect(persisted.root.name).toBe(useModelStore.getState().scene!.root.name)
+    // 预览操作（previewSelected）→ 内存更新但 localStorage 保持提交时的场景不变
+    const sceneBefore = useModelStore.getState().scene
+    useModelStore.getState().previewSelected({
+      position: { x: committed.x + 2, y: committed.y, z: committed.z },
+    })
+    expect(useModelStore.getState().scene).not.toBe(sceneBefore) // 内存已更新（预览生效）
+    const persistedAfter = JSON.parse(localStorage.getItem('wordcraft.model')!).state
+    expect(JSON.stringify(persistedAfter)).toBe(JSON.stringify({ scene: persisted }))
+    // 提交（commitDrag）后恢复持久化
+    useModelStore.getState().commitDrag(sceneBefore)
+    const persistedCommit = JSON.parse(localStorage.getItem('wordcraft.model')!).state.scene
+    expect(persistedCommit.root.name).toBe(useModelStore.getState().scene!.root.name)
+  })
+
   it('未选中模块时移动无效', () => {
     useModelStore.getState().setScene(createSampleModel())
     const scene = useModelStore.getState().scene

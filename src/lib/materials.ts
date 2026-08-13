@@ -52,7 +52,8 @@ function makeNoise(seed: number, cellPx: number): (x: number, y: number) => numb
   const hash = (ix: number, iy: number): number => {
     const wx = ((ix % cells) + cells) % cells
     const wy = ((iy % cells) + cells) % cells
-    const h = Math.imul(wx + 1, 374761393) + Math.imul(wy + 1, 668265263) + Math.imul(seed, 1442695041)
+    const h =
+      Math.imul(wx + 1, 374761393) + Math.imul(wy + 1, 668265263) + Math.imul(seed, 1442695041)
     const hh = Math.imul(h ^ (h >>> 13), 1274126177)
     return ((hh ^ (hh >>> 16)) >>> 0) / 4294967296
   }
@@ -134,7 +135,7 @@ function drawTileFloor(ctx: CanvasRenderingContext2D): void {
       } else {
         const gx = Math.floor(x / cell)
         const gy = Math.floor(y / cell)
-        const wob = ((gx * 13 + gy * 7) % 5 - 2) * 5 + (noise(x, y) - 0.5) * 8
+        const wob = (((gx * 13 + gy * 7) % 5) - 2) * 5 + (noise(x, y) - 0.5) * 8
         ctx.fillStyle = rgb(196 + wob, 198 + wob, 196 + wob)
       }
       ctx.fillRect(x, y, 1, 1)
@@ -199,7 +200,7 @@ function drawWoodGrain(ctx: CanvasRenderingContext2D, rand: () => number): void 
 function drawFabric(ctx: CanvasRenderingContext2D): void {
   for (let x = 0; x < SIZE; x++) {
     for (let y = 0; y < SIZE; y++) {
-      const on = ((Math.floor(x / 2) + Math.floor(y / 2)) % 2) === 0
+      const on = (Math.floor(x / 2) + Math.floor(y / 2)) % 2 === 0
       const v = on ? 186 : 168
       ctx.fillStyle = rgb(v, v * 0.97, v * 0.93)
       ctx.fillRect(x, y, 1, 1)
@@ -527,6 +528,9 @@ export function furnitureMaterial(
   shade: FurniturePart['shade'],
   colorMode: ColorMode,
 ): MaterialSpec {
-  const spec = (colorMode === 'colorblind' ? GRAY : FURNITURE_PARTS[kind] ?? FURNITURE_PARTS.generic)[shade] ?? WOOD_LIGHT
+  const spec =
+    (colorMode === 'colorblind' ? GRAY : (FURNITURE_PARTS[kind] ?? FURNITURE_PARTS.generic))[
+      shade
+    ] ?? WOOD_LIGHT
   return { map: spec.map, color: spec.color, roughness: spec.roughness, metalness: spec.metalness }
 }

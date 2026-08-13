@@ -48,6 +48,8 @@ export type Op =
       dimensions?: Partial<Dimensions>
       side?: string
       footprint?: Point2D[]
+      /** 绝对位置（房间中心，与 macro custom 房间规格的 position 同语义；优先级高于 relativeTo） */
+      position?: Position
       relativeTo?: { roomId: string; dir: Dir }
       furniture?: FurnitureSpec[]
       nestedRooms?: RoomSpec[]
@@ -95,7 +97,8 @@ export type Op =
   | {
       op: 'setOpenings'
       roomId: string
-      side: Dir
+      /** 方向（LLM 语义：取该方向最长边）；与 edgeIndex 二选一（P4 UI 用精确边下标） */
+      side?: Dir
       kind: 'door' | 'window'
       from?: number
       to?: number

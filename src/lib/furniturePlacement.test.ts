@@ -158,6 +158,61 @@ describe('applyFurnitureConventions', () => {
     const bb = roomBounds(bath)
     expect(toilet.position.z).toBeCloseTo(bb.minZ + 0.15 + toilet.dimensions.width / 2, 5)
   })
+
+  it('常配套件补全后摆放：书房书桌+床 → 补椅子与床头柜且全部在房间内不重叠', () => {
+    const study = room('study', 4.5, 3.5, 0, 2.35, [
+      furniture('desk', '书桌', 1.2, 0.6, -1.4, 1.5),
+      furniture('bed', '双人床', 2, 1.5, 1.0, 1.2),
+    ])
+    const model = applyFurnitureConventions(corridorHouse([study]))
+    const studyNode = findNodeById(model.root, 'study') as RoomNode
+    const furnitureList = studyNode.furniture
+    const names = furnitureList.map((f) => f.name)
+    // 补全生效：书桌 → 椅子；床 → 2 床头柜
+    expect(names.filter((n) => n === '椅子')).toHaveLength(1)
+    expect(names.filter((n) => n === '床头柜')).toHaveLength(2)
+    // 全部约束在房间内壁范围内（内缩墙厚）
+    const bb = roomBounds(studyNode)
+    const inner = {
+      minX: bb.minX + 0.15,
+      maxX: bb.maxX - 0.15,
+      minZ: bb.minZ + 0.15,
+      maxZ: bb.maxZ - 0.15,
+    }
+    for (const f of furnitureList) {
+      const hx = f.dimensions.length / 2
+      const hz = f.dimensions.width / 2
+      expect(f.position.x - hx).toBeGreaterThanOrEqual(inner.minX - 1e-6)
+      expect(f.position.x + hx).toBeLessThanOrEqual(inner.maxX + 1e-6)
+      expect(f.position.z - hz).toBeGreaterThanOrEqual(inner.minZ - 1e-6)
+      expect(f.position.z + hz).toBeLessThanOrEqual(inner.maxZ + 1e-6)
+    }
+    // 两两不重叠（容差 1e-6，贴边允许）
+    for (let i = 0; i < furnitureList.length; i++) {
+      for (let j = i + 1; j < furnitureList.length; j++) {
+        const a = furnitureList[i]
+        const b = furnitureList[j]
+        const noOverlap =
+          a.position.x + a.dimensions.length / 2 <= b.position.x - b.dimensions.length / 2 + 1e-6 ||
+          a.position.x - a.dimensions.length / 2 >= b.position.x + b.dimensions.length / 2 - 1e-6 ||
+          a.position.z + a.dimensions.width / 2 <= b.position.z - b.dimensions.width / 2 + 1e-6 ||
+          a.position.z - a.dimensions.width / 2 >= b.position.z + b.dimensions.width / 2 - 1e-6
+        expect(noOverlap).toBe(true)
+      }
+    }
+  })
+
+  it('description 明确排除配套时不补全（用户要求优先，坑 87 通道）', () => {
+    const study = room('study', 4.5, 3.5, 0, 2.35, [
+      { ...furniture('desk', '书桌', 1.2, 0.6, -1.4, 1.5), description: '用户不要椅子' },
+      furniture('bed', '双人床', 2, 1.5, 1.0, 1.2),
+    ])
+    const model = applyFurnitureConventions(corridorHouse([study]))
+    const studyNode = findNodeById(model.root, 'study') as RoomNode
+    const names = studyNode.furniture.map((f) => f.name)
+    expect(names.filter((n) => n === '椅子')).toHaveLength(0) // 整房间跳过
+    expect(names.filter((n) => n === '床头柜')).toHaveLength(0)
+  })
 })
 
 function roomBounds(r: RoomNode): { minX: number; maxX: number; minZ: number; maxZ: number } {

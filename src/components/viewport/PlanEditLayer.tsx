@@ -266,9 +266,10 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
           setMergeKeepId(hit.node.id)
         } else {
           const tryMerge = (keep: string, remove: string): boolean => {
-            const result = executeOps(sceneNow, [{ op: 'mergeRoom', keep, remove } as Op])
+            const op: Op = { op: 'mergeRoom', keep, remove }
+            const result = executeOps(sceneNow, [op])
             if (result.applied === 0) return false
-            store.applyPlanOps([{ op: 'mergeRoom', keep, remove } as Op])
+            store.applyPlanOps([op])
             return true
           }
           const ok = tryMerge(mergeKeepId, hit.node.id) || tryMerge(hit.node.id, mergeKeepId)
@@ -304,12 +305,10 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
       const position = axis === 'x' ? b.x : b.z
       const before = useModelStore.getState().scene
       if (before) {
-        const result = executeOps(before, [{ op: 'splitRoom', id: roomId, axis, position } as Op])
+        const op: Op = { op: 'splitRoom', id: roomId, axis, position }
+        const result = executeOps(before, [op])
         if (result.applied === 0) window.alert(t('plan.splitFail'))
-        else
-          useModelStore
-            .getState()
-            .applyPlanOps([{ op: 'splitRoom', id: roomId, axis, position } as Op])
+        else useModelStore.getState().applyPlanOps([op])
       }
       setSplit(null)
       setSplitCur(null)

@@ -240,37 +240,37 @@ export function SettingsPage() {
           </div>
         </div>
 
-          <div className="field">
-            <label className="field__label field__label--row">
-              <input type="checkbox" checked={wireframe.enabled} onChange={toggleWireframe} />
-              {t('settings.showWireframe')}
-            </label>
-            <div className="field__slider">
-              <span className="field__hint">{t('settings.wireframeWidth')}</span>
-              <input
-                type="range"
-                min={1}
-                max={4}
-                step={1}
-                value={wireframe.lineWidth}
-                onChange={(e) => setWireframeLineWidth(Number(e.target.value))}
-              />
-              <span className="field__hint">{wireframe.lineWidth}</span>
-            </div>
+        <div className="field">
+          <label className="field__label field__label--row">
+            <input type="checkbox" checked={wireframe.enabled} onChange={toggleWireframe} />
+            {t('settings.showWireframe')}
+          </label>
+          <div className="field__slider">
+            <span className="field__hint">{t('settings.wireframeWidth')}</span>
+            <input
+              type="range"
+              min={1}
+              max={4}
+              step={1}
+              value={wireframe.lineWidth}
+              onChange={(e) => setWireframeLineWidth(Number(e.target.value))}
+            />
+            <span className="field__hint">{wireframe.lineWidth}</span>
           </div>
+        </div>
 
-          <div className="field">
-            <label className="field__label field__label--row">
-              <input
-                type="checkbox"
-                checked={shadows}
-                onChange={(e) => setShadows(e.target.checked)}
-              />
-              {t('settings.showShadows')}
-            </label>
-            <p className="field__hint">{t('settings.showShadowsHint')}</p>
-          </div>
-        </section>
+        <div className="field">
+          <label className="field__label field__label--row">
+            <input
+              type="checkbox"
+              checked={shadows}
+              onChange={(e) => setShadows(e.target.checked)}
+            />
+            {t('settings.showShadows')}
+          </label>
+          <p className="field__hint">{t('settings.showShadowsHint')}</p>
+        </div>
+      </section>
 
       <section className="panel settings__section">
         <h3 className="panel__title">{t('settings.debugSection')}</h3>

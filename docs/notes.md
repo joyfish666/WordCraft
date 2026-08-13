@@ -241,6 +241,33 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 78. **共享纹理 repeat 与几何层 UV 拉伸相乘 = tile² 双重缩放**（写实化审查发现，2026-08-13）：`getTexture` 对共享纹理全局设 `repeat = 1/tileMeters`，墙面（`boxWallGeometry`）/屋顶/地面（`scaleAllUvs`/`planeGeometryWithUvs`）又在几何层把 UV 拉伸 `len/tileMeters`——采样坐标 = uv × repeat，实际平铺周期变成 tileMeters²（混凝土墙 6.25m、草地 4m 一贴），墙面纹理糊成一片"灰平涂"。只有地板（Extrude 顶面 UV 为世界坐标，仅乘一次 repeat）碰巧正确。**修复（materials.ts）**：base 纹理 repeat=1（归一化 UV 几何自行按米拉伸，家具/墙/屋顶/地面共用）；新增 `getWorldUvTexture` 返回 base 的克隆（共享图像 source，仅 repeat=1/tileMeters）供世界坐标 UV 的地板使用。`MaterialSpec` 加 `uvMode: 'world' | 'normalized'`（默认 normalized），`materialParams` 按模式选纹理。**教训：纹理 repeat 与 UV 缩放只能二选一，混用即平方**。
 79. **屋顶整体移除（用户决策，2026-08-13 晚）**：用户为**一层户型**，屋檐遮挡内部视野要求去掉。`RoofView.tsx` 删除；`roof` 设置项全链路清理（`types/settings.ts`/`useSettingsStore`（含 `setRoof`）/`SettingsPage` 开关/i18n 中英 key）；settings persist 升 **v5**，migrate 中把旧存档残留的 `roof` 字段解构剔除（避免残留进状态）。**教训：造型层功能被用户否掉时要整链删除（类型/存储/迁移/UI/i18n），不要留死开关**；v4 → v5 的迁移仍保留 shadows 默认开启逻辑。
 
+### 3.19 审查批次后续（2026-08-13 晚，坑 80-84 + 工程化，批 A/B/C）
+
+> 承接 3.16/3.17 的全面审查结论，本次修复"性能热路径 + 契约漂移"两个主题；D 批（modelTree 泛型化消 cast、组件拆分、死代码清理、HashRouter）留待后续。
+
+80. **拖拽预览每帧写 localStorage（坑 75 的姊妹问题）**（审查发现，2026-08-13）：坑 75 修掉了脏检查的每帧 `JSON.stringify`，但 **zustand persist 每次 `setState` 后同步 JSON.stringify 全场景写 localStorage**——`previewSelected`/`previewFootprint` 拖拽每帧产生新场景引用，100KB+ 场景 × 60fps 同步序列化 + `setItem`。修复（`useModelStore`）：persist 配置改走自定义存储层 `previewAwareStorage`（`storage: createJSONStorage(() => previewAwareStorage)`，`getStorage` 已弃用），模块级 `persistEnabled` 开关在预览 set 期间跳过写入、提交恢复；配套测试断言「预览后 storage 保持提交时场景、commitDrag 恢复持久化」。⚠️ **不要用「partialize 返回 undefined」实现**——zustand v4 对 undefined 仍会写 `{"state":...}`（把已持久化场景清成空壳）；预览态是瞬态，中途刷新丢失可接受。
+81. **对话消息持久化整场景快照（5MB 配额风险）**（审查发现，2026-08-13）：`useChatStore` 的 messages 内嵌完整 `SceneModel`（多轮 = 每轮一份），`partialize: { messages }` 每次 addMessage 全量重序列化，多轮后逼近 localStorage 5MB 配额。修复：partialize 剥离 `model` 字段（`model` 仅供会话内「撤销生成」——`generationStack` 已覆盖，刷新后由场景摘要 + 编辑日志替代）；persist 升 **v3**，migrate 把 v2 存档消息中的 `model` 一并剥离。**约定：持久化体积上限思维——凡是"每轮/每次操作一份全量数据"的字段，先问是否必须落盘。**
+82. **v2 快照容错路径丢 position/relativeTo → 新房间全部堆到东侧**（审查发现，2026-08-13）：`diffSceneV2` 的 `addRoom` op 构造只拷贝 id/name/dimensions/side/footprint/furniture/nestedRooms，`roomSpecFromV2` 算出的 `position` 被丢——按 position 布局的 custom 快照新增房间全部落到 `defaultPlacement` 的"排东侧"兜底，**静默几何错误**（无报错、日志无感知）。根因是三层漂移：提示词声明 addRoom 支持 position → `RoomSpec` 类型有 → `addRoom` op 类型/schema/执行器没有。修复：`addRoom` op 契约补 `position` 字段贯通 type/schema/执行器（落点优先级 **footprint > position > relativeTo > 东侧兜底**）；`diff.ts` 的 addRoom 构造与 `roomSpecFromV2` 家具映射全字段透传（顺带补回此前静默丢失的 `rotationY`/`description`）。**教训：契约三层（提示词/类型/zod）任一层改字段，必须三层同步 + 快照适配器检查。**
+83. **setOpenings 的 side 三方不一致，UI 靠 `as Op` 绕过校验**（审查发现，2026-08-13）：schema 强索 `side` 但执行器支持 edgeIndex-only 路径，`PlanEditLayer` 只能 `as Op` 绕过——类型系统形同虚设。修复：`side` 改为可选（schema/类型同步），跨字段约束「side 与 edgeIndex 至少其一」由执行器兜底（**discriminatedUnion 不接受 `.refine` 包装成 ZodEffects 的选项**，跨字段校验放执行器与"房间存在性"同模式）；`PlanEditLayer` 四处 `as Op` 删除（对象字面量本身类型已足够）；错误消息区分 side/edgeIndex 来源。
+84. **RoomShell 地板几何每帧重建（Shape + ExtrudeGeometry 分配/GC）**（审查发现，2026-08-13）：`floorShape = new THREE.Shape(...)` 每 render 新建并传 `<extrudeGeometry args>`，拖拽预览每帧每房间重建几何 + 旧实例 dispose。难点：`computeAllWallPlansCached` 按场景引用缓存，预览每帧新 scene → 新 WallPlan 引用，`useMemo([room, plan])` 引用比较每帧失效。修复：`wallPlanKey(plan)` 按**内容签名**（axis/line/shared/dir，即 `floorPolygon` 实际消费的字段）经 WeakMap 缓存字符串实例，memo 依赖 `[room.footprint, wallPlanKey(plan)]`——足迹与墙线内容不变即命中（足迹数组引用在不可变更新中稳定，`rebuildContainer` 保留原引用）。**教训：缓存键是"内容"还是"引用"取决于消费方**——渲染层引用键（坑 72）对"同引用只算一次"是对的，组件 memo 需要内容键。
+85. **工程化批次（2026-08-13）**：① **format 门修复**——审查时发现 HEAD 上 6 个文件未格式化（ModelNodeView/Viewport3D/translations/materials/palette/SettingsPage），`format:check` 实际是红的，与文档声称的"全仓格式收敛"矛盾：`npm run format` 收敛；② **ci.yml 补 build 门**（此前 PR 只跑 lint/format/typecheck/test，rollup 错误只在 main 部署时炸）+ **deploy.yml 补测试门**（此前 CI 与 deploy 并行，测试红照样部署）；③ **`three-stdlib` 声明为直接依赖**（`PlanRig`/`SceneViewer` 直接 import 但靠 drei 传递解析，幽灵依赖——升级即断）；④ **`npm audit`**：nanoid High（vite→postcss 链，`npm audit fix` 已清）清零，react-router v6 线 2 个 Moderate 需升 v7（破坏性变更，待规划）；⑤ **zustand persist `getStorage` 弃用** → `storage: createJSONStorage(...)`。
+
+### 3.20 用户反馈修复批次（2026-08-13，坑 86-87：卫生间公共语义 + 家具配套补全）
+
+> 用户反馈两件事：① 全屋只有一个卫生间时应默认视为公共卫生间，而不是主卧专属；② 家具摆放应符合常理（书房有书桌就要有椅子，除非用户明确不要；床头柜应在床头两侧等）。两条都遵循「用户明确要求优先，未明确才按常理」。
+
+86. **全屋唯一卫生间被当成"某卧室专属"**（用户反馈，2026-08-13）：`bathroomDoorTargets`（roomGeometry.ts）对无命名归属的卫生间"走廊优先、无走廊时邻居 id 最小"——无走廊的自由布局（custom）里单卫生间同时邻主卧与客厅时，若主卧 id 较小，门只开向主卧 → 卫生间变成主卧专属，其他房间不可用。修复：预扫描增加「**全屋唯一卫生间 → 公共语义**」分支——顶层卫生间计数（**嵌套卫生间不算**：嵌在卧室内的显然是专属）为 1 且无命名归属时，目标优先级改为 **走廊 > 开放空间（客厅/餐厅/厨房，isOpenRoom 且非走廊）> 邻居 id 最小（确定性兜底）**；命名归属（"主卧卫生间"）与多卫生间场景保持原规则不变。回归测试：唯一卫生间邻客厅+主卧 → 门开向客厅；只邻私密房间 → 退化为 id 最小；两个卫生间 → 不特判（旧规则）。⚠️ 判断"唯一"必须只数**顶层房间**——`computeWallPlan` 只对顶层房间调用该预扫描，嵌套卫生间走 `nestedWallPlan` 不经过此规则。
+87. **LLM 漏配常配套件（书房有书桌没椅子、卧室有床没床头柜）**（用户反馈，2026-08-13）：提示词第 6 条要求"每类至少配 1-2 件"但依赖 LLM 遵循度。修复：新增 `lib/furnitureCompleteness.ts`——**常配套件补全**（`completeRoomFurniture`，挂进 `applyFurnitureConventions` 的 visitRoom）：书桌/梳妆台 → 使用者侧（背侧反方向 0.6m）补 1 椅；餐桌/圆桌 → 长边/直径两侧补 2 餐椅；床 → 床头两侧补 2 床头柜；沙发 → 前方补 1 茶几。**用户明确不要的通道**：该房间任一家具 `description` 含「不要|不配|不需要|无需|去掉|免配|别放|不加|不设」等词 → 整房间跳过补全（提示词已说明）。**幂等**：已有同类家具不补（`applyFurnitureConventions` 可能跑两轮）。**范围边界**：随 `furnitureConventions` 选项生效——auto 模板（corridor/living）与 v2 快照路径补全，custom 自由布局与手动编辑**不补全**（custom 保留 LLM 显式清单，手动编辑是用户显式操作，都不应被侵入）。补全件用 LLM 给定家具的当前位置推导初始坐标（绝对坐标），最终由摆放流程（贴墙/避让/约束进墙）确定，不保证"紧贴床头"的精确位置（软目标，硬保证是不越界不重叠）。示例模型（走 resolveLayout auto）随之获得 4 件补全（床头柜×2、书桌椅、沙发茶几），`countNodes` 断言 27 → 31 同步更新。
+
+### 3.21 渲染共面 z-fighting 审计批次（2026-08-13 晚，坑 88）
+
+> 用户反馈：示例模型在**墙转角**与**灶台/沙发两侧**仍闪烁（停止移动相机后一段时间才消失——互掐面多为端盖/顶面的细条带，只在特定视角可见，转动相机时最明显）。
+
+88. **转角与家具部件的「端盖/顶面同法向共面」互掐（用户反馈，2026-08-13）**：坑 77 只修了"底面/外侧面"错位，**端盖与顶面**这批漏网——审计发现三类共面对：
+   ① **墙转角**：踢脚线/勒脚沿墙线通铺，其**端盖与墙盒端盖同平面**（同法向 + 共面 + 重叠）——每处墙转角三面（墙端盖/踢脚线端盖/勒脚端盖）互掐。修法（ModelNodeView）：踢脚线/勒脚长度两端各内收 2mm（`END_CLEAR`），端盖平面离开墙端平面（2mm 端缝即标准伸缩缝观感）；
+   ② **家具部件同高顶面/端盖**（furniturePresets）：沙发**扶手顶面 = 座面顶面**（两侧交接带互掐）+ 扶手/靠背/底座**三底面同落地板** + 靠背端盖 = 底座端盖 + 扶手前脸 = 靠背前脸 + 扶手外端面 = 靠背端盖；灶台**控制条顶面 = 柜体顶面**、**前脸 = 柜体前脸**（正面双条互掐）；浴缸**内胆顶面 = 缸沿**；书架**背板通铺整宽**（端盖 = 侧板端盖、顶/底面 = 侧板顶/底面、背面 = 侧板背面——朝向旋转后 3 处共面）；梳妆镜**底面 = 桌面底面、背面 = 桌面后缘、小桌面时满宽端盖 = 桌面端盖**；床头板/水箱/龙头/电视屏**底面 = 主件底面**。修法：逐一分配错位（顶面低 2cm~5mm、端盖内收 3cm~1cm、底面抬 3~6mm 且相邻底面递增错开、背板/镜面宽度收缝），并**顺带修复灶台炉头整体埋在台面里不可见**（旧 burnerY 在台面内部——topTh 3~5cm 厚、炉头 2cm 高永远被埋；改为底面嵌入 1mm、顶面高出 1.9cm）；
+   ③ **回归防线**：`furniturePresets.test.ts` 新增**共面审计**（全种类 × 全档尺寸 × 四朝向，61 用例）——枚举所有 box 部件的 6 个面，断言任意两部件的面不存在「同法向 + 同一平面（1e-7）+ 面内区间重叠（1e-6）」组合；后续改任何部件几何必须过此审计（圆柱跳过）。**教训：改"贴面"几何要自查的不只是底面/侧面，还有端盖与顶面**；坑 6/77 的认知补全为「同法向 + 共面 + 重叠」三要素全查（法向反向不互掐、平面错开 ≥0.5mm 不互掐）。
+
 ## 6. 快速文件地图
 
 | 需求 | 改哪里 |
@@ -292,3 +319,12 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | 顶层错误边界【2026-08-13】 | `components/ui/ErrorBoundary.tsx` + `main.tsx`（包裹路由）+ `styles/error-boundary.css`（兜底页）+ i18n `error.boundary*` |
 | CI 质量门（lint/format:check/typecheck/test）【2026-08-13】 | `.github/workflows/ci.yml`（PR + main 推送）+ `package.json`（`typecheck` 脚本；format:check 于 2026-08-13 全仓格式收敛后正式入门） |
 | i18n | `i18n/translations.ts`（zh 为真源） |
+| 拖拽预览抑制持久化（坑 80）【2026-08-13 审查批次后续】 | `useModelStore.ts`（`previewAwareStorage` 存储层开关 + `withoutPersist` 包裹 preview 系列；persist `storage: createJSONStorage`） |
+| 对话消息剥离场景快照持久化（坑 81）【2026-08-13 审查批次后续】 | `useChatStore.ts`（partialize/migrate 剥离 `model`，persist 升 v3） |
+| addRoom position 契约贯通（坑 82）【2026-08-13 审查批次后续】 | `types/ops.ts` + `schemas/ops.schema.ts`（`addRoom.position`）+ `executor/rooms.ts`（落点优先级 footprint > position > relativeTo > 东侧）+ `executor/diff.ts`（快照路径全字段透传含 rotationY/description）+ `chat.ts` 提示词 |
+| setOpenings side 可选（坑 83）【2026-08-13 审查批次后续】 | `types/ops.ts` + `schemas/ops.schema.ts`（side 可选，跨字段约束在执行器）+ `executor/openings.ts`（兜底校验 + 错误消息区分来源）+ `PlanEditLayer.tsx`（删除四处 `as Op`） |
+| 地板几何内容签名 memo（坑 84）【2026-08-13 审查批次后续】 | `ModelNodeView.tsx`（`wallPlanKey` WeakMap 内容签名 + `floorShape` useMemo） |
+| 工程化（format 门修复/CI build 门/deploy 测试门/three-stdlib/audit）【2026-08-13 审查批次后续】 | `.github/workflows/ci.yml`、`deploy.yml`、`package.json`（`three-stdlib`） |
+| 全屋唯一卫生间公共语义（坑 86）【2026-08-13 用户反馈】 | `lib/roomGeometry.ts`（`computeWallPlan` 的 `bathroomDoorTargets` 预扫描：顶层卫生间计数 + 走廊 > 开放空间 > 邻居 id 最小） |
+| 家具常配套件补全（坑 87）【2026-08-13 用户反馈】 | `lib/furnitureCompleteness.ts`（`completeRoomFurniture`/`hasExcludedCompleteness`，新模块）+ `furniturePlacement.ts`（visitRoom 接入）+ `chat.ts` 提示词第 6 条（自动补齐说明 + description 排除通道） |
+| 渲染共面 z-fighting 审计（坑 88）【2026-08-13 用户反馈】 | `ModelNodeView.tsx`（踢脚线/勒脚端盖内收 `END_CLEAR` 2mm，墙转角不再互掐）+ `lib/furniturePresets.ts`（沙发扶手/靠背/灶台控制条与炉头/浴缸内胆/书架背板/梳妆镜/床头板/水箱/龙头/电视屏逐对错位）+ `furniturePresets.test.ts` 共面审计 61 用例 |

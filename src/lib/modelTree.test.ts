@@ -26,8 +26,9 @@ describe('modelTree', () => {
   })
 
   it('countNodes 统计全部模块', () => {
-    // 整屋 + 走廊 + 6 房间 + 内嵌卫生间 + 18 家具
-    expect(countNodes(scene.root)).toBe(27)
+    // 整屋 + 走廊 + 6 房间 + 内嵌卫生间 + 22 家具（18 源家具 + 常配套件补全 4：
+    // 主卧床头柜×2、书桌椅、沙发茶几，坑 87——示例模型走 resolveLayout auto 路径）
+    expect(countNodes(scene.root)).toBe(31)
   })
 
   it('updateNodePosition 不可变更新指定节点', () => {
