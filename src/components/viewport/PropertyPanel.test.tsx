@@ -11,7 +11,7 @@ import { PropertyPanel } from './PropertyPanel'
 /** 取示例模型的客厅沙发作为受测节点（布局引擎首房间为走廊，按 id 查找） */
 function getSofaNode(): FurnitureNode {
   const scene = createSampleModel()
-  for (const room of scene.root.levels[0].rooms) {
+  for (const room of scene.root.levels[0]!.rooms) {
     for (const f of room.furniture) {
       if (f.id === 'sofa-living') return f
     }

@@ -18,8 +18,8 @@ describe('debugLog', () => {
     logDebug('平铺完成', { rooms: 3 })
     const entries = getDebugEntries()
     expect(entries).toHaveLength(1)
-    expect(entries[0].message).toBe('平铺完成')
-    expect(entries[0].detail).toContain('"rooms": 3')
+    expect(entries[0]!.message).toBe('平铺完成')
+    expect(entries[0]!.detail).toContain('"rooms": 3')
   })
 
   it('clearDebug 清空日志', () => {

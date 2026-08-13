@@ -26,7 +26,7 @@ function run(ops: Op[], base: SceneModel | null = null): SceneModel {
 
 /** 便捷：从场景中取顶层房间数组 */
 function topRooms(scene: SceneModel): RoomNode[] {
-  return scene.root.levels[0].rooms
+  return scene.root.levels[0]!.rooms
 }
 
 describe('executeOps - macro 整体布局', () => {
@@ -173,8 +173,8 @@ describe('executeOps - macro 整体布局', () => {
     // 大窗保持完整一段（未被门劈开）
     const southWindows = south.segments.filter((s) => s.kind === 'window')
     expect(southWindows).toHaveLength(1)
-    expect(southWindows[0].from).toBeCloseTo(0.5)
-    expect(southWindows[0].to).toBeCloseTo(4.5)
+    expect(southWindows[0]!.from).toBeCloseTo(0.5)
+    expect(southWindows[0]!.to).toBeCloseTo(4.5)
     // setHouse 按名称命中：入口房间落位 + 入户门恒为 0.9m（南墙放不下时改到东墙）
     expect(scene.root.entranceRoomId).toBe(room.id)
     const entranceSeg = plan
@@ -253,7 +253,7 @@ describe('executeOps - macro 整体布局', () => {
 
   it('macro 缺省 params 时生成空整屋（不崩溃）', () => {
     const scene = run([{ op: 'macro', name: 'custom' }])
-    expect(scene.root.levels[0].rooms).toEqual([])
+    expect(scene.root.levels[0]!.rooms).toEqual([])
     expect(scene.root.name).toBe('未命名房屋')
   })
 })
@@ -446,7 +446,7 @@ describe('executeOps - 房间增删改', () => {
     expect(roomDims(a).width).toBeCloseTo(4, 5)
     expect(a.height).toBe(3)
     // 楼层高度同步刷新
-    expect(scene.root.levels[0].height).toBe(3)
+    expect(scene.root.levels[0]!.height).toBe(3)
   })
 
   it('updateRoom 空补丁 / 未命中房间时失败跳过', () => {
@@ -1107,7 +1107,7 @@ describe('executeOps - 家具操作', () => {
     const scene = run([{ op: 'addFurniture', roomId: 'r', name: '茶几' }], base)
     const room = findNodeById(scene.root, 'r') as RoomNode
     expect(room.furniture.length).toBe(1)
-    expect(room.furniture[0].id.length).toBeGreaterThan(0)
+    expect(room.furniture[0]!.id.length).toBeGreaterThan(0)
     // 未占用 id → 成功
     const r2 = executeOps(scene, [{ op: 'addFurniture', roomId: 'r', id: 'sofa', name: '沙发' }])
     expect(r2.skipped).toHaveLength(0)
@@ -1179,11 +1179,11 @@ describe('executeOps - 开洞（setOpenings）', () => {
     const room = findNodeById(scene.root, 'r') as RoomNode
     // 矩形足迹：0=南 1=东 2=北 3=西（坑 39 约定）
     expect(room.doors).toHaveLength(1)
-    expect(room.doors[0].edgeIndex).toBe(1) // 东墙
-    expect(room.doors[0].width).toBeCloseTo(0.9, 5) // 标准门宽
+    expect(room.doors[0]!.edgeIndex).toBe(1) // 东墙
+    expect(room.doors[0]!.width).toBeCloseTo(0.9, 5) // 标准门宽
     expect(room.windows).toHaveLength(1)
-    expect(room.windows[0].edgeIndex).toBe(2) // 北墙
-    expect(room.windows[0].width).toBeCloseTo(1.5, 5)
+    expect(room.windows[0]!.edgeIndex).toBe(2) // 北墙
+    expect(room.windows[0]!.width).toBeCloseTo(1.5, 5)
     // 渲染覆盖层生效：东墙门段、北墙窗段
     const plan = computeAllWallPlans(topRooms(scene), { entrance: 'south' })
     expect(edgeOf(plan.get('r')!, 'east')!.segments.some((s) => s.kind === 'door')).toBe(true)
@@ -1211,8 +1211,8 @@ describe('executeOps - 开洞（setOpenings）', () => {
     ])
     const room = findNodeById(scene.root, 'r') as RoomNode
     expect(room.doors).toHaveLength(1) // 替换而非叠加
-    expect(room.doors[0].from).toBeCloseTo(0.5, 5)
-    expect(room.doors[0].to).toBeCloseTo(1.5, 5)
+    expect(room.doors[0]!.from).toBeCloseTo(0.5, 5)
+    expect(room.doors[0]!.to).toBeCloseTo(1.5, 5)
   })
 
   it('房间不存在 / 无边方向时失败跳过', () => {
@@ -1253,7 +1253,7 @@ describe('executeOps - 开洞（setOpenings）', () => {
     ])
     const bath = findNodeById(scene.root, 'bath') as RoomNode
     expect(bath.doors).toHaveLength(1)
-    expect(bath.doors[0].edgeIndex).toBe(0) // 南墙
+    expect(bath.doors[0]!.edgeIndex).toBe(0) // 南墙
   })
 
   it('P4 edgeIndex 精确指定边；非矩形同方向多边也能命中指定边', () => {
@@ -1285,7 +1285,7 @@ describe('executeOps - 开洞（setOpenings）', () => {
     ]).scene
     const room = findNodeById(scene.root, 'r') as RoomNode
     expect(room.doors).toHaveLength(1)
-    expect(room.doors[0].edgeIndex).toBe(2) // 精确命中东段南墙而非最长的西段南墙
+    expect(room.doors[0]!.edgeIndex).toBe(2) // 精确命中东段南墙而非最长的西段南墙
   })
 
   it('setOpenings 可只给 edgeIndex 不给 side（契约可选化后 schema 放行、执行器正常）', () => {
@@ -1314,7 +1314,7 @@ describe('executeOps - 开洞（setOpenings）', () => {
     ]).scene
     const room = findNodeById(scene.root, 'r') as RoomNode
     expect(room.doors).toHaveLength(1)
-    expect(room.doors[0].edgeIndex).toBe(1) // 东墙
+    expect(room.doors[0]!.edgeIndex).toBe(1) // 东墙
     // 删除路径同样支持 edgeIndex-only
     const s1 = executeOps(scene, [
       { op: 'setOpenings', roomId: 'r', kind: 'door', edgeIndex: 1, remove: true },
@@ -1569,7 +1569,7 @@ describe('executeOps - 拆房/合并（P4 splitRoom / mergeRoom）', () => {
     ])
     const merged = executeOps(scene, [{ op: 'mergeRoom', keep: 'a', remove: 'b' }]).scene
     expect(topRooms(merged)).toHaveLength(1)
-    const room = topRooms(merged)[0]
+    const room = topRooms(merged)[0]!
     expect(room.id).toBe('a')
     expect(room.name).toBe('客厅')
     const rb = footprintBounds(room.footprint)
@@ -1578,11 +1578,11 @@ describe('executeOps - 拆房/合并（P4 splitRoom / mergeRoom）', () => {
     expect(room.furniture.map((f) => f.id).sort()).toEqual(['sofa', 'table'])
     // 共墙（a 的东墙）门丢弃；b 的东墙门保留并映射到合并后的东墙
     expect(room.doors).toHaveLength(1)
-    expect(room.doors[0].edgeIndex).toBe(1)
+    expect(room.doors[0]!.edgeIndex).toBe(1)
     // a 的南墙窗局部区间不变（a 在最西侧，起点不变）
     expect(room.windows).toHaveLength(1)
-    expect(room.windows[0].from).toBeCloseTo(0.5, 5)
-    expect(room.windows[0].to).toBeCloseTo(1.5, 5)
+    expect(room.windows[0]!.from).toBeCloseTo(0.5, 5)
+    expect(room.windows[0]!.to).toBeCloseTo(1.5, 5)
   })
 
   it('mergeRoom 垂直合并 + remove 是入口房间时入口迁移；并集非矩形/房间缺失失败跳过', () => {
@@ -1876,7 +1876,7 @@ describe('executeOps - setHouse / 约束兜底 / 楼层高度', () => {
       },
     ])
     const room = findNodeById(scene.root, 'r') as RoomNode
-    const bed = room.furniture[0]
+    const bed = room.furniture[0]!
     // 越墙坐标被拉回墙内（内缩墙厚）
     expect(bed.position.x).toBeGreaterThanOrEqual(houseLevelsBoundsOf(room).minX + 0.15)
     expect(bed.position.x).toBeLessThanOrEqual(houseLevelsBoundsOf(room).maxX - 0.15)
@@ -1910,7 +1910,7 @@ describe('executeOps - setHouse / 约束兜底 / 楼层高度', () => {
       { furnitureConventions: true },
     )
     const room = findNodeById(result.scene.root, 'r') as RoomNode
-    const bed = room.furniture[0]
+    const bed = room.furniture[0]!
     const b = houseLevelsBoundsOf(room)
     // 床贴某面墙（内壁）
     const flush =
@@ -2158,7 +2158,7 @@ describe('executeOps - 端点行为', () => {
     ])
     const result = executeOps(base, [])
     expect(result.applied).toBe(0)
-    expect(result.scene.root.levels[0].rooms.map((r) => r.id)).toEqual(['a'])
+    expect(result.scene.root.levels[0]!.rooms.map((r) => r.id)).toEqual(['a'])
   })
 
   it('findRoom 可命中嵌套房间', () => {
@@ -2235,7 +2235,7 @@ describe('executeOps - 按名称引用（坑 71：findRoom 名称回退与 id-on
     )
     const a = findNodeById(scene.root, 'a') as RoomNode
     const b = findNodeById(scene.root, 'b') as RoomNode
-    expect(b.footprint.some((p) => p.z < a.footprint[0].z - 1)).toBe(true)
+    expect(b.footprint.some((p) => p.z < a.footprint[0]!.z - 1)).toBe(true)
   })
 
   it('moveRoom 名称引用指向自身时失败跳过（相对引用与 id 引用等价）', () => {

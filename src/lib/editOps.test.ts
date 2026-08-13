@@ -40,7 +40,7 @@ describe('editDiffToOps（手动编辑 → op，P3 双向同步）', () => {
     }
     const ops = editDiffToOps(before, next, 'sofa-living')
     expect(ops).toHaveLength(1)
-    const op = ops[0]
+    const op = ops[0]!
     expect(op.op).toBe('updateFurniture')
     if (op.op !== 'updateFurniture') return
     expect(op.roomId).toBe('room-living')
@@ -69,7 +69,7 @@ describe('editDiffToOps（手动编辑 → op，P3 双向同步）', () => {
     }
     const ops = editDiffToOps(before, next, 'room-living')
     expect(ops).toHaveLength(1)
-    const op = ops[0]
+    const op = ops[0]!
     expect(op.op).toBe('updateRoom')
     if (op.op !== 'updateRoom') return
     expect(op.patch.footprint).toEqual(translateFootprint(living.footprint, 2, 1))
@@ -86,7 +86,7 @@ describe('editDiffToOps（手动编辑 → op，P3 双向同步）', () => {
     }
     const ops = editDiffToOps(before, next, 'room-living')
     expect(ops).toHaveLength(1)
-    const op = ops[0]
+    const op = ops[0]!
     expect(op.op).toBe('updateRoom')
     if (op.op !== 'updateRoom') return
     expect(op.patch.name).toBe('大客厅')
@@ -105,7 +105,7 @@ describe('editDiffToOps（手动编辑 → op，P3 双向同步）', () => {
     }
     const ops = editDiffToOps(before, next, 'room-kitchen')
     expect(ops).toHaveLength(1)
-    const op = ops[0]
+    const op = ops[0]!
     expect(op.op).toBe('updateRoom')
     if (op.op !== 'updateRoom') return
     expect(op.patch.footprint).toBeUndefined()
@@ -123,7 +123,7 @@ describe('editDiffToOps（手动编辑 → op，P3 双向同步）', () => {
     }
     const ops = editDiffToOps(before, next, 'wardrobe-master')
     expect(ops).toHaveLength(1)
-    const op = ops[0]
+    const op = ops[0]!
     expect(op.op).toBe('updateFurniture')
     if (op.op !== 'updateFurniture') return
     expect(op.roomId).toBe('room-master')
@@ -144,7 +144,7 @@ describe('editDiffToOps（手动编辑 → op，P3 双向同步）', () => {
     })
     const ops = editDiffToOps(before, next, 'nightstand-master')
     expect(ops).toHaveLength(1)
-    expect(ops[0].op).toBe('updateFurniture')
+    expect(ops[0]!.op).toBe('updateFurniture')
   })
 
   it('无实际变化 → 空数组（不记录日志）', () => {
@@ -180,8 +180,8 @@ describe('editDiffToOps（手动编辑 → op，P3 双向同步）', () => {
     }
     const ops = editDiffToOps(before, next, 'toilet-master')
     expect(ops).toHaveLength(1)
-    expect(ops[0].op).toBe('updateFurniture')
-    if (ops[0].op !== 'updateFurniture') return
-    expect(ops[0].roomId).toBe('bath-master')
+    expect(ops[0]!.op).toBe('updateFurniture')
+    if (ops[0]!.op !== 'updateFurniture') return
+    expect(ops[0]!.roomId).toBe('bath-master')
   })
 })

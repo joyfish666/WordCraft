@@ -54,7 +54,7 @@ export const FLOOR_SIDE_COLOR = '#8d8570'
 /** 按索引取房间颜色，超出色板长度自动循环 */
 export function roomColor(index: number, colorMode: ColorMode): string {
   const palette = colorMode === 'colorblind' ? COLORBLIND_ROOM_COLORS : ROOM_COLORS
-  return palette[index % palette.length]
+  return palette[index % palette.length]!
 }
 
 /**

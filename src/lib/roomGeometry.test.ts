@@ -358,8 +358,8 @@ describe('入户门', () => {
     const south = edgeOf(plan.get('study')!, 'south')!
     const windows = south.segments.filter((s) => s.kind === 'window')
     expect(windows).toHaveLength(1)
-    expect(windows[0].from).toBeCloseTo(0.5)
-    expect(windows[0].to).toBeCloseTo(4.5)
+    expect(windows[0]!.from).toBeCloseTo(0.5)
+    expect(windows[0]!.to).toBeCloseTo(4.5)
     // 入户门改到东墙（入口方向顺时针第一面放得下 0.9m 的外墙），宽度恒为标准门宽
     const east = edgeOf(plan.get('study')!, 'east')!
     const entranceSeg = east.segments.find((s) => s.entrance)!
@@ -385,8 +385,8 @@ describe('入户门', () => {
     // 窗未被劈开：仍是完整一段
     const windows = south.segments.filter((s) => s.kind === 'window')
     expect(windows).toHaveLength(1)
-    expect(windows[0].from).toBeCloseTo(0.5)
-    expect(windows[0].to).toBeCloseTo(3.5)
+    expect(windows[0]!.from).toBeCloseTo(0.5)
+    expect(windows[0]!.to).toBeCloseTo(3.5)
   })
 })
 
@@ -554,10 +554,10 @@ describe('墙段坐标与渲染映射（坑 37/坑 41 回归）', () => {
 
   it('segmentWorldRange：段局部以边起点为 0，世界 = start + [from, to]', () => {
     const roomA = room('a', '主卧', 0, 0, 4, 3)
-    const edge = footprintEdges(roomA)[0] // 南墙（沿 x，start 为 x 最小值）
+    const edge = footprintEdges(roomA)[0]! // 南墙（沿 x，start 为 x 最小值）
     expect(edge.axis).toBe('x')
     expect(edge.start).toBeCloseTo(-2, 5)
-    const whole = segmentWorldRange(edge, edge.segments[0])
+    const whole = segmentWorldRange(edge, edge.segments[0]!)
     expect(whole.from).toBeCloseTo(-2, 5)
     expect(whole.to).toBeCloseTo(2, 5)
   })
@@ -625,7 +625,7 @@ describe('墙段坐标与渲染映射（坑 37/坑 41 回归）', () => {
     it('不同场景引用重新计算，结果与无缓存版本一致', () => {
       const s = scene()
       const cached = computeAllWallPlansCached(s, 'south', 'living')
-      const fresh = computeAllWallPlans(s.root.levels[0].rooms, {
+      const fresh = computeAllWallPlans(s.root.levels[0]!.rooms, {
         entrance: 'south',
         entranceRoomId: 'living',
       })

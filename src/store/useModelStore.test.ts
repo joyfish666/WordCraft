@@ -252,7 +252,7 @@ describe('useModelStore 手动编辑 → 编辑操作日志（P3 双向同步）
     useModelStore.getState().translateSelected(1, 0, 0)
     const ops = useChatStore.getState().editOps
     expect(ops).toHaveLength(1)
-    const op = ops[0]
+    const op = ops[0]!
     expect(op.op).toBe('updateFurniture')
     if (op.op !== 'updateFurniture') return
     expect(op.id).toBe('sofa-living')
@@ -266,7 +266,7 @@ describe('useModelStore 手动编辑 → 编辑操作日志（P3 双向同步）
     useModelStore.getState().translateSelected(2, 0, 0)
     const ops = useChatStore.getState().editOps
     expect(ops).toHaveLength(1)
-    const op = ops[0]
+    const op = ops[0]!
     expect(op.op).toBe('updateRoom')
     if (op.op !== 'updateRoom') return
     expect(op.id).toBe('room-living')
@@ -287,7 +287,7 @@ describe('useModelStore 手动编辑 → 编辑操作日志（P3 双向同步）
     useModelStore.getState().updateSelected({ name: '大衣柜', dimensions: { width: 0.8 } })
     const ops = useChatStore.getState().editOps
     expect(ops).toHaveLength(1)
-    const op = ops[0]
+    const op = ops[0]!
     expect(op.op).toBe('updateFurniture')
     if (op.op !== 'updateFurniture') return
     expect(op.patch.name).toBe('大衣柜')
@@ -310,7 +310,7 @@ describe('useModelStore 手动编辑 → 编辑操作日志（P3 双向同步）
     useModelStore.getState().previewSelected({ position: { z: 2.5 } })
     useModelStore.getState().commitDrag(base)
     expect(useChatStore.getState().editOps).toHaveLength(1)
-    const op = useChatStore.getState().editOps[0]
+    const op = useChatStore.getState().editOps[0]!
     expect(op.op).toBe('updateFurniture')
   })
 
@@ -356,7 +356,7 @@ describe('useModelStore 平面图编辑（P4）', () => {
     const shifted = room.footprint.map((p) => ({ x: p.x + 1, z: p.z }))
     useModelStore.getState().previewFootprint('room-master', shifted)
     const after = findNodeById(useModelStore.getState().scene!.root, 'room-master') as RoomNode
-    expect(after.footprint[0].x).toBeCloseTo(room.footprint[0].x + 1, 5)
+    expect(after.footprint[0]!.x).toBeCloseTo(room.footprint[0]!.x + 1, 5)
     expect(useModelStore.getState().past).toHaveLength(0)
     expect(useChatStore.getState().editOps).toHaveLength(0)
     // commitPlanEdit：压入拖拽前快照 + 记录一条 updateRoom footprint op
@@ -370,7 +370,7 @@ describe('useModelStore 平面图编辑（P4）', () => {
     // 撤销回到拖拽前
     useModelStore.getState().undo()
     const undone = findNodeById(useModelStore.getState().scene!.root, 'room-master') as RoomNode
-    expect(undone.footprint[0].x).toBeCloseTo(room.footprint[0].x, 5)
+    expect(undone.footprint[0]!.x).toBeCloseTo(room.footprint[0]!.x, 5)
   })
 
   it('commitPlanEdit 无变化（场景引用相同）不记历史', () => {
@@ -397,7 +397,7 @@ describe('useModelStore 平面图编辑（P4）', () => {
     ])
     const room = findNodeById(useModelStore.getState().scene!.root, 'room-master') as RoomNode
     expect(room.windows).toHaveLength(1)
-    expect(room.windows[0].edgeIndex).toBe(2)
+    expect(room.windows[0]!.edgeIndex).toBe(2)
     expect(useModelStore.getState().past).toHaveLength(1)
     expect(useModelStore.getState().past[0]).toBe(before)
     expect(useChatStore.getState().editOps).toHaveLength(1)
@@ -448,11 +448,11 @@ describe('useModelStore 平面图编辑（P4）', () => {
   it('applyPlanOps 拆房 splitRoom：两个房间 + 可撤销 + 编辑日志', () => {
     useModelStore.getState().setScene(createSampleModel())
     const before = useModelStore.getState().scene!
-    const beforeCount = before.root.levels[0].rooms.length
+    const beforeCount = before.root.levels[0]!.rooms.length
     useModelStore
       .getState()
       .applyPlanOps([{ op: 'splitRoom', id: 'room-master', axis: 'x', position: 0 }])
-    const rooms = useModelStore.getState().scene!.root.levels[0].rooms
+    const rooms = useModelStore.getState().scene!.root.levels[0]!.rooms
     expect(rooms).toHaveLength(beforeCount + 1)
     expect(rooms.some((r) => r.id === 'room-master')).toBe(true)
     useModelStore.getState().undo()

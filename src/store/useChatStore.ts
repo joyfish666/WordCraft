@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import type { ChatMessage } from '../lib/api'
 import { createId } from '../lib/id'
+import { safeLocalStorage } from '../lib/safeStorage'
 import type { SceneModel } from '../types/model'
 import type { Op } from '../types/ops'
 
@@ -80,7 +81,7 @@ export const useChatStore = create<ChatState>()(
           // 仅当最后一条是"携带模型的助手消息"时才允许撤销（连同其前一条用户消息一起移除）
           const last = state.messages[state.messages.length - 1]
           if (!last || last.role !== 'assistant' || !last.model) return state
-          restored = state.generationStack[state.generationStack.length - 1]
+          restored = state.generationStack[state.generationStack.length - 1]!
           return {
             generationStack: state.generationStack.slice(0, -1),
             messages: state.messages.slice(0, -2),
@@ -100,6 +101,8 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: STORAGE_KEY,
+      // 写入失败（配额/隐私模式）降级为静默跳过，不打断对话（safeStorage.ts）
+      storage: createJSONStorage(() => safeLocalStorage),
       // 仅持久化对话记录；生成状态与历史栈均无需保存。
       // ⚠️ 消息内嵌的 model（整场景快照）不落盘（2026-08-13 审查批次后续，坑 75 姊妹）：
       // 多轮对话每轮各带一份完整 SceneModel，持久化会以每次 addMessage 全量重序列化的代价

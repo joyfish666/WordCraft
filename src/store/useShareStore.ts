@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import { safeLocalStorage } from '../lib/safeStorage'
 
 /** 一条分享口令记录：code 为 lz-string 压缩后的模型口令，还原时解压 */
 export interface ShareRecord {
@@ -47,6 +48,7 @@ export const useShareStore = create<ShareState>()(
     }),
     {
       name: 'wordcraft.share',
+      storage: createJSONStorage(() => safeLocalStorage),
       partialize: (s) => ({ records: s.records }),
     },
   ),

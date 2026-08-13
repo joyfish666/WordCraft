@@ -77,7 +77,7 @@ function v1Model(): unknown {
 describe('migrateModel（v1 → v3）', () => {
   it('盒子房间 → 4 点足迹，尺寸/中心一致', () => {
     const model = migrateModel(v1Model())!
-    const living = model.root.levels[0].rooms.find((r) => r.id === 'living')!
+    const living = model.root.levels[0]!.rooms.find((r) => r.id === 'living')!
     expect(living.footprint).toHaveLength(4)
     // 足迹包围盒与 v1 中心/尺寸一致（float 噪声容忍）
     const minX = Math.min(...living.footprint.map((p) => p.x))
@@ -93,12 +93,12 @@ describe('migrateModel（v1 → v3）', () => {
 
   it('嵌套房间保留在嵌套数组、家具与墙类型归并为 furniture', () => {
     const model = migrateModel(v1Model())!
-    const master = model.root.levels[0].rooms.find((r) => r.id === 'master')!
+    const master = model.root.levels[0]!.rooms.find((r) => r.id === 'master')!
     expect(master.nestedRooms.map((r) => r.id)).toEqual(['bath'])
-    const bath = master.nestedRooms[0]
+    const bath = master.nestedRooms[0]!
     expect(bath.furniture.map((f) => f.id)).toEqual(['toilet'])
     // v1 的 'wall' 类型并入 furniture
-    const living = model.root.levels[0].rooms.find((r) => r.id === 'living')!
+    const living = model.root.levels[0]!.rooms.find((r) => r.id === 'living')!
     expect(living.furniture.map((f) => f.id)).toEqual(['sofa', 'wall1'])
     expect(living.furniture.every((f) => f.type === 'furniture')).toBe(true)
   })
@@ -107,9 +107,9 @@ describe('migrateModel（v1 → v3）', () => {
     const model = migrateModel(v1Model())!
     expect(model.version).toBe(3)
     expect(model.root.levels).toHaveLength(1)
-    expect(model.root.levels[0].rooms).toHaveLength(2)
+    expect(model.root.levels[0]!.rooms).toHaveLength(2)
     expect(model.root.entranceRoomId).toBe('living')
-    expect(model.root.levels[0].height).toBe(2.8)
+    expect(model.root.levels[0]!.height).toBe(2.8)
   })
 
   it('迁移幂等：migrate(migrate(v1)) 与 migrate(v1) 结构一致', () => {
@@ -230,7 +230,7 @@ describe('migrateModel（v1 → v3）', () => {
   it('v1 字段缺失时兜底默认值（不崩溃）', () => {
     const model = migrateModel({ version: 1, root: { type: 'house', children: [] } })!
     expect(model.root.name).toBe('整屋')
-    expect(model.root.levels[0].rooms).toHaveLength(0)
-    expect(model.root.levels[0].height).toBe(2.8)
+    expect(model.root.levels[0]!.rooms).toHaveLength(0)
+    expect(model.root.levels[0]!.height).toBe(2.8)
   })
 })

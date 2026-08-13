@@ -10,6 +10,7 @@ import { useT } from '../../i18n'
 import { useModelStore } from '../../store/useModelStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { Button } from './Button'
+import { useConfirm } from './useConfirm'
 import { Dialog } from './Dialog'
 
 export interface ProjectLibraryDialogProps {
@@ -42,6 +43,7 @@ export function ProjectLibraryDialog({
   const currentId = useProjectStore((s) => s.currentId)
   const setCurrentName = useProjectStore((s) => s.setCurrentName)
   const t = useT()
+  const { confirm } = useConfirm()
 
   const [projects, setProjects] = useState<ProjectRecord[]>([])
   const [name, setName] = useState('')
@@ -82,7 +84,12 @@ export function ProjectLibraryDialog({
 
   const handleDelete = async (rec: ProjectRecord) => {
     if (!rec.id) return
-    if (!window.confirm(t('project.deleteConfirm', { name: rec.name }))) return
+    const ok = await confirm({
+      title: t('project.deleteTitle'),
+      message: t('project.deleteConfirm', { name: rec.name }),
+      danger: true,
+    })
+    if (!ok) return
     await deleteProject(rec.id)
     if (!aliveRef.current) return
     if (rec.id === currentId) useProjectStore.getState().clearProject()

@@ -48,7 +48,7 @@ function baseScene(): SceneModel {
 }
 
 function roomOf(scene: SceneModel, id = 'r'): RoomNode {
-  const found = (scene.root.levels[0].rooms.find((r) => r.id === id) ?? null) as RoomNode | null
+  const found = (scene.root.levels[0]!.rooms.find((r) => r.id === id) ?? null) as RoomNode | null
   if (!found) throw new Error(`room ${id} not found`)
   return found
 }
@@ -156,8 +156,8 @@ describe('planEdit - 顶点拖拽（正交约束）', () => {
     expect(footprintValid(next)).toBe(true)
     // 指针自动网格吸附
     const snapped = dragVertexFootprint(fp, 1, { x: 1.043, z: 1.987 })!
-    expect(snapped[1].x).toBeCloseTo(1, 10)
-    expect(snapped[1].z).toBeCloseTo(2, 10)
+    expect(snapped[1]!.x).toBeCloseTo(1, 10)
+    expect(snapped[1]!.z).toBeCloseTo(2, 10)
   })
 
   it('拖西北角（垂直边在前）对称成立', () => {
@@ -311,11 +311,11 @@ describe('planEdit - 拆房布局', () => {
     // 开洞：南墙窗 → a（局部不变）；东墙门 → b（东墙起点不变）；北墙窗跨切线 → 丢弃
     expect(a.doors).toHaveLength(0)
     expect(a.windows).toHaveLength(1)
-    expect(a.windows[0].edgeIndex).toBe(0)
-    expect(a.windows[0].from).toBeCloseTo(0.5, 5)
-    expect(a.windows[0].to).toBeCloseTo(2.0, 5)
+    expect(a.windows[0]!.edgeIndex).toBe(0)
+    expect(a.windows[0]!.from).toBeCloseTo(0.5, 5)
+    expect(a.windows[0]!.to).toBeCloseTo(2.0, 5)
     expect(b.doors).toHaveLength(1)
-    expect(b.doors[0].edgeIndex).toBe(1)
+    expect(b.doors[0]!.edgeIndex).toBe(1)
     expect(b.windows).toHaveLength(0)
     // 拒绝：非矩形 / 切线太靠边（0.1 < 1m）
     const l: Point2D[] = [

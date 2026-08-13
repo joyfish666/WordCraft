@@ -116,7 +116,7 @@ function drawWoodFloor(ctx: CanvasRenderingContext2D, rand: () => number, plankW
       const g = (grain(x * 4, y * 0.35) - 0.5) * 38
       const m = (mottle(x * 1.3, y * 0.5) - 0.5) * 24
       const darkStreak = streak(x * 3, y * 0.4) > 0.82 ? -28 : 0
-      const v = Math.min(252, tones[p] + g + m + darkStreak - (1 - edgeFade) * 8)
+      const v = Math.min(252, tones[p]! + g + m + darkStreak - (1 - edgeFade) * 8)
       ctx.fillStyle = rgb(v, v * 0.95, v * 0.77)
       ctx.fillRect(x, y, 1, 1)
     }

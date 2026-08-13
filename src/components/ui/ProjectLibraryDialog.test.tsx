@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createSampleModel } from '../../lib/sampleModel'
 import { useModelStore } from '../../store/useModelStore'
 import { useProjectStore } from '../../store/useProjectStore'
+import { ConfirmProvider } from './ConfirmDialog'
 import { ProjectLibraryDialog } from './ProjectLibraryDialog'
 
 // mock 数据层：对话框只调用这些函数，行为由测试控制
@@ -27,12 +28,14 @@ function renderDialog(overrides: Partial<{ open: boolean }> = {}) {
   const onOpenProject = vi.fn()
   const onProjectCreated = vi.fn()
   render(
-    <ProjectLibraryDialog
-      open={overrides.open ?? true}
-      onClose={onClose}
-      onOpenProject={onOpenProject}
-      onProjectCreated={onProjectCreated}
-    />,
+    <ConfirmProvider>
+      <ProjectLibraryDialog
+        open={overrides.open ?? true}
+        onClose={onClose}
+        onOpenProject={onOpenProject}
+        onProjectCreated={onProjectCreated}
+      />
+    </ConfirmProvider>,
   )
   return { onClose, onOpenProject, onProjectCreated }
 }
@@ -99,15 +102,17 @@ describe('ProjectLibraryDialog', () => {
     mocks.listProjects.mockResolvedValue([
       { id: 5, name: '旧名', data: '{}', createdAt: 1, updatedAt: 2 },
     ])
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderDialog()
     fireEvent.click(await screen.findByRole('button', { name: '删除' }))
+    // 确认对话框出现，点「确定」删除
+    expect(await screen.findByRole('heading', { name: '删除项目' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '确定' }))
     await vi.waitFor(() => expect(mocks.deleteProject).toHaveBeenCalledWith(5))
   })
 
-  it('项目行显示房间数（v3 模型：root.levels[0].rooms，原实现读错字段恒为 0）', async () => {
+  it('项目行显示房间数（v3 模型：root.levels[0]!.rooms，原实现读错字段恒为 0）', async () => {
     const model = createSampleModel()
-    const rooms = model.root.levels[0].rooms.map((r) => ({ ...r }))
+    const rooms = model.root.levels[0]!.rooms.map((r) => ({ ...r }))
     mocks.listProjects.mockResolvedValue([
       { id: 1, name: '三房', data: JSON.stringify(model), createdAt: 1, updatedAt: 2 },
       {

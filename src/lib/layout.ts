@@ -64,7 +64,7 @@ export function resolveLayout(scene: SceneModelV2): SceneModel {
  * 第一个不冲突的角；全部冲突保持原位。嵌套房间的嵌套房间递归处理。
  */
 function avoidNestedDoorZones(model: SceneModel): SceneModel {
-  const rooms = model.root.levels[0].rooms
+  const rooms = model.root.levels[0]!.rooms
   const doorZones = computeDoorZones(rooms, {
     entrance: model.root.entranceDir ?? 'south',
     entranceRoomId: model.root.entranceRoomId,
@@ -108,7 +108,7 @@ function avoidNestedDoorZones(model: SceneModel): SceneModel {
 
 /** 布局完成的调试日志（resolveLayout 两个分支共用） */
 function withLayoutLog(model: SceneModel): SceneModel {
-  const rooms = model.root.levels[0].rooms
+  const rooms = model.root.levels[0]!.rooms
   logDebug('布局解析完成', {
     house: model.root.name,
     rooms: rooms.map((c) => ({
@@ -336,13 +336,13 @@ function resolveCorridor(house: HouseNodeV2): HouseNode {
   )
   const totals = { left: 0, right: 0 }
   sideOf.forEach((s, i) => {
-    if (s) totals[s] += ordered[i].dimensions.length
+    if (s) totals[s] += ordered[i]!.dimensions.length
   })
   sideOf.forEach((s, i) => {
     if (s) return
     const side = totals.left <= totals.right ? 'left' : 'right'
     sideOf[i] = side
-    totals[side] += ordered[i].dimensions.length
+    totals[side] += ordered[i]!.dimensions.length
   })
 
   const cursor = { left: 0, right: 0 }

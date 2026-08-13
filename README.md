@@ -2,10 +2,18 @@
 
 > A pure-frontend "text-to-3D" house designer — describe your home in one sentence, and an AI generates an editable 3D spatial model.
 
+🛑 **Recommended on desktop (PC)**: the app is built for desktop browsers — mobile gets only basic adaptations (landscape-only, compact layout). For the best experience, please use a computer.
+
 🚀 **Live demo**: <https://joyfish666.github.io/WordCraft/>
 
 - Deployed on GitHub Pages · no backend · all data stays in the browser
 - Click "示例" or an example chip on the empty-state card on first visit to load a ready-made house
+
+<p align="center">
+  <img src="docs/images/screenshot-3d.png" alt="3D view — generated house with realistic materials" width="72%" />
+  <br />
+  <img src="docs/images/screenshot-plan.png" alt="2D plan view — editable room footprints" width="72%" />
+</p>
 
 📄 [中文 README](README-zh.md) · [Design](docs/design.md) · [Architecture](docs/architecture.md) · [History](docs/history.md) · [Dev Notes](docs/notes.md)
 

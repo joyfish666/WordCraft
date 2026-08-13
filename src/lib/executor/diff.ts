@@ -77,7 +77,7 @@ export function diffSceneV2(current: SceneModel | null, target: SceneModelV2): O
   if (!current || current.root.name !== target.root.name) {
     ops.push({ op: 'setHouse', name: target.root.name })
   }
-  ops.push(...diffRooms(current?.root.levels[0].rooms ?? [], target.root.children))
+  ops.push(...diffRooms(current?.root.levels[0]!.rooms ?? [], target.root.children))
   return ops
 }
 

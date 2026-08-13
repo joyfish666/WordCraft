@@ -115,7 +115,7 @@ export function applyMacro(scene: SceneModel, op: Extract<Op, { op: 'macro' }>):
 
 /** 无 relativeTo 时的落点：已有房间 → 排到整屋东侧（避免重叠）；空屋 → 原点 */
 function defaultPlacement(scene: SceneModel, spec: RoomSpec): { x: number; z: number } {
-  const rooms = scene.root.levels[0].rooms
+  const rooms = scene.root.levels[0]!.rooms
   if (rooms.length === 0) return { x: 0, z: 0 }
   const b = houseLevelsBounds(scene.root) ?? { minX: 0, maxX: 0, minZ: 0, maxZ: 0 }
   const dims = spec.footprint ? footprintBounds(spec.footprint) : null
@@ -160,7 +160,7 @@ function alignAdjacentPlacement(
   x: number,
   z: number,
 ): { x: number; z: number } {
-  const corridor = scene.root.levels[0].rooms.find((r) => isCorridorName(r.name))
+  const corridor = scene.root.levels[0]!.rooms.find((r) => isCorridorName(r.name))
   if (!corridor || corridor.id === target.id) return { x, z }
   if (dir !== 'east' && dir !== 'west') return { x, z }
   const cc = footprintCenter(corridor.footprint)
@@ -210,7 +210,7 @@ export function applyAddRoom(scene: SceneModel, op: Extract<Op, { op: 'addRoom' 
           })()
         : defaultPlacement(scene, spec)
   const room = makeRoom(specToRoomV2(spec), placement.x, placement.z, spec.footprint)
-  const level = scene.root.levels[0]
+  const level = scene.root.levels[0]!
   return {
     ...scene,
     root: { ...scene.root, levels: [{ ...level, rooms: [...level.rooms, room] }] },
@@ -294,7 +294,7 @@ export function applyNestRoom(scene: SceneModel, op: Extract<Op, { op: 'nestRoom
   const halfZ = Math.max(0, (pb.maxZ - pb.minZ - (rb.maxZ - rb.minZ)) / 2 - WALL_THICKNESS)
   // 父房间门口禁区（与渲染同源）：嵌套落点不得压住门
   const doorZoneRects = (
-    computeDoorZones(removed.root.levels[0].rooms, {
+    computeDoorZones(removed.root.levels[0]!.rooms, {
       entrance: removed.root.entranceDir ?? 'south',
       entranceRoomId: removed.root.entranceRoomId,
     }).get(parent.id) ?? []
@@ -439,7 +439,7 @@ function moveAdjacent(
   const halfL = (b.maxX - b.minX) / 2
   const halfW = (b.maxZ - b.minZ) / 2
   // 嵌套房间 → 提升到顶层（保持世界坐标，追加到顶层末尾），再贴靠
-  const lifted = scene.root.levels[0].rooms.some((r) => r.id === room.id)
+  const lifted = scene.root.levels[0]!.rooms.some((r) => r.id === room.id)
     ? scene
     : {
         ...scene,
@@ -480,7 +480,7 @@ function pickFreePlacement(
       minZ: aligned.z - halfW,
       maxZ: aligned.z + halfW,
     }
-    const conflicts = scene.root.levels[0].rooms.some((r) => {
+    const conflicts = scene.root.levels[0]!.rooms.some((r) => {
       if (r.id === id) return false
       return rectsOverlap(bb, footprintBounds(r.footprint))
     })

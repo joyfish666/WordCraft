@@ -196,7 +196,7 @@ function angleFor(back: FacingDir, facing: FacingDir): number {
     'west-east': 180,
     'west-west': 0,
   }
-  return TABLE[`${back}-${facing}`]
+  return TABLE[`${back}-${facing}`]!
 }
 
 /**
@@ -821,10 +821,10 @@ export function partsBounds(parts: FurniturePart[]): {
   const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
   for (const p of parts) {
     for (let i = 0; i < 3; i++) {
-      const lo = p.center[i] - p.size[i] / 2
-      const hi = p.center[i] + p.size[i] / 2
-      if (lo < min[i]) min[i] = lo
-      if (hi > max[i]) max[i] = hi
+      const lo = p.center[i]! - p.size[i]! / 2
+      const hi = p.center[i]! + p.size[i]! / 2
+      if (lo < min[i]!) min[i] = lo
+      if (hi > max[i]!) max[i] = hi
     }
   }
   return { min, max }

@@ -58,7 +58,7 @@ export function translateRoom(room: RoomNode, dx: number, dz: number): RoomNode 
 export function sameFootprint(a: Point2D[], b: Point2D[]): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) {
-    if (Math.abs(a[i].x - b[i].x) > EPSILON || Math.abs(a[i].z - b[i].z) > EPSILON) return false
+    if (Math.abs(a[i]!.x - b[i]!.x) > EPSILON || Math.abs(a[i]!.z - b[i]!.z) > EPSILON) return false
   }
   return true
 }

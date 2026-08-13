@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>言筑 WordCraft</title>
+    <script>
+      // GitHub Pages 静态托管没有 SPA 回退：直接访问 /WordCraft/settings 等深链接或在此刷新时，
+      // 服务器找不到对应文件会返回 404.html。此脚本把原始路径编码进查询串
+      // （/WordCraft/?/settings 形式）后重定向到首页，由 index.html 的内联脚本还原路径
+      // 交给应用路由，实现深链接刷新不丢页面（与 BrowserRouter 兼容，无需改 HashRouter）。
+      // pathSegmentsToKeep：保留仓库名前缀段（/WordCraft），其余路径段交给应用。
+      ;(function () {
+        var pathSegmentsToKeep = 1
+        var l = window.location
+        var base = l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/')
+        var rest = l.pathname
+          .slice(1)
+          .split('/')
+          .slice(pathSegmentsToKeep)
+          .map(encodeURIComponent)
+          .join('/')
+        l.replace(
+          l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') + base + '/?/' + rest + l.search + l.hash,
+        )
+      })()
+    </script>
+  </head>
+  <body>
+    <p>正在跳转…</p>
+  </body>
+</html>

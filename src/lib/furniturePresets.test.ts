@@ -84,9 +84,9 @@ describe('buildFurnitureParts', () => {
   it('generic 回退为单个整盒（与旧渲染一致）', () => {
     const parts = buildFurnitureParts('generic', 2, 0.5, 1.5)
     expect(parts).toHaveLength(1)
-    expect(parts[0].center).toEqual([0, 0, 0])
-    expect(parts[0].size).toEqual([2, 0.5, 1.5])
-    expect(parts[0].shade).toBe('base')
+    expect(parts[0]!.center).toEqual([0, 0, 0])
+    expect(parts[0]!.size).toEqual([2, 0.5, 1.5])
+    expect(parts[0]!.shade).toBe('base')
   })
 
   it('每类家具部件数量符合预期', () => {
@@ -251,8 +251,8 @@ describe('共面审计（坑 88：z-fighting 只发生在「同法向 + 共面 +
         })
         for (let i = 0; i < all.length; i++) {
           for (let j = i + 1; j < all.length; j++) {
-            const a = all[i]
-            const b = all[j]
+            const a = all[i]!
+            const b = all[j]!
             if (!sameNormal(a.face, b.face)) continue
             if (Math.abs(a.face.plane - b.face.plane) > 1e-7) continue
             if (overlap(a.face.a, b.face.a) && overlap(a.face.b, b.face.b)) {
@@ -328,7 +328,7 @@ describe('facingFromRoom', () => {
     )
     expect(doors).toHaveLength(2)
     expect(doors.every((d) => d.center[0] < 0)).toBe(true) // 西侧
-    expect(doors[0].size[2]).toBeGreaterThan(0.8) // 沿 z 跨度 ≈ 大面宽的一半
+    expect(doors[0]!.size[2]).toBeGreaterThan(0.8) // 沿 z 跨度 ≈ 大面宽的一半
   })
 
   it('长轴朝背（床）：由长轴方向上最近的墙决定朝向', () => {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useConfirm } from '../components/ui/useConfirm'
 import { useT } from '../i18n'
 import { ChatGenerationError, generateModelFromChat } from '../lib/chat'
 import { toChatHistory, useChatStore } from '../store/useChatStore'
@@ -22,6 +23,7 @@ interface UseGenerationOptions {
  */
 export function useGeneration({ draft, setDraft, setChatCollapsed }: UseGenerationOptions) {
   const t = useT()
+  const { confirm } = useConfirm()
   const [elapsed, setElapsed] = useState(0)
   const isGenerating = useChatStore((s) => s.isGenerating)
   const addMessage = useChatStore((s) => s.addMessage)
@@ -75,7 +77,10 @@ export function useGeneration({ draft, setDraft, setChatCollapsed }: UseGenerati
       // 生成期间场景已变化（手动编辑/打开项目/加载示例/撤销等）→ 提示冲突，避免静默覆盖
       const latestScene = useModelStore.getState().scene
       if (latestScene !== baseScene) {
-        const apply = window.confirm(t('home.genConflictApply'))
+        const apply = await confirm({
+          title: t('home.genConflictTitle'),
+          message: t('home.genConflictApply'),
+        })
         if (!apply) {
           addMessage({ role: 'error', content: t('home.genConflictAborted') })
           return
