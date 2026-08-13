@@ -1,0 +1,45 @@
+/* ---------- 操作说明弹窗 ---------- */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: rgba(45, 42, 34, 0.55);
+}
+
+.dialog {
+  width: min(520px, calc(100vw - 40px));
+  max-height: 80vh;
+  overflow: auto;
+  padding: 20px 22px;
+  border-radius: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+}
+
+.dialog__title {
+  margin: 0 0 14px;
+  font-size: 17px;
+}
+
+.dialog__list {
+  margin: 0 0 16px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.dialog__list strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+}

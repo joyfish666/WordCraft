@@ -173,12 +173,7 @@ export function PlanEnhancements() {
       {/* 家具足迹 */}
       {rooms.map(({ node }) =>
         node.furniture.map((f) => (
-          <FurnitureFootprint
-            key={f.id}
-            furniture={f}
-            room={node}
-            selected={f.id === selectedId}
-          />
+          <FurnitureFootprint key={f.id} furniture={f} room={node} selected={f.id === selectedId} />
         )),
       )}
 
@@ -198,7 +193,12 @@ export function PlanEnhancements() {
             }
             if (seg.kind === 'window') {
               return windowHatchLines(edge, seg, SYMBOL_Y).map((pts, i) => (
-                <Line key={`${key}-w${i}`} points={pts} color={WINDOW_SYMBOL_COLOR} lineWidth={1.5} />
+                <Line
+                  key={`${key}-w${i}`}
+                  points={pts}
+                  color={WINDOW_SYMBOL_COLOR}
+                  lineWidth={1.5}
+                />
               ))
             }
             return []

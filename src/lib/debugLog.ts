@@ -67,6 +67,13 @@ export function clearDebug(): void {
   notify()
 }
 
+/** 将调试日志格式化为可复制/下载的纯文本 */
+export function formatDebugText(entries: DebugEntry[]): string {
+  return entries
+    .map((e) => `[${e.time}] [${e.level}] ${e.message}${e.detail ? `\n${e.detail}` : ''}`)
+    .join('\n')
+}
+
 /** React hook：订阅调试日志列表 */
 export function useDebugEntries(): DebugEntry[] {
   const [state, setState] = useState<DebugEntry[]>(getDebugEntries)

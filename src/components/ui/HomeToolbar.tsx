@@ -68,7 +68,12 @@ export function HomeToolbar({
   return (
     <header className="toolbar">
       <div className="toolbar__brand">
-        <svg className="toolbar__brand-logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <svg
+          className="toolbar__brand-logo"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
           <path d="M12 3L4 9v12h5v-7h6v7h5V9l-8-6z" />
         </svg>
         <span className="toolbar__brand-text">
@@ -78,11 +83,22 @@ export function HomeToolbar({
       </div>
 
       <div className="toolbar__group">
-        <button type="button" className="toolbar__btn" title={t('home.loadSampleTitle')} onClick={onLoadSample}>
+        <button
+          type="button"
+          className="toolbar__btn"
+          title={t('home.loadSampleTitle')}
+          onClick={onLoadSample}
+        >
           <IconSample />
           <span>{t('home.loadSample')}</span>
         </button>
-        <button type="button" className="toolbar__btn" title={t('home.clearSceneTitle')} onClick={onClearScene} disabled={!canClear}>
+        <button
+          type="button"
+          className="toolbar__btn"
+          title={t('home.clearSceneTitle')}
+          onClick={onClearScene}
+          disabled={!canClear}
+        >
           <IconTrash />
           <span>{t('home.clearScene')}</span>
         </button>
@@ -91,10 +107,24 @@ export function HomeToolbar({
       <div className="toolbar__sep" />
 
       <div className="toolbar__group">
-        <button type="button" className="toolbar__btn toolbar__btn--icon-only" title={undoTitle} aria-label={t('home.undo')} onClick={onUndo} disabled={!canUndo}>
+        <button
+          type="button"
+          className="toolbar__btn toolbar__btn--icon-only"
+          title={undoTitle}
+          aria-label={t('home.undo')}
+          onClick={onUndo}
+          disabled={!canUndo}
+        >
           <IconUndo />
         </button>
-        <button type="button" className="toolbar__btn toolbar__btn--icon-only" title={redoTitle} aria-label={t('home.redo')} onClick={onRedo} disabled={!canRedo}>
+        <button
+          type="button"
+          className="toolbar__btn toolbar__btn--icon-only"
+          title={redoTitle}
+          aria-label={t('home.redo')}
+          onClick={onRedo}
+          disabled={!canRedo}
+        >
           <IconRedo />
         </button>
       </div>
@@ -110,24 +140,53 @@ export function HomeToolbar({
         <IconChat />
         <span>{t('home.chat')}</span>
       </button>
-      <button type="button" className="toolbar__btn" title={t('share.title')} aria-label={t('home.share')} onClick={onShare}>
+      <button
+        type="button"
+        className="toolbar__btn"
+        title={t('share.title')}
+        aria-label={t('home.share')}
+        onClick={onShare}
+      >
         <IconShare />
       </button>
-      <button type="button" className="toolbar__btn" title={t('home.screenshotTitle')} aria-label={t('home.screenshot')} onClick={onScreenshot}>
+      <button
+        type="button"
+        className="toolbar__btn"
+        title={t('home.screenshotTitle')}
+        aria-label={t('home.screenshot')}
+        onClick={onScreenshot}
+      >
         <IconCamera />
         <span>{t('home.screenshot')}</span>
       </button>
-      <button type="button" className="toolbar__btn" title={t('home.help')} aria-label={t('home.help')} onClick={onHelp}>
+      <button
+        type="button"
+        className="toolbar__btn"
+        title={t('home.help')}
+        aria-label={t('home.help')}
+        onClick={onHelp}
+      >
         <IconHelp />
       </button>
 
       <div className="toolbar__right">
         <div className="toolbar__group">
-          <button type="button" className="toolbar__btn toolbar__btn--primary" title={saveTitle} onClick={onSave} disabled={!canSave}>
+          <button
+            type="button"
+            className="toolbar__btn toolbar__btn--primary"
+            title={saveTitle}
+            onClick={onSave}
+            disabled={!canSave}
+          >
             <IconSave />
             <span>{t('home.save')}</span>
           </button>
-          <button type="button" className="toolbar__btn" title={t('home.library')} onClick={onOpenLibrary}>
+          <button
+            type="button"
+            className="toolbar__btn"
+            title={t('home.library')}
+            onClick={onOpenLibrary}
+          >
             <IconFolder />
             <span>{t('home.library')}</span>
           </button>
@@ -137,7 +196,9 @@ export function HomeToolbar({
           <NavLink
             to="/"
             end
-            className={({ isActive }) => `toolbar__nav-btn ${isActive ? 'toolbar__nav-btn--active' : ''}`}
+            className={({ isActive }) =>
+              `toolbar__nav-btn ${isActive ? 'toolbar__nav-btn--active' : ''}`
+            }
             data-label={t('nav.home')}
             aria-label={t('nav.home')}
           >
@@ -145,7 +206,9 @@ export function HomeToolbar({
           </NavLink>
           <NavLink
             to="/settings"
-            className={({ isActive }) => `toolbar__nav-btn ${isActive ? 'toolbar__nav-btn--active' : ''}`}
+            className={({ isActive }) =>
+              `toolbar__nav-btn ${isActive ? 'toolbar__nav-btn--active' : ''}`
+            }
             data-label={t('nav.settings')}
             aria-label={t('nav.settings')}
           >

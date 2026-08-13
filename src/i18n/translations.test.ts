@@ -8,10 +8,10 @@ describe('翻译词典', () => {
 
   it('插值替换 {占位符}', () => {
     expect(translate('zh', 'chat.generatedModel', { name: '小屋', count: 5 })).toBe(
-      '已生成「小屋」模型，共 5 个模块。可点击模块查看/修改尺寸，或用方向键移动视角。',
+      '已生成「小屋」模型，共 5 个模块。可点击模块编辑尺寸，或切换到平面图自由编辑。',
     )
     expect(translate('en', 'chat.generatedModel', { name: 'Cabin', count: 5 })).toBe(
-      'Generated "Cabin" with 5 modules. Click a module to view/edit dimensions, or use the arrow keys to move the view.',
+      'Generated "Cabin" with 5 modules. Click a module to edit dimensions, or switch to the plan view for free-form editing.',
     )
     expect(translate('zh', 'plan.length', { width: 7 })).toBe('总长 7m')
     expect(translate('en', 'plan.length', { width: 7 })).toBe('Length 7m')

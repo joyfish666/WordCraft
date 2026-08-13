@@ -1,4 +1,3 @@
-import axios from 'axios'
 import { t } from '../i18n'
 import { logDebug } from './debugLog'
 import type { ThinkingMode } from '../types/settings'
@@ -15,6 +14,8 @@ export interface ChatCompletionRequest {
   messages: ChatMessage[]
   temperature?: number
   max_tokens?: number
+  /** o1 等部分模型不接受 max_tokens，连通性检测时降级重试用 */
+  max_completion_tokens?: number
 }
 
 /** API 客户端配置 */
@@ -36,17 +37,8 @@ export interface ConnectionTestResult {
 const DEFAULT_BASE_URL = 'https://api.deepseek.com'
 const DEFAULT_TEST_MODEL = 'deepseek-v4-flash'
 
-/** 构建指向 OpenAI 兼容接口（OpenAI / DeepSeek / LocalAI 等）的 HTTP 客户端 */
-export function createApiClient({ apiKey, baseUrl }: ApiClientOptions) {
-  return axios.create({
-    baseURL: (baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, ''),
-    timeout: 30_000,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-  })
-}
+/** 连通性检测请求的超时（毫秒） */
+const CONNECTION_TIMEOUT_MS = 15_000
 
 /** 从错误响应体中提取服务商返回的错误信息 */
 function extractErrorMessage(text: string): string | null {
@@ -61,10 +53,35 @@ function extractErrorMessage(text: string): string | null {
 
 /** 描述 fetch 网络层错误（区分用户中止 / 超时 / 连接失败） */
 function describeNetworkError(error: unknown): string {
-  if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') {
+  if (
+    typeof DOMException !== 'undefined' &&
+    error instanceof DOMException &&
+    error.name === 'AbortError'
+  ) {
     return t('error.timeout')
   }
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * 从 HTTP 错误信息中提取可读描述（fetch 路径统一使用）：
+ * 优先服务商返回的 error.message，其次是 HTTP 状态码，最后回退到网络层错误原文。
+ * @param error 网络层错误（fetch 抛出的原始错误）
+ * @param status HTTP 状态码（有响应时传入，无响应为 null）
+ * @param bodyText 响应体文本（可解析出服务商错误信息）
+ */
+export function describeHttpError(
+  error: unknown,
+  status: number | null = null,
+  bodyText: string | null = null,
+): string {
+  if (bodyText) {
+    const detail = extractErrorMessage(bodyText)
+    if (detail) return status !== null ? t('error.httpStatus', { status, detail }) : detail
+  }
+  if (status !== null) return t('error.httpNoDetail', { status })
+  if (error instanceof Error && error.message) return t('error.network', { detail: error.message })
+  return t('error.networkFallback')
 }
 
 /**
@@ -159,30 +176,9 @@ export async function streamChatCompletion(
 }
 
 /**
- * 从任意 axios 错误中提取可读描述：优先取服务商返回的 error.message，
- * 其次是 HTTP 状态码，最后回退到网络层错误原文（超时 / 连接失败等）。
- */
-export function describeAxiosError(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    const status = error.response?.status ?? null
-    const data = error.response?.data as
-      | { error?: { message?: unknown }; message?: unknown }
-      | undefined
-    const detail = data?.error?.message ?? data?.message
-    if (typeof detail === 'string' && detail.trim()) {
-      return status ? t('error.httpStatus', { status, detail }) : detail
-    }
-    if (status) return t('error.httpNoDetail', { status })
-    if (error.code === 'ECONNABORTED') return t('error.timeout')
-    if (error.message) return t('error.network', { detail: error.message })
-    return t('error.networkFallback')
-  }
-  return error instanceof Error ? error.message : String(error)
-}
-
-/**
  * 检测 API Key 连通性：发起一次极小的 chat/completions 请求。
  * 对常见的 401/403/404 等错误给出可读提示。
+ * 部分模型（如 o1 系列）不认 max_tokens（HTTP 400），此时降级为 max_completion_tokens 重试一次。
  */
 export async function testConnection(options: ApiClientOptions): Promise<ConnectionTestResult> {
   logDebug('连通性检测发起', {
@@ -190,24 +186,61 @@ export async function testConnection(options: ApiClientOptions): Promise<Connect
     model: options.model ?? '(默认)',
     keySuffix: options.apiKey.slice(-4),
   })
-  const client = createApiClient(options)
+  const baseUrl = (options.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, '')
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${options.apiKey}`,
+  }
+  const ping = async (tokenField: 'max_tokens' | 'max_completion_tokens'): Promise<Response> => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT_MS)
+    try {
+      return await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: options.model ?? DEFAULT_TEST_MODEL,
+          messages: [{ role: 'user', content: 'ping' }],
+          [tokenField]: 1,
+        } satisfies ChatCompletionRequest),
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   try {
-    const { data } = await client.post<{ model?: string }>('/chat/completions', {
-      model: options.model ?? DEFAULT_TEST_MODEL,
-      messages: [{ role: 'user', content: 'ping' }],
-      max_tokens: 1,
-    } satisfies ChatCompletionRequest)
-    logDebug('连通性检测成功', data, 'info')
-    return { ok: true, message: t('error.connected', { model: data?.model ?? t('error.unknownModel') }) }
+    let response = await ping('max_tokens')
+    // 部分模型拒绝 max_tokens 参数（HTTP 400），降级为 max_completion_tokens 重试一次
+    if (response.status === 400) {
+      response = await ping('max_completion_tokens')
+    }
+    const bodyText = await response.text().catch(() => '')
+    if (!response.ok) {
+      let message: string
+      if (response.status === 401 || response.status === 403) message = t('error.authFailed')
+      else if (response.status === 404) message = t('error.modelMissing')
+      else
+        message = t('error.requestFailed', {
+          detail: describeHttpError(new Error(), response.status, bodyText),
+        })
+      logDebug('连通性检测失败', message, 'error')
+      return { ok: false, message }
+    }
+    let modelName: string | undefined
+    try {
+      modelName = (JSON.parse(bodyText) as { model?: string }).model
+    } catch {
+      // 空 body 或非 JSON 响应不解析模型名
+    }
+    logDebug('连通性检测成功', { model: modelName }, 'info')
+    return {
+      ok: true,
+      message: t('error.connected', { model: modelName ?? t('error.unknownModel') }),
+    }
   } catch (error) {
-    const message = axios.isAxiosError(error)
-      ? (() => {
-          const status = error.response?.status
-          if (status === 401 || status === 403) return t('error.authFailed')
-          if (status === 404) return t('error.modelMissing')
-          return t('error.requestFailed', { detail: describeAxiosError(error) })
-        })()
-      : describeAxiosError(error)
+    const message = t('error.requestFailed', { detail: describeNetworkError(error) })
     logDebug('连通性检测失败', message, 'error')
     return { ok: false, message }
   }

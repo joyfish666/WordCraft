@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -41,6 +41,13 @@ export function SettingsPage() {
   const [baseUrl, setBaseUrl] = useState('')
   const [testingId, setTestingId] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, ConnectionTestResult>>({})
+  // 异步连通性检测的卸载守卫：组件卸载后不 setState（notes 坑 33 同款）
+  const aliveRef = useRef(true)
+  useEffect(() => {
+    return () => {
+      aliveRef.current = false
+    }
+  }, [])
 
   const submit = () => {
     if (!name.trim() || !key.trim()) return
@@ -59,6 +66,7 @@ export function SettingsPage() {
       baseUrl: entry.baseUrl ?? defaultBaseUrl,
       model: defaultModel,
     })
+    if (!aliveRef.current) return
     setResults((prev) => ({ ...prev, [id]: result }))
     setTestingId(null)
   }
@@ -171,13 +179,18 @@ export function SettingsPage() {
                   <div className="api-item__info">
                     <span className="api-item__name">
                       {entry.name}
-                      {entry.id === activeKeyId && <em className="api-item__tag">{t('settings.currentTag')}</em>}
+                      {entry.id === activeKeyId && (
+                        <em className="api-item__tag">{t('settings.currentTag')}</em>
+                      )}
                     </span>
                     <span className="api-item__meta">
-                      {maskKey(entry.key)} · {entry.baseUrl || defaultBaseUrl || t('settings.defaultBaseUrlFallback')}
+                      {maskKey(entry.key)} ·{' '}
+                      {entry.baseUrl || defaultBaseUrl || t('settings.defaultBaseUrlFallback')}
                     </span>
                     {result && (
-                      <span className={`test-result ${result.ok ? 'test-result--ok' : 'test-result--error'}`}>
+                      <span
+                        className={`test-result ${result.ok ? 'test-result--ok' : 'test-result--error'}`}
+                      >
                         {result.message}
                       </span>
                     )}
@@ -188,7 +201,9 @@ export function SettingsPage() {
                       onClick={() => runTest(entry.id)}
                       disabled={testingId !== null}
                     >
-                      {testingId === entry.id ? t('settings.testing') : t('settings.testConnectivity')}
+                      {testingId === entry.id
+                        ? t('settings.testing')
+                        : t('settings.testConnectivity')}
                     </Button>
                     <Button variant="danger" onClick={() => removeApiKey(entry.id)}>
                       {t('settings.delete')}

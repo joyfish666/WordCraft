@@ -4,11 +4,31 @@ import { findNodeById } from './modelTree'
 import { rectFootprint } from './footprint'
 import type { FurnitureNode, RoomNode, SceneModel } from '../types/model'
 
-function furniture(id: string, name: string, length: number, width: number, x: number, z: number): FurnitureNode {
-  return { id, type: 'furniture', name, dimensions: { length, width, height: 0.5 }, position: { x, y: 0.25, z } }
+function furniture(
+  id: string,
+  name: string,
+  length: number,
+  width: number,
+  x: number,
+  z: number,
+): FurnitureNode {
+  return {
+    id,
+    type: 'furniture',
+    name,
+    dimensions: { length, width, height: 0.5 },
+    position: { x, y: 0.25, z },
+  }
 }
 
-function room(id: string, length: number, width: number, x: number, z: number, children: (RoomNode | FurnitureNode)[]): RoomNode {
+function room(
+  id: string,
+  length: number,
+  width: number,
+  x: number,
+  z: number,
+  children: (RoomNode | FurnitureNode)[],
+): RoomNode {
   return {
     id,
     type: 'room',
@@ -72,7 +92,9 @@ describe('isWallAnchored', () => {
 
 describe('applyFurnitureConventions', () => {
   it('床短边（床头）贴墙，且避让门口', () => {
-    const model = applyFurnitureConventions(corridorHouse([bedroom([furniture('bed', '双人床', 2, 1.5, 0, 0.5)])]))
+    const model = applyFurnitureConventions(
+      corridorHouse([bedroom([furniture('bed', '双人床', 2, 1.5, 0, 0.5)])]),
+    )
     const bedroomNode = findNodeById(model.root, 'bedroom1') as RoomNode
     const bed = findNodeById(model.root, 'bed') as FurnitureNode
     // 门在卧室南墙（贴走廊）。床贴最近的西墙、床头朝墙（短边 1.5 贴墙），
@@ -86,7 +108,9 @@ describe('applyFurnitureConventions', () => {
   })
 
   it('大面积贴墙：长边沿墙，必要时旋转（交换长宽）', () => {
-    const model = applyFurnitureConventions(corridorHouse([bedroom([furniture('wardrobe', '衣柜', 1.2, 0.6, 1.0, 2.0)])]))
+    const model = applyFurnitureConventions(
+      corridorHouse([bedroom([furniture('wardrobe', '衣柜', 1.2, 0.6, 1.0, 2.0)])]),
+    )
     const wardrobe = findNodeById(model.root, 'wardrobe') as FurnitureNode
     // 衣柜贴近东墙：贴墙后长边（1.2）沿墙（z 轴）→ 长宽交换
     expect(wardrobe.dimensions.length).toBe(0.6)
@@ -115,7 +139,9 @@ describe('applyFurnitureConventions', () => {
   })
 
   it('独立家具（茶几）不被贴墙，保持原位', () => {
-    const model = applyFurnitureConventions(corridorHouse([bedroom([furniture('table', '茶几', 1.2, 0.6, 0.5, 2.5)])]))
+    const model = applyFurnitureConventions(
+      corridorHouse([bedroom([furniture('table', '茶几', 1.2, 0.6, 0.5, 2.5)])]),
+    )
     const table = findNodeById(model.root, 'table') as FurnitureNode
     expect(table.position.x).toBeCloseTo(0.5, 5)
     expect(table.position.z).toBeCloseTo(2.5, 5)

@@ -1,0 +1,62 @@
+/* ---------- 世界锚定罗盘（3D/平面图通用，指向真实东西南北） ---------- */
+
+.world-compass__label {
+  display: block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(237, 232, 221, 0.9);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.world-compass__label--n {
+  color: var(--danger);
+}
+
+/* ---------- 右上角罗盘（屏幕覆盖层，标签按世界方向投影逐帧定位） ---------- */
+
+.corner-compass {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  background: rgba(237, 232, 221, 0.9);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.corner-compass__label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  line-height: 1;
+  transform: translate(-50%, -50%);
+}
+
+.corner-compass__label--n {
+  color: var(--danger);
+}
+
+.corner-compass__cross {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--text-dim);
+}

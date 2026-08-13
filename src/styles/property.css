@@ -1,0 +1,168 @@
+/* ---------- 属性面板 ---------- */
+
+.prop-panel {
+  position: absolute;
+  /* 让开右上角方向罗盘（108px 圆 + 8px 间距），避免面板盖住罗盘下半部 */
+  top: 130px;
+  right: 14px;
+  width: 270px;
+  max-height: calc(100% - 70px);
+  overflow: auto;
+  z-index: 15;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow-md);
+}
+
+.prop-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.prop-panel__header:active {
+  cursor: grabbing;
+}
+
+.prop-panel--dragging {
+  opacity: 0.95;
+  box-shadow: var(--shadow-lg);
+}
+
+.prop-panel__title-wrap {
+  min-width: 0;
+}
+
+.prop-panel__type {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-pill);
+  padding: 0 8px;
+  line-height: 1.8;
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
+}
+
+.prop-panel__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.prop-panel__close {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.prop-panel__section {
+  margin-top: 10px;
+}
+
+.prop-panel__section-title {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.prop-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.prop-field {
+  display: block;
+}
+
+.prop-field__label {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.prop-field__input {
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.prop-panel__reset {
+  margin-top: 8px;
+}
+
+.prop-panel__step {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.step-btn {
+  min-width: 30px;
+  padding: 3px 4px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+.step-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.step-btn--active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* 位置微调：3 列网格（东/北/上 一行，西/南/下 一行），方向与罗盘一致 */
+.prop-nudge {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.prop-nudge__btn {
+  padding: 6px 4px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+
+.prop-nudge__btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}

@@ -68,11 +68,7 @@ export function translateFootprint(footprint: Point2D[], dx: number, dz: number)
  * 缩放足迹：保持包围盒中心不变，把包围盒尺寸调整为 length×width。
  * 对矩形（4 点足迹）即精确改尺寸；对一般正交多边形按包围盒比例缩放（P1 无多边形输入，安全）。
  */
-export function resizeFootprint(
-  footprint: Point2D[],
-  length: number,
-  width: number,
-): Point2D[] {
+export function resizeFootprint(footprint: Point2D[], length: number, width: number): Point2D[] {
   const b = footprintBounds(footprint)
   const cx = (b.minX + b.maxX) / 2
   const cz = (b.minZ + b.maxZ) / 2

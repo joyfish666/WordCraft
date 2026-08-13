@@ -259,11 +259,16 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | 共享配色（2D/3D 一致，2026-08-12 按浅底重调） | `lib/palette.ts` |
 | Gizmo 编辑 | `GizmoControls.tsx` + `SceneViewer.tsx` + `PropertyPanel.tsx` + `useModelStore.ts` |
 | 截图分享/口令（**顶栏截图按钮【2026-08-12】**） | `ShareDialog.tsx` + `HomePage.tsx`（`handleScreenshot`）+ `SceneViewer.tsx` + `lib/watermark.ts` + `lib/compression.ts`（`wc3:` 前缀）+ `store/useShareStore.ts` |
-| 竖屏横屏引导 + 窄横屏布局【2026-08-10】 | `components/ui/OrientationGuard.tsx`（JS 视口判定：竖屏覆盖层 + `wc-compact` 类）+ `App.tsx`（包裹整棵路由）+ `index.html`（内联脚本首帧预置类）+ `styles/global.css`（覆盖层样式 + `.wc-compact` 门控紧凑布局 + `.scene-canvas` `touch-action: none`） |
-| 全新 UI（顶栏/抽屉/空态/图标）【2026-08-12】 | `components/ui/HomeToolbar.tsx` + `ChatDrawer.tsx` + `EmptyStateCard.tsx` + `icons.tsx` + `components/layout/AppShell.tsx`（无侧边栏）+ `styles/global.css`（:root 暖色浅色变量 + 顶栏/抽屉/空态/状态栏样式）+ `SettingsPage.tsx`（返回首页入口） |
+| 竖屏横屏引导 + 窄横屏布局【2026-08-10】 | `components/ui/OrientationGuard.tsx`（JS 视口判定：竖屏覆盖层 + `wc-compact` 类）+ `App.tsx`（包裹整棵路由）+ `index.html`（内联脚本首帧预置类）+ `styles/mobile.css`（覆盖层样式 + `.wc-compact` 门控紧凑布局 + 桌面窄窗口降级）；判定阈值共享 `lib/viewport.ts`（`isCompactViewport`/`isPortraitBlocked`，2026-08-13 起与 `hooks/useMobileCompact` 同源）+ `.scene-canvas` `touch-action: none` |
+| 全新 UI（顶栏/抽屉/空态/图标）【2026-08-12】 | `components/ui/HomeToolbar.tsx` + `ChatDrawer.tsx` + `EmptyStateCard.tsx` + `icons.tsx` + `components/layout/AppShell.tsx`（无侧边栏）+ `styles/variables.css`（:root 暖色浅色变量，2026-08-13 起样式按域拆分）+ `SettingsPage.tsx`（返回首页入口） |
 | 生成竞态防护（场景引用快照 + 冲突确认，坑 70）【2026-08-13】 | `HomePage.tsx`（`send`：`generationBaseRef` + `window.confirm` + 无 key 不清草稿） |
+| 平面图工具栏（桌面工具行 + 移动端弹出面板）【2026-08-13 从 HomePage 拆出】 | `components/ui/PlanToolbar.tsx`（工具清单 `TOOLS` 单一定义，移动/桌面两分支共用；选择工具即关闭弹出面板） |
+| 调试日志面板 / 键盘快捷键 / 紧凑视口判定【2026-08-13 从 HomePage 拆出】 | `components/ui/DebugPanel.tsx`（含 `debugLog.formatDebugText` 复制/下载）+ `hooks/useKeyboardShortcuts.ts`（方向键/R/撤销重做）+ `hooks/useMobileCompact.ts` + `lib/viewport.ts`（与 OrientationGuard 共享阈值） |
+| HTTP 请求（fetch 统一 + 连通性检测降级）【2026-08-13 移除 axios】 | `lib/api.ts`（`streamChatCompletion`/`testConnection`/`describeHttpError`；`testConnection` 400 时 `max_tokens` → `max_completion_tokens` 重试一次） |
+| 样式（按域拆分，@import 顺序 = 层叠顺序）【2026-08-13】 | `styles/*.css`（variables/base/home/toolbar/chat/property/compass/debug/dialog/settings/project/share/plan/mobile/error-boundary；`global.css` 仅 @import 链） |
+| 应用版本号（状态栏展示）【2026-08-13】 | `vite.config.ts`（define `__APP_VERSION__` ← package.json）+ `src/vite-env.d.ts` 声明 + `HomePage.tsx` 状态栏 |
 | 墙体方案共享缓存（坑 72）【2026-08-13】 | `lib/roomGeometry.ts`（`computeAllWallPlansCached`，WeakMap 按场景引用）+ `Viewport3D`/`PlanEnhancements`/`lib/planEdit.ts`（`collectWallHitEdges`） |
 | 平面图取景依赖包围盒数值（坑 73）【2026-08-13】 | `PlanRig.tsx`（取景 spec 按包围盒数值 memo，effect 依赖 spec 引用） |
-| 顶层错误边界【2026-08-13】 | `components/ui/ErrorBoundary.tsx` + `main.tsx`（包裹路由）+ `styles/global.css`（`.error-boundary` 兜底页）+ i18n `error.boundary*` |
-| CI 质量门（lint/typecheck/test）【2026-08-13】 | `.github/workflows/ci.yml`（PR + main 推送）+ `package.json`（`typecheck` 脚本；format:check 待全仓格式化收敛后再入门） |
+| 顶层错误边界【2026-08-13】 | `components/ui/ErrorBoundary.tsx` + `main.tsx`（包裹路由）+ `styles/error-boundary.css`（兜底页）+ i18n `error.boundary*` |
+| CI 质量门（lint/format:check/typecheck/test）【2026-08-13】 | `.github/workflows/ci.yml`（PR + main 推送）+ `package.json`（`typecheck` 脚本；format:check 于 2026-08-13 全仓格式收敛后正式入门） |
 | i18n | `i18n/translations.ts`（zh 为真源） |

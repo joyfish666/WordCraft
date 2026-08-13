@@ -414,7 +414,12 @@ function sinkParts(L: number, H: number, W: number): FurniturePart[] {
   return [
     { center: [0, cabY, 0], size: [L, cabH, depth], shade: 'base' },
     { center: [0, topY, 0], size: [L, topTh, depth], shade: 'secondary' },
-    { center: [basinZ * 0.4, basinY, basinZ], size: [basinR, 0.05, basinR], shape: 'cylinder', shade: 'dark' },
+    {
+      center: [basinZ * 0.4, basinY, basinZ],
+      size: [basinR, 0.05, basinR],
+      shape: 'cylinder',
+      shade: 'dark',
+    },
   ]
 }
 
@@ -718,7 +723,10 @@ function microwaveParts(L: number, H: number, W: number): FurniturePart[] {
   ]
 }
 
-const BUILDERS: Record<Exclude<FurnitureKind, 'bed' | 'bathtub' | 'generic'>, (L: number, H: number, W: number) => FurniturePart[]> = {
+const BUILDERS: Record<
+  Exclude<FurnitureKind, 'bed' | 'bathtub' | 'generic'>,
+  (L: number, H: number, W: number) => FurniturePart[]
+> = {
   wardrobe: wardrobeParts,
   desk: deskParts,
   sofa: sofaParts,

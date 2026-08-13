@@ -94,7 +94,14 @@ export const ChatDrawer = forwardRef<ChatDrawerHandle, ChatDrawerProps>(function
         <IconChevronUp />
       </button>
 
-      <div className="chat-bottom__log" id="chat-log" role="log" aria-live="polite" aria-label={t('chat.ariaLog')} ref={logRef}>
+      <div
+        className="chat-bottom__log"
+        id="chat-log"
+        role="log"
+        aria-live="polite"
+        aria-label={t('chat.ariaLog')}
+        ref={logRef}
+      >
         <div className="chat-bottom__log-inner">
           {messages.length === 0 && !isGenerating ? (
             <div className="chat-msg chat-msg--assistant">

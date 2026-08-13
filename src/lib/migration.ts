@@ -33,9 +33,7 @@ function migrateHouse(house: Record<string, unknown>): HouseNode {
   const id = asString(house.id, 'house')
   const name = asString(house.name, '整屋')
   const children = Array.isArray(house.children) ? house.children : []
-  const rooms = children
-    .map((c) => migrateRoom(c))
-    .filter((r): r is RoomNode => r !== null)
+  const rooms = children.map((c) => migrateRoom(c)).filter((r): r is RoomNode => r !== null)
   const entranceRoomId = typeof house.entranceRoomId === 'string' ? house.entranceRoomId : undefined
   const dims = (house.dimensions ?? {}) as Record<string, unknown>
   const legacyHeight = asNum(dims.height, 2.8)

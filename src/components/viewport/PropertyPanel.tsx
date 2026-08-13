@@ -116,7 +116,8 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
   const t = useT()
 
   const canReset = initialPositions[node.id] !== undefined
-  const patchDim = (key: keyof Dimensions, v: number) => updateSelected({ dimensions: { [key]: v } })
+  const patchDim = (key: keyof Dimensions, v: number) =>
+    updateSelected({ dimensions: { [key]: v } })
   const patchPos = (key: keyof Position, v: number) => updateSelected({ position: { [key]: v } })
   // 房间尺寸/坐标为足迹派生值（展示用）；编辑提交时由 updateNodeFields 转为足迹缩放/平移
   const dims = nodeDims(node)
@@ -124,7 +125,9 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
 
   // 面板可拖动（按住头部拖拽移动位置；会话内记住偏移，选中变化不重置）
   const [panelOffset, setPanelOffset] = useState<{ x: number; y: number } | null>(null)
-  const dragState = useRef<{ baseX: number; baseY: number; startX: number; startY: number } | null>(null)
+  const dragState = useRef<{ baseX: number; baseY: number; startX: number; startY: number } | null>(
+    null,
+  )
   const [dragging, setDragging] = useState(false)
 
   const startDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -210,9 +213,24 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
       <div className="prop-panel__section">
         <span className="prop-panel__section-title">{t('property.dimSection')}</span>
         <div className="prop-panel__grid">
-          <NumberField label={t('property.length')} value={dims.length} min={0.1} onCommit={(v) => patchDim('length', v)} />
-          <NumberField label={t('property.width')} value={dims.width} min={0.1} onCommit={(v) => patchDim('width', v)} />
-          <NumberField label={t('property.height')} value={dims.height} min={0.1} onCommit={(v) => patchDim('height', v)} />
+          <NumberField
+            label={t('property.length')}
+            value={dims.length}
+            min={0.1}
+            onCommit={(v) => patchDim('length', v)}
+          />
+          <NumberField
+            label={t('property.width')}
+            value={dims.width}
+            min={0.1}
+            onCommit={(v) => patchDim('width', v)}
+          />
+          <NumberField
+            label={t('property.height')}
+            value={dims.height}
+            min={0.1}
+            onCommit={(v) => patchDim('height', v)}
+          />
         </div>
       </div>
 
@@ -252,22 +270,52 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
             3D 内容整体沿 X 镜像（坑 26），南视角下东在屏幕右侧（上北下南、左西右东），
             与 2D 平面图（标准地图）一致。内部墙/走廊代码的 east=+x 与罗盘一致，无需镜像。 */}
         <div className="prop-nudge">
-          <button type="button" className="prop-nudge__btn" title={t('property.nudgeEast')} onClick={() => translateSelected(stepSize, 0, 0)}>
+          <button
+            type="button"
+            className="prop-nudge__btn"
+            title={t('property.nudgeEast')}
+            onClick={() => translateSelected(stepSize, 0, 0)}
+          >
             {t('property.east')}
           </button>
-          <button type="button" className="prop-nudge__btn" title={t('property.nudgeNorth')} onClick={() => translateSelected(0, 0, stepSize)}>
+          <button
+            type="button"
+            className="prop-nudge__btn"
+            title={t('property.nudgeNorth')}
+            onClick={() => translateSelected(0, 0, stepSize)}
+          >
             {t('property.north')}
           </button>
-          <button type="button" className="prop-nudge__btn" title={t('property.nudgeUp')} onClick={() => translateSelected(0, stepSize, 0)}>
+          <button
+            type="button"
+            className="prop-nudge__btn"
+            title={t('property.nudgeUp')}
+            onClick={() => translateSelected(0, stepSize, 0)}
+          >
             {t('property.up')}
           </button>
-          <button type="button" className="prop-nudge__btn" title={t('property.nudgeWest')} onClick={() => translateSelected(-stepSize, 0, 0)}>
+          <button
+            type="button"
+            className="prop-nudge__btn"
+            title={t('property.nudgeWest')}
+            onClick={() => translateSelected(-stepSize, 0, 0)}
+          >
             {t('property.west')}
           </button>
-          <button type="button" className="prop-nudge__btn" title={t('property.nudgeSouth')} onClick={() => translateSelected(0, 0, -stepSize)}>
+          <button
+            type="button"
+            className="prop-nudge__btn"
+            title={t('property.nudgeSouth')}
+            onClick={() => translateSelected(0, 0, -stepSize)}
+          >
             {t('property.south')}
           </button>
-          <button type="button" className="prop-nudge__btn" title={t('property.nudgeDown')} onClick={() => translateSelected(0, -stepSize, 0)}>
+          <button
+            type="button"
+            className="prop-nudge__btn"
+            title={t('property.nudgeDown')}
+            onClick={() => translateSelected(0, -stepSize, 0)}
+          >
             {t('property.down')}
           </button>
         </div>

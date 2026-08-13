@@ -43,7 +43,7 @@
 | 口令压缩 | **lz-string** | 高效的 JSON 数据压缩算法 |
 | HTTP 请求 | **Axios** | 处理 API 请求，支持拦截器与错误处理 |
 | 构建工具 | **Vite** | 快速的开发构建工具 |
-| 测试框架 | **Vitest + Testing Library** | 单元测试与组件测试（403 用例，CI 强制执行） |
+| 测试框架 | **Vitest + Testing Library** | 单元测试与组件测试（430 用例，CI 强制执行） |
 
 ## 项目文档
 

@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { editDiffToOps } from './editOps'
 import { createSampleModel } from './sampleModel'
 import { footprintCenter, translateFootprint } from './footprint'
-import { findNodeById, normalizeContainment, updateNodeFields, updateNodePosition } from './modelTree'
+import {
+  findNodeById,
+  normalizeContainment,
+  updateNodeFields,
+  updateNodePosition,
+} from './modelTree'
 import type { FurnitureNode, RoomNode, SceneModel } from '../types/model'
 
 const sample = (): SceneModel => createSampleModel()

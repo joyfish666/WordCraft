@@ -43,7 +43,7 @@
 | Code compression | **lz-string** | Efficient JSON compression |
 | HTTP | **Axios** | API requests with interceptors and error handling |
 | Build | **Vite** | Fast dev/build tooling |
-| Testing | **Vitest + Testing Library** | Unit and component tests (403 cases, run in CI) |
+| Testing | **Vitest + Testing Library** | Unit and component tests (430 cases, run in CI) |
 
 ## Project Docs
 

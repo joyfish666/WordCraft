@@ -99,7 +99,8 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
         scale = 1 / (camera as OrthographicCameraImpl).zoom
       } else {
         const offset = camera.position.clone().sub(controls.target)
-        const targetDistance = offset.length() * Math.tan(((camera as PerspectiveCamera).fov * Math.PI) / 360)
+        const targetDistance =
+          offset.length() * Math.tan(((camera as PerspectiveCamera).fov * Math.PI) / 360)
         scale = (2 * targetDistance) / clientHeight
       }
 
@@ -138,7 +139,14 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
         }}
       >
         {planMode && (
-          <OrthographicCamera makeDefault near={1} far={300} zoom={20} position={[0, 60, 0]} up={[0, 0, 1]} />
+          <OrthographicCamera
+            makeDefault
+            near={1}
+            far={300}
+            zoom={20}
+            position={[0, 60, 0]}
+            up={[0, 0, 1]}
+          />
         )}
         <ambientLight intensity={0.7} />
         <directionalLight position={[6, 10, 6]} intensity={0.9} />

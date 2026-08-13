@@ -72,7 +72,9 @@ describe('HomePage 对话交互', () => {
       </MemoryRouter>,
     )
     typeAndSend('设计一个卧室')
-    expect(await screen.findByText(/尚未配置 API Key，请先前往设置页配置后再试/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/尚未配置 API Key，请先前往设置页配置后再试/),
+    ).toBeInTheDocument()
     expect(mockGenerate).not.toHaveBeenCalled()
     // 草稿不被清空，用户无需重新输入
     expect(screen.getByPlaceholderText(/帮我设计/)).toHaveValue('设计一个卧室')
@@ -144,7 +146,9 @@ describe('HomePage 对话交互', () => {
 
   it('模型返回业务错误时在对话中展示错误信息', async () => {
     useSettingsStore.getState().addApiKey({ name: '测试', key: 'sk-test' })
-    mockGenerate.mockRejectedValue(new ChatGenerationError('模型请求失败：401 Unauthorized', 'http'))
+    mockGenerate.mockRejectedValue(
+      new ChatGenerationError('模型请求失败：401 Unauthorized', 'http'),
+    )
 
     render(
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -244,9 +248,7 @@ describe('HomePage 对话交互', () => {
         <HomePage />
       </MemoryRouter>,
     )
-    expect(
-      screen.getByText(/尚未配置 API Key，可先加载示例模型体验/),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/尚未配置 API Key，可先加载示例模型体验/)).toBeInTheDocument()
     // 空态卡内的「示例」按钮（chip 样式）与顶栏「示例」按钮并存，取空态卡内的
     const loadBtn = screen
       .getAllByRole('button', { name: '示例' })
@@ -263,9 +265,7 @@ describe('HomePage 对话交互', () => {
         <HomePage />
       </MemoryRouter>,
     )
-    expect(
-      screen.queryByText(/尚未配置 API Key，可先加载示例模型体验/),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/尚未配置 API Key，可先加载示例模型体验/)).not.toBeInTheDocument()
   })
 
   it('无场景时显示空态引导卡，点击示例标签填入输入框', () => {
@@ -274,9 +274,7 @@ describe('HomePage 对话交互', () => {
         <HomePage />
       </MemoryRouter>,
     )
-    expect(
-      screen.getByRole('heading', { name: '用一句话，生成你的房子' }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '用一句话，生成你的房子' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '三室一厅一厨' }))
     expect(screen.getByPlaceholderText(/帮我设计/)).toHaveValue('三室一厅一厨，主卧带卫生间')
   })

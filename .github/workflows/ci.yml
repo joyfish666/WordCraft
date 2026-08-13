@@ -20,9 +20,8 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
-      # 注意：format:check 暂未纳入 CI——仓库存在既有格式漂移（55 个文件，
-      # 多为 prettier 版本差异，与本次改动无关），先跑会直接红灯。
-      # 待全仓 `npm run format` 收敛后再加入此门。
+      - name: Format check
+        run: npm run format:check
       - name: Type check
         run: npm run typecheck
       - name: Test

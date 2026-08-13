@@ -126,14 +126,12 @@ export const useChatStore = create<ChatState>()(
  */
 export function toChatHistory(messages: ChatMessageItem[]): ChatMessage[] {
   return messages
-    .filter(
-      (m): m is ChatMessageItem & { role: 'user' | 'assistant' } => {
-        if (m.role !== 'user' && m.role !== 'assistant') return false
-        const content = m.content.trim()
-        if (content.length === 0) return false
-        if (m.role === 'assistant' && content.startsWith('{')) return false // 上一轮 ops 原文 → 摘要替代
-        return true
-      },
-    )
+    .filter((m): m is ChatMessageItem & { role: 'user' | 'assistant' } => {
+      if (m.role !== 'user' && m.role !== 'assistant') return false
+      const content = m.content.trim()
+      if (content.length === 0) return false
+      if (m.role === 'assistant' && content.startsWith('{')) return false // 上一轮 ops 原文 → 摘要替代
+      return true
+    })
     .map((m) => ({ role: m.role, content: m.content }))
 }

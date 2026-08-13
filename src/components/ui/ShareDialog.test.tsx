@@ -87,7 +87,14 @@ describe('ShareDialog（分享与口令）', () => {
         dimensions: { length: 4, width: 3, height: 2.8 },
         position: { x: 0, y: 0, z: 0 },
         children: [
-          { id: 'r1', type: 'room', name: '客厅', dimensions: { length: 3, width: 3, height: 2.8 }, position: { x: 0, y: 1.4, z: 0 }, children: [] },
+          {
+            id: 'r1',
+            type: 'room',
+            name: '客厅',
+            dimensions: { length: 3, width: 3, height: 2.8 },
+            position: { x: 0, y: 1.4, z: 0 },
+            children: [],
+          },
         ],
       },
     }
@@ -97,7 +104,10 @@ describe('ShareDialog（分享与口令）', () => {
     fireEvent.change(input, { target: { value: legacyCode } })
     fireEvent.click(screen.getByRole('button', { name: '还原' }))
     expect(onRestore).toHaveBeenCalledTimes(1)
-    const restored = onRestore.mock.calls[0][0] as { version: number; root: { name: string; levels: { rooms: unknown[] }[] } }
+    const restored = onRestore.mock.calls[0][0] as {
+      version: number
+      root: { name: string; levels: { rooms: unknown[] }[] }
+    }
     expect(restored.version).toBe(3)
     expect(restored.root.name).toBe('旧房子')
     expect(restored.root.levels[0].rooms).toHaveLength(1)

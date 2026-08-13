@@ -144,9 +144,7 @@ function topLevelAdjacency(rooms: SceneModel['root']['levels'][0]['rooms']): Map
       list.set(B.id, [...(list.get(B.id) ?? []), `${A.name}-${dirOf(shared.axis, B.id, A.id)}`])
     }
   }
-  return new Map(
-    [...list.entries()].map(([id, texts]) => [id, `（邻接：${texts.join('、')}）`]),
-  )
+  return new Map([...list.entries()].map(([id, texts]) => [id, `（邻接：${texts.join('、')}）`]))
 }
 
 function fmt(n: number): string {

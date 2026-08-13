@@ -95,13 +95,21 @@ describe('planEdit - 网格吸附与足迹校验', () => {
 
   it('segmentsIntersect：垂直/共线/贴边判定', () => {
     // 垂直相交
-    expect(segmentsIntersect({ x: 0, z: -1 }, { x: 0, z: 1 }, { x: -1, z: 0 }, { x: 1, z: 0 })).toBe(true)
+    expect(
+      segmentsIntersect({ x: 0, z: -1 }, { x: 0, z: 1 }, { x: -1, z: 0 }, { x: 1, z: 0 }),
+    ).toBe(true)
     // 平行不共线
-    expect(segmentsIntersect({ x: 0, z: 0 }, { x: 2, z: 0 }, { x: 0, z: 1 }, { x: 2, z: 1 })).toBe(false)
+    expect(segmentsIntersect({ x: 0, z: 0 }, { x: 2, z: 0 }, { x: 0, z: 1 }, { x: 2, z: 1 })).toBe(
+      false,
+    )
     // 共线区间分离
-    expect(segmentsIntersect({ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 2, z: 0 }, { x: 3, z: 0 })).toBe(false)
+    expect(segmentsIntersect({ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 2, z: 0 }, { x: 3, z: 0 })).toBe(
+      false,
+    )
     // 共线端点贴边 → 相交（自触非法）
-    expect(segmentsIntersect({ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 1, z: 0 }, { x: 2, z: 0 })).toBe(true)
+    expect(segmentsIntersect({ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 1, z: 0 }, { x: 2, z: 0 })).toBe(
+      true,
+    )
   })
 
   it('footprintValid：拒绝非正交/过短/自交', () => {
@@ -253,8 +261,20 @@ describe('planEdit - 拆房布局', () => {
     const room: RoomNode = {
       ...roomOf(scene),
       furniture: [
-        { id: 'f1', type: 'furniture', name: '沙发', dimensions: { length: 2, width: 0.9, height: 0.9 }, position: { x: -1, y: 0.45, z: 0 } },
-        { id: 'f2', type: 'furniture', name: '茶几', dimensions: { length: 0.8, width: 0.6, height: 0.4 }, position: { x: 1, y: 0.2, z: 0 } },
+        {
+          id: 'f1',
+          type: 'furniture',
+          name: '沙发',
+          dimensions: { length: 2, width: 0.9, height: 0.9 },
+          position: { x: -1, y: 0.45, z: 0 },
+        },
+        {
+          id: 'f2',
+          type: 'furniture',
+          name: '茶几',
+          dimensions: { length: 0.8, width: 0.6, height: 0.4 },
+          position: { x: 1, y: 0.2, z: 0 },
+        },
       ],
       nestedRooms: [
         {
@@ -326,7 +346,13 @@ describe('planEdit - 合并布局', () => {
       ...roomOf(scene),
       name: '客厅',
       furniture: [
-        { id: 'f1', type: 'furniture', name: '沙发', dimensions: { length: 2, width: 0.9, height: 0.9 }, position: { x: -1, y: 0.45, z: 0 } },
+        {
+          id: 'f1',
+          type: 'furniture',
+          name: '沙发',
+          dimensions: { length: 2, width: 0.9, height: 0.9 },
+          position: { x: -1, y: 0.45, z: 0 },
+        },
       ],
       doors: [
         { edgeIndex: 1, from: 0.5, to: 1.4, width: 0.9 }, // 东墙门（共墙）→ 合并后丢弃
@@ -353,7 +379,13 @@ describe('planEdit - 合并布局', () => {
       name: '餐厅',
       footprint: rect(3, 0, 2, 3), // x ∈ [2, 4]
       furniture: [
-        { id: 'f2', type: 'furniture', name: '餐桌', dimensions: { length: 1.2, width: 0.8, height: 0.75 }, position: { x: 3.2, y: 0.375, z: 0 } },
+        {
+          id: 'f2',
+          type: 'furniture',
+          name: '餐桌',
+          dimensions: { length: 1.2, width: 0.8, height: 0.75 },
+          position: { x: 3.2, y: 0.375, z: 0 },
+        },
       ],
       doors: [
         { edgeIndex: 1, from: 0.5, to: 1.4, width: 0.9 }, // 东墙门 → 保留（合并后东墙起点 minZ 不变）

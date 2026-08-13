@@ -1,6 +1,12 @@
 import { walkRooms } from './planGeometry'
 import { computeAllWallPlansCached, type WallSegment } from './roomGeometry'
-import { footprintBounds, footprintCenter, rectFootprint, translateFootprint, type Bounds } from './footprint'
+import {
+  footprintBounds,
+  footprintCenter,
+  rectFootprint,
+  translateFootprint,
+  type Bounds,
+} from './footprint'
 import type { Opening, Point2D, RoomNode, SceneModel } from '../types/model'
 import type { Dir } from '../types/ops'
 
@@ -137,11 +143,7 @@ export function footprintValid(fp: Point2D[], opts?: { minEdge?: number }): bool
  * 前驱顶点沿其所属边滑行（只改一个坐标）、后继顶点同理，其余顶点不动。
  * 结果不满足 footprintValid（退化/自交）时返回 null（拒绝该次拖拽）。
  */
-export function dragVertexFootprint(
-  fp: Point2D[],
-  i: number,
-  target: Point2D,
-): Point2D[] | null {
+export function dragVertexFootprint(fp: Point2D[], i: number, target: Point2D): Point2D[] | null {
   const n = fp.length
   if (n < 4) return null
   const idx = ((i % n) + n) % n
@@ -323,7 +325,11 @@ function remapRectOpenings(
     const wFrom = oldStart + o.from
     const wTo = oldStart + o.to
     // 平行于切线的边：按切线位置归属 A/B（跨切线丢弃）
-    if (opts.cutAxis !== undefined && opts.cutPos !== undefined && alongAxisOf(dir) === opts.cutAxis) {
+    if (
+      opts.cutAxis !== undefined &&
+      opts.cutPos !== undefined &&
+      alongAxisOf(dir) === opts.cutAxis
+    ) {
       const cutPos = opts.cutPos
       if (wTo <= cutPos + EPS) {
         if (opts.keepSide === 'b') continue // 在 A 侧
@@ -364,31 +370,55 @@ export function splitRoomLayout(
 
   const aRect =
     axis === 'x'
-      ? rectFootprint((b.minX + position) / 2, (b.minZ + b.maxZ) / 2, position - b.minX, b.maxZ - b.minZ)
-      : rectFootprint((b.minX + b.maxX) / 2, (b.minZ + position) / 2, b.maxX - b.minX, position - b.minZ)
+      ? rectFootprint(
+          (b.minX + position) / 2,
+          (b.minZ + b.maxZ) / 2,
+          position - b.minX,
+          b.maxZ - b.minZ,
+        )
+      : rectFootprint(
+          (b.minX + b.maxX) / 2,
+          (b.minZ + position) / 2,
+          b.maxX - b.minX,
+          position - b.minZ,
+        )
   const bRect =
     axis === 'x'
-      ? rectFootprint((position + b.maxX) / 2, (b.minZ + b.maxZ) / 2, b.maxX - position, b.maxZ - b.minZ)
-      : rectFootprint((b.minX + b.maxX) / 2, (position + b.maxZ) / 2, b.maxX - b.minX, b.maxZ - position)
+      ? rectFootprint(
+          (position + b.maxX) / 2,
+          (b.minZ + b.maxZ) / 2,
+          b.maxX - position,
+          b.maxZ - b.minZ,
+        )
+      : rectFootprint(
+          (b.minX + b.maxX) / 2,
+          (position + b.maxZ) / 2,
+          b.maxX - b.minX,
+          b.maxZ - position,
+        )
 
-  const inA = (p: Point2D): boolean =>
-    axis === 'x' ? p.x < position - EPS : p.z < position - EPS
-  const inB = (p: Point2D): boolean =>
-    axis === 'x' ? p.x > position + EPS : p.z > position + EPS
+  const inA = (p: Point2D): boolean => (axis === 'x' ? p.x < position - EPS : p.z < position - EPS)
+  const inB = (p: Point2D): boolean => (axis === 'x' ? p.x > position + EPS : p.z > position + EPS)
   const sideOf = (p: Point2D): boolean => {
     if (inA(p)) return true
     if (inB(p)) return false
     return true // 恰在切线上：归 A（西/南侧，确定性）
   }
 
-  const splitFurniture = room.furniture.reduce<{ a: RoomNode['furniture']; b: RoomNode['furniture'] }>(
+  const splitFurniture = room.furniture.reduce<{
+    a: RoomNode['furniture']
+    b: RoomNode['furniture']
+  }>(
     (acc, f) => {
       acc[sideOf(f.position) ? 'a' : 'b'].push({ ...f })
       return acc
     },
     { a: [], b: [] },
   )
-  const splitNested = room.nestedRooms.reduce<{ a: RoomNode['nestedRooms']; b: RoomNode['nestedRooms'] }>(
+  const splitNested = room.nestedRooms.reduce<{
+    a: RoomNode['nestedRooms']
+    b: RoomNode['nestedRooms']
+  }>(
     (acc, n) => {
       acc[sideOf(footprintCenter(n.footprint)) ? 'a' : 'b'].push({ ...n })
       return acc
@@ -446,8 +476,7 @@ export function unionRectOf(a: Bounds, c: Bounds): Bounds | null {
     maxZ: Math.max(a.maxZ, c.maxZ),
   }
   const unionArea = (b.maxX - b.minX) * (b.maxZ - b.minZ)
-  const sumArea =
-    (a.maxX - a.minX) * (a.maxZ - a.minZ) + (c.maxX - c.minX) * (c.maxZ - c.minZ)
+  const sumArea = (a.maxX - a.minX) * (a.maxZ - a.minZ) + (c.maxX - c.minX) * (c.maxZ - c.minZ)
   if (Math.abs(unionArea - sumArea) > 1e-6) return null
   return b
 }
@@ -476,7 +505,10 @@ export function mergeRoomsLayout(keep: RoomNode, remove: RoomNode): RoomNode | n
     height: Math.max(keep.height, remove.height),
     furniture: [...keep.furniture, ...remove.furniture],
     nestedRooms: [...keep.nestedRooms, ...remove.nestedRooms],
-    doors: [...remapRectOpenings(keep.footprint, union, keep.doors), ...remapRectOpenings(remove.footprint, union, remove.doors)],
+    doors: [
+      ...remapRectOpenings(keep.footprint, union, keep.doors),
+      ...remapRectOpenings(remove.footprint, union, remove.doors),
+    ],
     windows: [
       ...remapRectOpenings(keep.footprint, union, keep.windows),
       ...remapRectOpenings(remove.footprint, union, remove.windows),

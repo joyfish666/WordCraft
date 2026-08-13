@@ -98,7 +98,11 @@ describe('resolveLayout - corridor 走廊型', () => {
   it('未指定 side 的房间自动分配到走廊两侧（避免全挤一侧）', () => {
     const model = resolveLayout(
       scene({
-        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living' } },
+        layout: {
+          mode: 'auto',
+          template: 'corridor',
+          corridor: { width: 1.2, entranceRoomId: 'living' },
+        },
         children: [
           roomV2('living', '客厅', 6, 4.5, 'left'),
           roomV2('kitchen', '厨房', 3, 3), // 未指定 side
@@ -118,7 +122,11 @@ describe('resolveLayout - corridor 走廊型', () => {
   it('入口房间名字含「走廊」（如"入口走廊"）也保留为真实房间，大门开在其南墙', () => {
     const model = resolveLayout(
       scene({
-        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'corridor_entrance' } },
+        layout: {
+          mode: 'auto',
+          template: 'corridor',
+          corridor: { width: 1.2, entranceRoomId: 'corridor_entrance' },
+        },
         children: [
           roomV2('corridor_entrance', '入口走廊', 2, 1.2, 'left'),
           roomV2('living', '客厅', 6, 4.5, 'left'),
@@ -131,7 +139,11 @@ describe('resolveLayout - corridor 走廊型', () => {
     const rooms = topRooms(model)
     const plan = computeWallPlan(rooms, { entrance: 'south', entranceRoomId: 'corridor_entrance' })
     // 入户门开在入口房间南墙；客厅南墙无入户门
-    expect(edgeOf(plan.get('corridor_entrance')!, 'south')!.segments.some((s) => s.kind === 'door' && s.entrance)).toBe(true)
+    expect(
+      edgeOf(plan.get('corridor_entrance')!, 'south')!.segments.some(
+        (s) => s.kind === 'door' && s.entrance,
+      ),
+    ).toBe(true)
     expect(edgeOf(plan.get('living')!, 'south')!.segments.some((s) => s.entrance)).toBe(false)
   })
 })
@@ -193,9 +205,7 @@ describe('resolveLayout - custom 自由型', () => {
     // z 取 0 避开南墙入户门通道，normalizeContainment 不会推出堵门家具
     const model = resolveLayout(
       scene({
-        children: [
-          roomV2('r1', '客厅', 3, 3, undefined, [{ id: '茶几', x: 0.5, z: 0 }]),
-        ],
+        children: [roomV2('r1', '客厅', 3, 3, undefined, [{ id: '茶几', x: 0.5, z: 0 }])],
       }),
     )
     const room = findNodeById(model.root, 'r1')!
@@ -210,9 +220,7 @@ describe('resolveLayout - custom 自由型', () => {
   it('房间使用提供的绝对坐标并整体居中', () => {
     const model = resolveLayout(
       scene({
-        children: [
-          { ...roomV2('a', '房A', 3, 3), position: { x: 5, y: 1.4, z: 2 } },
-        ],
+        children: [{ ...roomV2('a', '房A', 3, 3), position: { x: 5, y: 1.4, z: 2 } }],
       }),
     )
     const a = findNodeById(model.root, 'a')!
@@ -227,10 +235,7 @@ describe('resolveLayout - 整屋包围盒', () => {
     const model = resolveLayout(
       scene({
         layout: { mode: 'auto', template: 'corridor' },
-        children: [
-          roomV2('master', '主卧', 3, 3, 'left'),
-          roomV2('living', '客厅', 4, 3, 'right'),
-        ],
+        children: [roomV2('master', '主卧', 3, 3, 'left'), roomV2('living', '客厅', 4, 3, 'right')],
       }),
     )
     const bounds = houseLevelsBounds(model.root)!
@@ -272,7 +277,11 @@ describe('resolveLayout - 两卫生间布局', () => {
         name: '三室两卫',
         dimensions: { length: 14.4, width: 9.6, height: 2.8 },
         position: { x: 0, y: 0, z: 0 },
-        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        layout: {
+          mode: 'auto',
+          template: 'corridor',
+          corridor: { width: 1.2, entranceRoomId: 'living_room' },
+        },
         children: [
           roomV2('living_room', '客厅', 6, 4.2, 'left'),
           roomV2('kitchen', '厨房', 3, 3, 'left'),
@@ -317,9 +326,20 @@ describe('resolveLayout - 两卫生间布局', () => {
         name: '带内卫',
         dimensions: { length: 10, width: 8, height: 2.8 },
         position: { x: 0, y: 0, z: 0 },
-        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        layout: {
+          mode: 'auto',
+          template: 'corridor',
+          corridor: { width: 1.2, entranceRoomId: 'living_room' },
+        },
         children: [
-          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 6, width: 4.8, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'living_room',
+            type: 'room',
+            name: '客厅',
+            dimensions: { length: 6, width: 4.8, height: 2.8 },
+            side: 'left',
+            children: [],
+          },
           {
             id: 'bedroom1',
             type: 'room',
@@ -327,7 +347,13 @@ describe('resolveLayout - 两卫生间布局', () => {
             dimensions: { length: 4.8, width: 3.6, height: 2.8 },
             side: 'right',
             children: [
-              { id: 'bed', type: 'furniture', name: '双人床', dimensions: { length: 2, width: 1.5, height: 0.5 }, position: { x: 0, y: 0.25, z: 0.8 } },
+              {
+                id: 'bed',
+                type: 'furniture',
+                name: '双人床',
+                dimensions: { length: 2, width: 1.5, height: 0.5 },
+                position: { x: 0, y: 0.25, z: 0.8 },
+              },
               {
                 id: 'bathroom1',
                 type: 'room',
@@ -335,7 +361,13 @@ describe('resolveLayout - 两卫生间布局', () => {
                 dimensions: { length: 2, width: 1.8, height: 2.8 },
                 position: { x: 1.2, y: 1.4, z: 1.2 },
                 children: [
-                  { id: 'toilet', type: 'furniture', name: '马桶', dimensions: { length: 0.6, width: 0.4, height: 0.7 }, position: { x: 0, y: 0.35, z: 0 } },
+                  {
+                    id: 'toilet',
+                    type: 'furniture',
+                    name: '马桶',
+                    dimensions: { length: 0.6, width: 0.4, height: 0.7 },
+                    position: { x: 0, y: 0.35, z: 0 },
+                  },
                 ],
               },
             ],
@@ -375,9 +407,20 @@ describe('resolveLayout - 两卫生间布局', () => {
         name: '三室一厅一厨',
         dimensions: { length: 12, width: 8, height: 2.8 },
         position: { x: 0, y: 0, z: 0 },
-        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        layout: {
+          mode: 'auto',
+          template: 'corridor',
+          corridor: { width: 1.2, entranceRoomId: 'living_room' },
+        },
         children: [
-          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 6, width: 4.5, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'living_room',
+            type: 'room',
+            name: '客厅',
+            dimensions: { length: 6, width: 4.5, height: 2.8 },
+            side: 'left',
+            children: [],
+          },
           {
             id: 'master',
             type: 'room',
@@ -385,10 +428,34 @@ describe('resolveLayout - 两卫生间布局', () => {
             dimensions: { length: 4.5, width: 3.5, height: 2.8 },
             side: 'right',
             children: [
-              { id: 'bed', type: 'furniture', name: '双人床', dimensions: { length: 2, width: 1.5, height: 0.5 }, position: { x: -1, y: 0.25, z: -0.8 } },
-              { id: 'wardrobe', type: 'furniture', name: '衣柜', dimensions: { length: 1.8, width: 0.6, height: 2.4 }, position: { x: 1.2, y: 1.2, z: -1.2 } },
-              { id: 'nb1', type: 'furniture', name: '床头柜', dimensions: { length: 0.5, width: 0.4, height: 0.5 }, position: { x: -2, y: 0.25, z: -0.8 } },
-              { id: 'nb2', type: 'furniture', name: '床头柜', dimensions: { length: 0.5, width: 0.4, height: 0.5 }, position: { x: 0, y: 0.25, z: -0.8 } },
+              {
+                id: 'bed',
+                type: 'furniture',
+                name: '双人床',
+                dimensions: { length: 2, width: 1.5, height: 0.5 },
+                position: { x: -1, y: 0.25, z: -0.8 },
+              },
+              {
+                id: 'wardrobe',
+                type: 'furniture',
+                name: '衣柜',
+                dimensions: { length: 1.8, width: 0.6, height: 2.4 },
+                position: { x: 1.2, y: 1.2, z: -1.2 },
+              },
+              {
+                id: 'nb1',
+                type: 'furniture',
+                name: '床头柜',
+                dimensions: { length: 0.5, width: 0.4, height: 0.5 },
+                position: { x: -2, y: 0.25, z: -0.8 },
+              },
+              {
+                id: 'nb2',
+                type: 'furniture',
+                name: '床头柜',
+                dimensions: { length: 0.5, width: 0.4, height: 0.5 },
+                position: { x: 0, y: 0.25, z: -0.8 },
+              },
               {
                 id: 'bath',
                 type: 'room',
@@ -432,7 +499,7 @@ describe('resolveLayout - 两卫生间布局', () => {
     }
   })
 
-    it('嵌套卫生间默认东北角，但避开父房间门口禁区（坑 47 的 macro 路径）', () => {
+  it('嵌套卫生间默认东北角，但避开父房间门口禁区（坑 47 的 macro 路径）', () => {
     // 复现用户反馈：主卧（左侧，朝走廊开门）内卫无 side → 常理东北角，
     // 恰好压在主卧朝走廊的门正下方（门后无墙）；应确定性改到第一个不压门区的角
     const v2: SceneModelV2 = {
@@ -443,9 +510,20 @@ describe('resolveLayout - 两卫生间布局', () => {
         name: '小屋',
         dimensions: { length: 10, width: 8, height: 2.8 },
         position: { x: 0, y: 0, z: 0 },
-        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        layout: {
+          mode: 'auto',
+          template: 'corridor',
+          corridor: { width: 1.2, entranceRoomId: 'living_room' },
+        },
         children: [
-          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 5, width: 4, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'living_room',
+            type: 'room',
+            name: '客厅',
+            dimensions: { length: 5, width: 4, height: 2.8 },
+            side: 'left',
+            children: [],
+          },
           {
             id: 'master',
             type: 'room',
@@ -473,20 +551,27 @@ describe('resolveLayout - 两卫生间布局', () => {
     // 内卫仍在父房间内部
     expect(master.nestedRooms.some((c) => c.id === 'bath')).toBe(true)
     // 与渲染同源的门区：主卧朝走廊的门（含入户门）
-    const zones = computeDoorZones(topRooms(model), { entrance: 'south', entranceRoomId: 'living_room' })
+    const zones = computeDoorZones(topRooms(model), {
+      entrance: 'south',
+      entranceRoomId: 'living_room',
+    })
     const rects = (zones.get(master.id) ?? []).map((z) => doorZoneRect(master, z))
     expect(rects.length).toBeGreaterThan(0)
     const bb = roomBoundsOf(bath)
     for (const r of rects) {
       const overlap =
-        bb.minX < r.maxX - 1e-6 && bb.maxX > r.minX + 1e-6 && bb.minZ < r.maxZ - 1e-6 && bb.maxZ > r.minZ + 1e-6
+        bb.minX < r.maxX - 1e-6 &&
+        bb.maxX > r.minX + 1e-6 &&
+        bb.minZ < r.maxZ - 1e-6 &&
+        bb.maxZ > r.minZ + 1e-6
       expect(overlap).toBe(false)
     }
     // 内卫门朝父房间中心开（nestedDoorDirection 语义不变）
     expect(roomCenter(bath).x).toBeGreaterThanOrEqual(roomBoundsOf(master).minX)
   })
 
-  it('嵌套卫生间按 side 靠边放置（side:north → 卧室北侧）', () => {    const v2: SceneModelV2 = {
+  it('嵌套卫生间按 side 靠边放置（side:north → 卧室北侧）', () => {
+    const v2: SceneModelV2 = {
       version: 2,
       root: {
         id: 'h',
@@ -494,9 +579,20 @@ describe('resolveLayout - 两卫生间布局', () => {
         name: '带内卫',
         dimensions: { length: 10, width: 8, height: 2.8 },
         position: { x: 0, y: 0, z: 0 },
-        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        layout: {
+          mode: 'auto',
+          template: 'corridor',
+          corridor: { width: 1.2, entranceRoomId: 'living_room' },
+        },
         children: [
-          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 6, width: 4.8, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'living_room',
+            type: 'room',
+            name: '客厅',
+            dimensions: { length: 6, width: 4.8, height: 2.8 },
+            side: 'left',
+            children: [],
+          },
           {
             id: 'bedroom1',
             type: 'room',
@@ -504,7 +600,14 @@ describe('resolveLayout - 两卫生间布局', () => {
             dimensions: { length: 4, width: 3.5, height: 2.8 },
             side: 'right',
             children: [
-              { id: 'bathroom1', type: 'room', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 }, side: 'north', children: [] },
+              {
+                id: 'bathroom1',
+                type: 'room',
+                name: '主卧卫生间',
+                dimensions: { length: 2, width: 1.8, height: 2.8 },
+                side: 'north',
+                children: [],
+              },
             ],
           },
         ],
@@ -533,16 +636,35 @@ describe('resolveLayout - 两卫生间布局', () => {
         name: '带内卫',
         dimensions: { length: 10, width: 8, height: 2.8 },
         position: { x: 0, y: 0, z: 0 },
-        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        layout: {
+          mode: 'auto',
+          template: 'corridor',
+          corridor: { width: 1.2, entranceRoomId: 'living_room' },
+        },
         children: [
-          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 6, width: 4.8, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'living_room',
+            type: 'room',
+            name: '客厅',
+            dimensions: { length: 6, width: 4.8, height: 2.8 },
+            side: 'left',
+            children: [],
+          },
           {
             id: 'bedroom1',
             type: 'room',
             name: '主卧',
             dimensions: { length: 4, width: 3.5, height: 2.8 },
             side: 'right',
-            children: [{ id: 'bathroom1', type: 'room', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 }, children: [] }],
+            children: [
+              {
+                id: 'bathroom1',
+                type: 'room',
+                name: '主卧卫生间',
+                dimensions: { length: 2, width: 1.8, height: 2.8 },
+                children: [],
+              },
+            ],
           },
         ],
       },
@@ -570,16 +692,36 @@ describe('resolveLayout - 两卫生间布局', () => {
         name: '带内卫',
         dimensions: { length: 12, width: 9, height: 2.8 },
         position: { x: 0, y: 0, z: 0 },
-        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        layout: {
+          mode: 'auto',
+          template: 'corridor',
+          corridor: { width: 1.2, entranceRoomId: 'living_room' },
+        },
         children: [
-          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 6, width: 4.8, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'living_room',
+            type: 'room',
+            name: '客厅',
+            dimensions: { length: 6, width: 4.8, height: 2.8 },
+            side: 'left',
+            children: [],
+          },
           {
             id: 'bedroom1',
             type: 'room',
             name: '主卧',
             dimensions: { length: 4, width: 3.5, height: 2.8 },
             side: 'right',
-            children: [{ id: 'bathroom1', type: 'room', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 }, side: 'north', children: [] }],
+            children: [
+              {
+                id: 'bathroom1',
+                type: 'room',
+                name: '主卧卫生间',
+                dimensions: { length: 2, width: 1.8, height: 2.8 },
+                side: 'north',
+                children: [],
+              },
+            ],
           },
         ],
       },
@@ -645,9 +787,20 @@ describe('resolveLayout - 家具常理摆放（贴墙 + 避让嵌套卫生间 + 
         name: '带内卫',
         dimensions: { length: 12, width: 9, height: 2.8 },
         position: { x: 0, y: 0, z: 0 },
-        layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'living_room' } },
+        layout: {
+          mode: 'auto',
+          template: 'corridor',
+          corridor: { width: 1.2, entranceRoomId: 'living_room' },
+        },
         children: [
-          { id: 'living_room', type: 'room', name: '客厅', dimensions: { length: 6, width: 4.5, height: 2.8 }, side: 'left', children: [] },
+          {
+            id: 'living_room',
+            type: 'room',
+            name: '客厅',
+            dimensions: { length: 6, width: 4.5, height: 2.8 },
+            side: 'left',
+            children: [],
+          },
           {
             id: 'bedroom1',
             type: 'room',
@@ -655,8 +808,21 @@ describe('resolveLayout - 家具常理摆放（贴墙 + 避让嵌套卫生间 + 
             dimensions: { length: 4.5, width: 3.5, height: 2.8 },
             side: 'right',
             children: [
-              { id: 'bed', type: 'furniture', name: '双人床', dimensions: { length: 2, width: 1.5, height: 0.5 }, position: { x: 0, y: 0.25, z: -0.8 } },
-              { id: 'bathroom1', type: 'room', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 }, side: 'north', children: [] },
+              {
+                id: 'bed',
+                type: 'furniture',
+                name: '双人床',
+                dimensions: { length: 2, width: 1.5, height: 0.5 },
+                position: { x: 0, y: 0.25, z: -0.8 },
+              },
+              {
+                id: 'bathroom1',
+                type: 'room',
+                name: '主卧卫生间',
+                dimensions: { length: 2, width: 1.8, height: 2.8 },
+                side: 'north',
+                children: [],
+              },
             ],
           },
         ],

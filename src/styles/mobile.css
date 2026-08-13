@@ -1,0 +1,192 @@
+/* ---------- 竖屏横屏引导（移动端横屏限定） ---------- */
+
+.orientation-guard {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+  text-align: center;
+}
+
+.orientation-guard__phone {
+  position: relative;
+  width: 52px;
+  height: 96px;
+  border: 3px solid var(--text);
+  border-radius: 12px;
+  animation: orientation-swing 1.6s ease-in-out infinite;
+}
+
+.orientation-guard__phone::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 16px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--text-dim);
+  transform: translateX(-50%);
+}
+
+.orientation-guard__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.orientation-guard__subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+@keyframes orientation-swing {
+  0%,
+  100% {
+    transform: rotate(90deg);
+  }
+  50% {
+    transform: rotate(0deg);
+  }
+}
+
+/* ---------- 窄屏/横屏手机适配（桌面端正常窗口不受影响） ----------
+   不用媒体查询门控（小米系统浏览器等部分安卓浏览器对媒体查询的视口判定不可靠，
+   实测横屏不命中），改由 OrientationGuard 的 JS 计算（innerWidth/innerHeight，
+   恒为 CSS 像素）给 <html> 加 .wc-compact 类：
+   条件 = 宽度 ≤760px 或 高度 ≤480px（手机横屏高度恒为 360-430px，含 844px 宽新 iPhone；
+   桌面正常窗口高度 ≥500px 不会命中） */
+
+.wc-compact .toolbar {
+  overflow-x: auto;
+}
+
+.wc-compact .toolbar__brand-sub {
+  display: none;
+}
+
+.wc-compact .chat-bottom--collapsed {
+  max-height: 96px;
+}
+
+.wc-compact .chat-bottom__textarea {
+  font-size: 16px;
+}
+
+.wc-compact .statusbar {
+  flex-wrap: wrap;
+  gap: 8px;
+  height: auto;
+  min-height: var(--statusbar-h);
+  padding: 4px 10px;
+}
+
+.wc-compact .prop-panel {
+  width: 240px;
+  /* 紧凑模式下罗盘缩小为 68px：14 + 68 + 8 */
+  top: 90px;
+}
+
+.wc-compact .api-form {
+  grid-template-columns: 1fr;
+}
+
+/* 平面图工具栏（移动端）：「工具」+「尺寸」并排常驻，工具按钮呼出弹出面板（选择即关闭），
+   不再常驻遮挡平面图 */
+.wc-compact .plan-toolbar {
+  top: 46px;
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+/* 移动端「尺寸」开关为独立常驻按钮：与「工具」按钮等高、防压缩、去掉左侧偏移 */
+.wc-compact .plan-toolbar__dims {
+  flex-shrink: 0;
+  margin-left: 0;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* 右上角罗盘缩小，给视口让位（条件同 wc-compact：横屏手机高度 360-430px） */
+.wc-compact .corner-compass {
+  width: 68px;
+  height: 68px;
+}
+
+.wc-compact .corner-compass__label {
+  font-size: 9px;
+}
+
+.wc-compact .corner-compass__cross {
+  width: 6px;
+  height: 6px;
+}
+
+/* ---------- 桌面窄窗口降级（纯装饰，不影响移动端判定） ---------- */
+
+@media (max-width: 768px) {
+  .toolbar__brand-sub {
+    display: none;
+  }
+
+  .toolbar__btn span {
+    font-size: 0;
+  }
+
+  .toolbar__btn {
+    padding: 5px;
+    gap: 0;
+  }
+
+  .toolbar__btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .toolbar__sep {
+    margin: 0 2px;
+  }
+
+  .toolbar {
+    padding: 0 8px;
+    gap: 2px;
+  }
+
+  .toolbar__btn {
+    height: 32px;
+  }
+
+  .prop-panel {
+    width: 220px;
+    padding: 12px;
+    right: 8px;
+  }
+
+  .view-toggle {
+    top: 8px;
+    left: 8px;
+  }
+
+  .view-toggle__btn {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+
+  .statusbar {
+    padding: 0 10px;
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .breadcrumb__link {
+    font-size: 11px;
+  }
+}

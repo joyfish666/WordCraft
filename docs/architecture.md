@@ -1,6 +1,6 @@
 # 言筑（WordCraft）技术文档 —— 现行实现（v3 足迹模型 + ops 操作契约 + 双向同步）
 
-> 版本：v2.9 · 更新：2026-08-13。本文档描述**当前代码**的架构与数据契约（v3 足迹几何模型 + ops 操作契约 + v2 快照容错路径 + P3 手动编辑 op 回流 + P4 平面图自由编辑 + 平面图增强 + 移动端横屏支持 + 全新 UI）。P1（v3 数据模型）、P2（契约动词化）、P3（双向同步）与 P4（平面图自由编辑：拖顶点/拖房间/点墙放门窗/拆房/合并）已实施：P1 为纯重构（旧数据可打开、用例全绿、截图无回归）；P2 将生成契约从"整屋快照"动词化为"操作序列"（逐条容错执行器 + 提示词重写 + 快照 diff 容错）；P3 把手动编辑 diff 成同构 op 日志回流对话上下文（摘要 + 编辑日志替代整段旧历史，省 token）；P4 在平面图上直接编辑（全部产出同构 op：新增 splitRoom/mergeRoom 操作与 setOpenings 的 edgeIndex/remove，纯函数库 planEdit.ts + 交互层 PlanEditLayer）。2026-08-10 追加落地：**平面图增强**（家具足迹/门窗符号/房间尺寸线 + 尺寸开关）、**移动房间带动家具**（translateRoomContents）、**家具 13 → 20 类**、**移动端横屏支持**（OrientationGuard JS 视口判定 + `wc-compact` 类门控 + 平面图「工具/尺寸」工具栏 + 罗盘缩小 + Canvas touch-action）、**手动编辑避让门口**（normalizeContainment 推出堵门家具，坑 15 更新）。**2026-08-12 追加落地**：**全新 UI 改版**（暖色浅色主题、移除侧边栏、品牌入顶栏、底部对话抽屉、空态引导卡、独立截图按钮、属性面板可拖动、R 键复位视角）与**生成链路确定性补强**（macro.name 容错修复、房间按名称引用、custom 房间 relativeTo、无走廊自由布局直接开门、入户门与开洞互让、家具摆放管线与滑动算法修复、嵌套房间避让父房间门区；388 用例全绿）。**2026-08-13 追加落地（代码审查批次，坑 70-73）**：**生成竞态防护**（发送时快照场景引用，返回时场景已变则 confirm 是否覆盖，无 API Key 不再清空草稿）、**名称引用契约修复**（executor 先 findRoom 解析真实 id 再走 id-only 变更函数，坑 71）、**项目库房间数读取修正**（root.levels[0].rooms，原读错字段恒为 0）、**Ctrl/Cmd+R 不再被劫持**、**墙体方案共享缓存**（computeAllWallPlansCached，WeakMap 按场景引用，渲染层三组件一次计算，坑 72）、**PlanRig 取景按包围盒签名失效**（拖拽不再每帧重取景，坑 73）、**CI 补 lint/format/typecheck/test**、**顶层 ErrorBoundary**（渲染崩溃不再白屏，可重置本地数据）。下一代 v3 完整架构见 [设计方案](design.md)，演进脉络见 [版本演进](history.md)，踩坑记录见 [开发注意事项](notes.md)。
+> 版本：v2.10 · 更新：2026-08-13。本文档描述**当前代码**的架构与数据契约（v3 足迹几何模型 + ops 操作契约 + v2 快照容错路径 + P3 手动编辑 op 回流 + P4 平面图自由编辑 + 平面图增强 + 移动端横屏支持 + 全新 UI）。P1（v3 数据模型）、P2（契约动词化）、P3（双向同步）与 P4（平面图自由编辑：拖顶点/拖房间/点墙放门窗/拆房/合并）已实施：P1 为纯重构（旧数据可打开、用例全绿、截图无回归）；P2 将生成契约从"整屋快照"动词化为"操作序列"（逐条容错执行器 + 提示词重写 + 快照 diff 容错）；P3 把手动编辑 diff 成同构 op 日志回流对话上下文（摘要 + 编辑日志替代整段旧历史，省 token）；P4 在平面图上直接编辑（全部产出同构 op：新增 splitRoom/mergeRoom 操作与 setOpenings 的 edgeIndex/remove，纯函数库 planEdit.ts + 交互层 PlanEditLayer）。2026-08-10 追加落地：**平面图增强**（家具足迹/门窗符号/房间尺寸线 + 尺寸开关）、**移动房间带动家具**（translateRoomContents）、**家具 13 → 20 类**、**移动端横屏支持**（OrientationGuard JS 视口判定 + `wc-compact` 类门控 + 平面图「工具/尺寸」工具栏 + 罗盘缩小 + Canvas touch-action）、**手动编辑避让门口**（normalizeContainment 推出堵门家具，坑 15 更新）。**2026-08-12 追加落地**：**全新 UI 改版**（暖色浅色主题、移除侧边栏、品牌入顶栏、底部对话抽屉、空态引导卡、独立截图按钮、属性面板可拖动、R 键复位视角）与**生成链路确定性补强**（macro.name 容错修复、房间按名称引用、custom 房间 relativeTo、无走廊自由布局直接开门、入户门与开洞互让、家具摆放管线与滑动算法修复、嵌套房间避让父房间门区；388 用例全绿）。**2026-08-13 追加落地（代码审查批次，坑 70-73）**：**生成竞态防护**（发送时快照场景引用，返回时场景已变则 confirm 是否覆盖，无 API Key 不再清空草稿）、**名称引用契约修复**（executor 先 findRoom 解析真实 id 再走 id-only 变更函数，坑 71）、**项目库房间数读取修正**（root.levels[0].rooms，原读错字段恒为 0）、**Ctrl/Cmd+R 不再被劫持**、**墙体方案共享缓存**（computeAllWallPlansCached，WeakMap 按场景引用，渲染层三组件一次计算，坑 72）、**PlanRig 取景按包围盒签名失效**（拖拽不再每帧重取景，坑 73）、**CI 补 lint/format/typecheck/test**、**顶层 ErrorBoundary**（渲染崩溃不再白屏，可重置本地数据）。**2026-08-13 追加落地（工程化与代码结构整理批次）**：**移除 axios 统一 fetch**（流式与连通性检测同一 HTTP 栈，describeAxiosError → describeHttpError；testConnection 遇 max_tokens 400 自动降级 max_completion_tokens 重试）、**版本号单一来源**（package.json → vite define `__APP_VERSION__`，状态栏不再硬编码）、**HomePage 瘦身**（平面图工具栏 → `PlanToolbar`（移动/桌面分支收拢、工具清单单一定义）、调试面板 → `DebugPanel`、键盘快捷键 → `useKeyboardShortcuts`、移动端判定 → `lib/viewport.ts` + `useMobileCompact`，与 OrientationGuard 共享阈值）、**样式按域拆分**（global.css 2017 行单文件 → 15 个分区文件 + @import 链，顺序即层叠顺序）、**组件测试补齐**（PropertyPanel/ChatDrawer/HomeToolbar 12 用例）、**CI 补 format:check 门**（全仓格式一次收敛）。430 用例全绿。下一代 v3 完整架构见 [设计方案](design.md)，演进脉络见 [版本演进](history.md)，踩坑记录见 [开发注意事项](notes.md)。
 
 本文档面向开发者和贡献者，描述言筑的核心架构、数据契约与实现细节。项目为**纯前端**应用，无需后端。
 
@@ -230,7 +230,7 @@ interface WallPlan { edges: WallEdge[] }   // 与 footprint 顶点环一一对�
 ### 6.6.6 移动端横屏支持（2026-08-10，README 路线图项，横屏限定）
 
 - **竖屏引导**：`components/ui/OrientationGuard.tsx` 包裹整棵路由——JS 判定「宽度 < 768px 且 高度 > 宽度」（**阈值 A：窄屏 + 竖放才拦**，手机横屏/iPad/桌面均不命中）时渲染全屏覆盖层（旋转图标 + 双语提示，`role="alert"`）；**应用层不卸载**（盖在下方，旋转回来即时恢复、不丢状态）。**不用 matchMedia**——小米系统浏览器等部分安卓浏览器对媒体查询/`matchMedia` 的视口判定不可靠，实测横屏漏命中。
-- **紧凑布局**：JS 判定「宽度 ≤760px 或 高度 ≤480px」（任意宽度横屏手机，横屏高度恒 360-430px）时给 `<html>` 加 `wc-compact` 类，**窄屏样式全部由该类门控**（`styles/global.css`，不用媒体查询，原因同上）；`index.html` 有内联脚本在首帧前预置该类避免闪烁。桌面正常窗口（高度 ≥500px）永不命中。
+- **紧凑布局**：JS 判定「宽度 ≤760px 或 高度 ≤480px」（任意宽度横屏手机，横屏高度恒 360-430px）时给 `<html>` 加 `wc-compact` 类，**窄屏样式全部由该类门控**（`styles/mobile.css`，2026-08-13 由 global.css 按域拆分而来；判定阈值共享 `lib/viewport.ts`，不用媒体查询，原因同上）；`index.html` 有内联脚本在首帧前预置该类避免闪烁。桌面正常窗口（高度 ≥500px）永不命中。
 - **紧凑内容**（2026-08-12 UI 改版后调整）：顶栏横向滚动（隐藏品牌副标题）、**底部对话抽屉折叠态更矮（112→96px）、输入字体 16px（防 iOS 聚焦缩放）**、状态栏可换行、属性面板 240px（top 90px 让开缩小后的罗盘）、设置页 API 表单改单列、**平面图工具栏移动端改为「工具」+「尺寸」两个独立常驻按钮**（`HomePage` 内 `mobileCompact` 分支：工具按钮呼出弹出面板——工具两列网格 + 门窗门/窗切换 + 操作提示，面板 `max-height` 可上下滚动，选择工具即关闭、点空白关闭；**尺寸开关单独成按钮放在面板外**，用户反馈面板内点不到，常驻后不遮挡平面图且随时可切换；桌面端常驻工具行保持原样）、**右上角罗盘缩小**（108→68px，标签偏移随尺寸动态推导）。
 - **触控正确性**：`.scene-canvas` 加 `touch-action: none`——OrbitControls 双指缩放/平面图拖拽不被浏览器滚动与捏合手势劫持（桌面鼠标无影响）。
 
@@ -250,7 +250,7 @@ interface WallPlan { edges: WallEdge[] }   // 与 footprint 顶点环一一对�
 
 ## 6.8 全新 UI（2026-08-12，暖色浅色主题）
 
-- **主题**：`styles/global.css` 的 `:root` 全套 CSS 变量由深色切换为暖色米纸浅色（`--bg #e2dccb`、`--bg-panel #ede8dd`、强调色绿色 `--accent #3d7a48`、圆角/阴影体系）；**3D 渲染同步换肤**——场景背景 `#d6cfbf`（Viewport3D 的 `<color attach="background">`）、网格线、选中高亮（`#3d7a48`）、家具/走廊中性色（`palette.ts` 按浅底可辨性重调）、门窗符号、平面图标注（`plan-label`/`plan-dim`/罗盘改浅色面板底）。设置页/对话框/项目库/分享等全部页面随变量自动换肤。
+- **主题**：`styles/variables.css` 的 `:root` 全套 CSS 变量由深色切换为暖色米纸浅色（`--bg #e2dccb`、`--bg-panel #ede8dd`、强调色绿色 `--accent #3d7a48`、圆角/阴影体系）；**样式按域拆分为分区文件**（2026-08-13：variables/base/home/toolbar/chat/property/compass/debug/dialog/settings/project/share/plan/mobile/error-boundary，`global.css` 仅保留 @import 链，顺序即层叠顺序）；**3D 渲染同步换肤**——场景背景 `#d6cfbf`（Viewport3D 的 `<color attach="background">`）、网格线、选中高亮（`#3d7a48`）、家具/走廊中性色（`palette.ts` 按浅底可辨性重调）、门窗符号、平面图标注（`plan-label`/`plan-dim`/罗盘改浅色面板底）。设置页/对话框/项目库/分享等全部页面随变量自动换肤。
 - **布局骨架**：**移除侧边栏**（`AppShell` 精简为裸 `Outlet`）；品牌「言筑 WordCraft」移入顶栏左侧，首页/设置导航移入顶栏右侧图标（`toolbar__nav`，NavLink + data-label tooltip）；设置页顶部新增「← 首页」返回入口。
 - **顶栏分组**（`components/ui/HomeToolbar.tsx`）：场景（示例/清空场景）、编辑（撤销/重做，图标按钮）、对话（与底部抽屉联动的高亮态）/分享/截图/帮助、右侧 保存（primary 弱化样式）/项目库/导航/语言/API 徽章（未配置 → 链接到设置）。桌面窄窗口（≤768px）按钮自动图标化（媒体查询，纯装饰降级；移动端仍由 `wc-compact` 类门控，坑 61 不变）。
 - **底部对话抽屉**（`components/ui/ChatDrawer.tsx`，push 布局）：取代原左侧 320px 聊天面板——折叠时仅剩输入条（112px），展开最大 55vh；顶栏「对话」按钮与其联动高亮；消息气泡样式（用户右对齐绿色、助手左对齐）、生成中动画圆点 + 耗时、错误消息红框、**撤销生成/清空对话**按钮行、**API Key 未配置黄色提示条**（附「前往设置」）。发送自动展开抽屉；`role="log"` + `aria-live="polite"`。
@@ -263,7 +263,7 @@ interface WallPlan { edges: WallEdge[] }   // 与 footprint 顶点环一一对�
 ## 7. 生成链路（lib/chat.ts + lib/executor.ts）
 
 1. 构建 messages：系统提示词（**ops 操作序列契约**，P2 重写）+ 多轮历史（**P3 精简**：`toChatHistory` 剔除助手纯 JSON）+ **当前房屋状态摘要**（有场景时）+ **手动编辑日志**（`editOps` 非空时）+ 用户输入。
-2. **SSE 流式请求**（`streamChatCompletion`，lib/api.ts）：`chat.ts` 侧 `GENERATION_TIMEOUT_MS = 180s` 兜底超时（axios 默认 30s）。
+2. **SSE 流式请求**（`streamChatCompletion`，lib/api.ts，fetch 实现）：`chat.ts` 侧 `GENERATION_TIMEOUT_MS = 180s` 兜底超时。
 3. 从回复提取 JSON，解析为操作序列（**截断/双编码容错**：`repairTruncatedJson` 按未闭合括号栈补全被截断的 JSON，`extractModelJson` 解包被包进字符串的 JSON；逐条 zod 校验，单条无效跳过）。
 4. `executeOps` 确定性执行：`macro` 走旧布局引擎；`addRoom/updateRoom/...` 增量修改；失败单条跳过；结束统一 `normalizeContainment`（auto 批次额外家具常理兜底）+ 楼层高度刷新。
 5. **快照容错路径**：输出为 v2 整屋快照时，auto → 映射 `macro`，custom → `diffSceneV2` 按 id diff 成 ops 再执行；v3 场景直接使用。
@@ -278,9 +278,10 @@ src/
 ├── components/
 │   ├── layout/AppShell.tsx    # 无侧边栏：裸 Outlet（品牌/导航移入各页顶栏，2026-08-12）
 │   ├── ui/                    # Button/Input/HelpDialog/ProjectLibraryDialog/ShareDialog/OrientationGuard【移动端横屏】/LanguageToggle
-│   │                          # + HomeToolbar【顶栏，2026-08-12】/ChatDrawer【底部对话抽屉，2026-08-12】/EmptyStateCard【空态引导卡，2026-08-12】/icons【SVG 图标库，2026-08-12】/ErrorBoundary【顶层错误边界，2026-08-13】
+│   │                          # + HomeToolbar【顶栏，2026-08-12】/ChatDrawer【底部对话抽屉，2026-08-12】/EmptyStateCard【空态引导卡，2026-08-12】/icons【SVG 图标库，2026-08-12】/ErrorBoundary【顶层错误边界，2026-08-13】/PlanToolbar【平面图工具栏，2026-08-13 从 HomePage 拆出】/DebugPanel【调试日志面板，2026-08-13 拆出】
 │   └── viewport/              # SceneViewer/Viewport3D/ModelNodeView/PropertyPanel（可拖动，2026-08-12）/Compass/PlanRig/PlanAnnotations/GizmoControls/PlanEditLayer【P4】/PlanEnhancements【平面图增强】
-├── pages/                     # HomePage（顶栏 + 画布 + 底部抽屉 + 状态栏）/ SettingsPage（设置/调试/i18n，含返回首页入口）
+├── hooks/                     # useKeyboardShortcuts【全局键盘，2026-08-13 从 HomePage 拆出】/useMobileCompact【紧凑视口判定】
+├── pages/                     # HomePage（顶栏 + 画布 + 底部抽屉 + 状态栏，2026-08-13 工具栏/调试面板/键盘拆出后瘦身）/ SettingsPage（设置/调试/i18n，含返回首页入口）
 ├── db/database.ts             # Dexie（IndexedDB）项目库
 ├── i18n/                      # translations.ts（zh 真源 + en）+ useT/t 包装
 ├── store/                     # useSettingsStore/useModelStore/useChatStore/useProjectStore/useShareStore
@@ -289,7 +290,7 @@ src/
 │   ├── editOps.ts             # 双向同步：editDiffToOps 手动编辑 → op【P3】
 │   ├── executor.ts            # 确定性执行器 executeOps/applyOp + diffSceneV2 快照 diff（含 splitRoom/mergeRoom【P4】；findRoom/mapRoom 按名称回退【2026-08-12】+ 名称引用解析真实 id【2026-08-13，坑 71】）
 │   ├── planEdit.ts            # 平面图编辑纯函数（网格吸附/正交顶点拖拽/自交校验/墙命中/平移吸附/拆合布局）【P4 新增】collectWallHitEdges 走共享墙体缓存【2026-08-13，坑 72】
-│   ├── api.ts                 # OpenAI 兼容客户端、SSE 流式、连通性检测
+│   ├── api.ts                 # OpenAI 兼容客户端、SSE 流式、连通性检测（2026-08-13 移除 axios，统一 fetch；max_tokens 400 时降级 max_completion_tokens）
 │   ├── layout.ts              # 布局引擎 resolveLayout（macro 复用；custom 支持 footprint 顶点环与 relativeTo【2026-08-12】；avoidNestedDoorZones 嵌套避门区【2026-08-12】）
 │   ├── footprint.ts           # v3 足迹几何纯函数（包围盒/平移/缩放/节点访问器）
 │   ├── migration.ts           # migrateModel v1→v3 幂等迁移
@@ -298,19 +299,27 @@ src/
 │   ├── roomGeometry.ts        # 足迹边分段墙体 computeWallPlan（hasCorridor 门控【2026-08-12】）+ applyOpenings + placeEntranceDoorOnEdge 入户门互让【2026-08-12】+ nestedWallPlan（真·内嵌）+ window 段 + computeAllWallPlansCached 共享缓存【2026-08-13，坑 72】
 │   ├── modelTree.ts           # 树遍历/足迹更新/家具约束 normalizeContainment（约束进墙 + 推出嵌套占地与门口通道，含 updateNodeFootprint/removeNode）+ translateRoomContents（移动房间带动家具）
 │   ├── planGeometry.ts        # 2D 平面图纯函数（足迹包围盒/取景/尺寸线/门窗符号/房间尺寸线【平面图增强】）
+│   ├── viewport.ts            # 移动端视口判定纯函数（isCompactViewport/isPortraitBlocked，与 OrientationGuard 共享）【2026-08-13】
 │   ├── compression.ts         # lz-string 分享口令编解码（wc3: 版本前缀）
 │   ├── watermark.ts           # 截图口令水印（离屏 canvas）
 │   ├── sampleModel.ts         # 示例模型
-│   ├── debugLog.ts            # 调试日志器
+│   ├── debugLog.ts            # 调试日志器（含 formatDebugText 文本导出【2026-08-13】）
 │   └── palette.ts / id.ts     # palette 含共享 roomFaceColor 与家具三档配色（FURNITURE_COLOR 等；2026-08-12 按浅色底重调）
 ├── schemas/model.schema.ts    # v2 Zod Schema（快照容错路径用）
 ├── schemas/ops.schema.ts      # ops 操作契约 Zod Schema（判别联合白名单；roomSpec 支持 relativeTo【2026-08-12】）【新增】
 ├── types/model.ts             # v2 契约 + v3 已解析模型类型
 ├── types/ops.ts               # ops 操作契约类型（Op/RoomSpec/FurnitureSpec）【新增】
 ├── types/settings.ts          # 设置项类型（AppSettings/ApiKeyEntry/ColorMode 等）
+├── styles/                    # 2026-08-13 由单文件 global.css 按域拆分：global.css 仅 @import 链（顺序 = 层叠顺序）
+│   ├── variables.css          # 设计令牌（颜色/圆角/阴影/尺寸）
+│   ├── base.css               # 重置 + 布局骨架 + 通用组件（panel/btn/input/badge）
+│   ├── home/toolbar/chat/property/compass/debug/dialog.css  # 各 UI 分区
+│   ├── settings/project/share/plan.css                      # 设置页/项目库/分享/平面图
+│   └── mobile.css             # 竖屏引导 + wc-compact 紧凑布局 + 桌面窄窗口降级；error-boundary.css 兜底页
+└── vite-env.d.ts              # __APP_VERSION__ 声明（vite.config.ts 从 package.json 注入，2026-08-13）
 ```
 
-## 9. 测试（Vitest，403 用例）
+## 9. 测试（Vitest，430 用例）
 
 - `lib/planEdit.test.ts`【P4 新增】：网格吸附/足迹校验（非正交/过短/自交拒绝）、正交顶点拖拽（矩形滑行/L 形内凹角/退化与自交拒绝/最近顶点）、平移贴墙吸附（线差阈值/网格先行/无重叠不吸附）、拆房布局（家具/嵌套/开洞归属重映射）、合并布局（unionRectOf 面积守恒/开洞重映射）、墙命中（实心墙/入户门/门段/邻屋共墙）。
 - `lib/editOps.test.ts`【新增】：editDiffToOps 纯函数——家具位移（相对房间中心换算）/房间位移与改尺寸（footprint 顶点环）/层高（dimensions.height）/家具改名改尺寸/约束后位置变化/normalize 提交一致性/无变化与节点缺失返回空/整屋改名（setHouse）/嵌套房间内家具归属最内层房间。
@@ -333,6 +342,8 @@ src/
 - `lib/roomGeometry.test.ts`【2026-08-13 扩充】：**computeAllWallPlansCached 共享缓存（同场景引用返回同一 Map / 不同引用重算且与无缓存版本一致，坑 72）**。
 - `components/ui/ProjectLibraryDialog.test.tsx`【2026-08-13 扩充】：**项目行房间数读取 root.levels[0].rooms（v3 模型显示真实房间数，原实现读错字段恒为 0）**。
 - `components/ui/ErrorBoundary.test.tsx`【2026-08-13 新增】：子组件抛错展示兜底页不白屏 / 重置按钮清空 localStorage / 正常子树不受影响。
+- `components/viewport/PropertyPanel.test.tsx` / `components/ui/ChatDrawer.test.tsx` / `components/ui/HomeToolbar.test.tsx`【2026-08-13 新增】：属性面板（显示节点信息/尺寸 Enter 提交与非法回显/微调步长平移/复位与禁用态/关闭取消选中）、聊天抽屉（发送与 Enter/Shift+Enter、禁用态、消息渲染与生成摘要、API 提示条、折叠切换）、顶栏（按钮回调/禁用态/API 徽章/语言切换）。
+- `lib/api.test.ts`【2026-08-13 重写】：fetch 统一后的 describeHttpError（error.message 优先/data.message 兜底/仅状态码/网络错误/兜底文案）+ testConnection（成功/401/404/max_tokens 400 降级 max_completion_tokens 重试/网络错误）。
 
 ## 10. 调试模式
 
@@ -340,4 +351,4 @@ src/
 
 ---
 
-**维护者**：JoyFish · 文档版本 v2.9
+**维护者**：JoyFish · 文档版本 v2.10

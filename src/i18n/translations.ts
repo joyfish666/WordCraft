@@ -59,7 +59,7 @@ export const zh = {
   'chat.ariaLog': '对话记录',
   'chat.apiMissingHint': '尚未配置 API Key，暂时无法生成。',
   'chat.generatedModel':
-    '已生成「{name}」模型，共 {count} 个模块。可点击模块查看/修改尺寸，或用方向键移动视角。',
+    '已生成「{name}」模型，共 {count} 个模块。可点击模块编辑尺寸，或切换到平面图自由编辑。',
 
   // ---------- 空态引导 ----------
   'home.emptyTitle': '用一句话，生成你的房子',
@@ -109,7 +109,8 @@ export const zh = {
   'home.alertInvalid': '项目数据格式不正确，无法打开',
   'home.noApiKey': '尚未配置 API Key，请先前往设置页配置后再试。',
   'home.genFailed': '生成失败，请重试',
-  'home.genConflictApply': '生成期间你手动编辑了场景。仍要应用生成结果覆盖当前编辑吗？（建议选「取消」以保留你的修改）',
+  'home.genConflictApply':
+    '生成期间你手动编辑了场景。仍要应用生成结果覆盖当前编辑吗？（建议选「取消」以保留你的修改）',
   'home.genConflictAborted': '生成结果已丢弃：生成期间场景发生了变化，已保留你的手动编辑',
 
   // ---------- 设置页 ----------
@@ -160,7 +161,8 @@ export const zh = {
   'help.select': '选择模块',
   'help.selectDesc': '点击场景中的房间 / 家具，右侧弹出属性面板',
   'help.edit': '编辑属性',
-  'help.editDesc': '在属性面板修改名称 / 长宽高 / X·Y·Z，Enter 或失焦生效；或用「位置微调」按钮按步长移动',
+  'help.editDesc':
+    '在属性面板修改名称 / 长宽高 / X·Y·Z，Enter 或失焦生效；或用「位置微调」按钮按步长移动',
   'help.undoRedo': '撤销 / 重做',
   'help.undoRedoDesc': '工具栏按钮，或 Ctrl+Z 撤销、Ctrl+Y / Ctrl+Shift+Z 重做',
   'help.focus': '聚焦房间',
@@ -176,9 +178,11 @@ export const zh = {
   'help.breadcrumb': '层级导航',
   'help.breadcrumbDesc': '底部面包屑可点击跳转到任意层级',
   'help.projects': '保存 / 项目库',
-  'help.projectsDesc': '工具栏「保存」把当前场景存入本地项目库；「项目库」可新建 / 打开 / 重命名 / 删除多个方案',
+  'help.projectsDesc':
+    '工具栏「保存」把当前场景存入本地项目库；「项目库」可新建 / 打开 / 重命名 / 删除多个方案',
   'help.undoGeneration': '撤销生成',
-  'help.undoGenerationDesc': '多轮修改不满意时，点对话栏「撤销生成」回到本次生成前的场景并移除对应对话',
+  'help.undoGenerationDesc':
+    '多轮修改不满意时，点对话栏「撤销生成」回到本次生成前的场景并移除对应对话',
   'help.planView': '2D 平面图',
   'help.planViewDesc': '视口左上角「平面图」切换俯视平面图（正北朝上，可平移缩放），再点「3D」返回',
   'help.close': '知道了',
@@ -306,7 +310,8 @@ export const zh = {
   'error.authFailed': 'API Key 无效或无权限（401/403）',
   'error.modelMissing': 'API 可达，但模型不存在，请检查模型名与 Base URL',
   'error.boundaryTitle': '出错了',
-  'error.boundaryDesc': '应用遇到意外错误（通常是本地数据损坏）。可以重试，或重置本地数据后重新开始。',
+  'error.boundaryDesc':
+    '应用遇到意外错误（通常是本地数据损坏）。可以重试，或重置本地数据后重新开始。',
   'error.boundaryReset': '重置本地数据',
   'error.boundaryRetry': '重试',
 } as const
@@ -316,7 +321,8 @@ export type TKey = keyof typeof zh
 export const en: Record<TKey, string> = {
   // ---------- App shell ----------
   'app.title': 'WordCraft 言筑',
-  'app.desc': 'WordCraft 言筑 — a pure front-end web app that generates 3D spatial models from natural-language conversation',
+  'app.desc':
+    'WordCraft 言筑 — a pure front-end web app that generates 3D spatial models from natural-language conversation',
   'nav.home': 'Home',
   'nav.settings': 'Settings',
   'nav.footer': 'Pure front-end · Data stays local',
@@ -350,9 +356,11 @@ export const en: Record<TKey, string> = {
   // ---------- Chat panel ----------
   'chat.title': 'Chat',
   'chat.undoGen': 'Undo generation',
-  'chat.undoGenTitle': 'Undo the last generation, reverting to the scene before it (and removing that exchange)',
+  'chat.undoGenTitle':
+    'Undo the last generation, reverting to the scene before it (and removing that exchange)',
   'chat.clear': 'Clear chat',
-  'chat.hint': 'Describe what you need below to generate a 3D model. Supports multi-turn refinement.',
+  'chat.hint':
+    'Describe what you need below to generate a 3D model. Supports multi-turn refinement.',
   'chat.roleMe': 'Me',
   'chat.roleAssistant': 'WordCraft',
   'chat.roleError': 'Error',
@@ -363,11 +371,12 @@ export const en: Record<TKey, string> = {
   'chat.ariaLog': 'Chat log',
   'chat.apiMissingHint': 'No API Key configured yet — generation is disabled.',
   'chat.generatedModel':
-    'Generated "{name}" with {count} modules. Click a module to view/edit dimensions, or use the arrow keys to move the view.',
+    'Generated "{name}" with {count} modules. Click a module to edit dimensions, or switch to the plan view for free-form editing.',
 
   // ---------- Empty state ----------
   'home.emptyTitle': 'Describe your house in one sentence',
-  'home.emptyDesc': 'Describe rooms, style and orientation — the AI builds a 3D model you can refine later. Try one:',
+  'home.emptyDesc':
+    'Describe rooms, style and orientation — the AI builds a 3D model you can refine later. Try one:',
   'home.emptyFoot': 'All data stays local · Private by design',
   'home.emptyApiHint': 'No API Key configured yet — try the sample model first:',
   'home.example1': 'Three bedrooms, one living room, one kitchen, with an ensuite master bedroom',
@@ -391,7 +400,8 @@ export const en: Record<TKey, string> = {
   'home.downloadTitle': 'Download .log file (saved to your downloads)',
   'home.download': 'Download',
   'home.clear': 'Clear',
-  'home.debugEmpty': 'No logs yet (debug mode is on; logs appear when generating or testing connectivity)',
+  'home.debugEmpty':
+    'No logs yet (debug mode is on; logs appear when generating or testing connectivity)',
 
   // ---------- Status bar ----------
   'home.breadcrumbAria': 'Current location',
@@ -408,8 +418,9 @@ export const en: Record<TKey, string> = {
 
   // ---------- HomePage confirms / alerts ----------
   'home.confirmDiscardProject': 'This project has unsaved changes. Discard them and continue?',
-  'home.confirmDiscardScene': 'The current scene isn\'t saved to the project library. Overwrite it and continue?',
-  'home.alertCorrupt': 'Project data is corrupted and can\'t be opened',
+  'home.confirmDiscardScene':
+    "The current scene isn't saved to the project library. Overwrite it and continue?",
+  'home.alertCorrupt': "Project data is corrupted and can't be opened",
   'home.alertInvalid': 'Project data has an invalid format',
   'home.noApiKey': 'No API Key configured yet. Configure one on the Settings page first.',
   'home.genFailed': 'Generation failed, please try again',
@@ -424,7 +435,8 @@ export const en: Record<TKey, string> = {
   'settings.apiDesc':
     'Keys are stored only in your browser and are used to call the LLM. Supports OpenAI / DeepSeek / LocalAI-compatible endpoints.',
   'settings.defaultBaseUrl': 'Global default Base URL (optional)',
-  'settings.baseUrlPlaceholder': 'e.g. https://api.deepseek.com — leave empty to use the default DeepSeek endpoint',
+  'settings.baseUrlPlaceholder':
+    'e.g. https://api.deepseek.com — leave empty to use the default DeepSeek endpoint',
   'settings.defaultModel': 'Default model',
   'settings.modelPlaceholder': 'e.g. deepseek-v4-flash — depends on your provider',
   'settings.thinking': 'Deep thinking',
@@ -464,20 +476,23 @@ export const en: Record<TKey, string> = {
   'help.zoom': 'Zoom',
   'help.zoomDesc': 'Mouse wheel (two-finger pinch on touch)',
   'help.select': 'Select',
-  'help.selectDesc': 'Click a room / furniture in the scene; the property panel slides out on the right',
+  'help.selectDesc':
+    'Click a room / furniture in the scene; the property panel slides out on the right',
   'help.edit': 'Edit properties',
   'help.editDesc':
     'Edit name / length·width·height / X·Y·Z in the property panel (Enter or blur commits); or use the nudge buttons to move by a step',
   'help.undoRedo': 'Undo / redo',
   'help.undoRedoDesc': 'Toolbar buttons, or Ctrl+Z undo / Ctrl+Y / Ctrl+Shift+Z redo',
   'help.focus': 'Focus room',
-  'help.focusDesc': 'Click a room to enter its interior view; interior furniture is solid, other rooms are ghosted',
+  'help.focusDesc':
+    'Click a room to enter its interior view; interior furniture is solid, other rooms are ghosted',
   'help.unfocus': 'Exit focus',
   'help.unfocusDesc': 'Click the house floor, the "House" breadcrumb, or empty space',
   'help.move': 'Move view',
   'help.moveDesc': 'Use the arrow keys / WASD to pan',
   'help.keys': 'Arrow keys / WASD',
-  'help.keysDesc': '←/→ or A/D pan horizontally, ↑/↓ or W/S pan vertically (ignored while typing in a field)',
+  'help.keysDesc':
+    '←/→ or A/D pan horizontally, ↑/↓ or W/S pan vertically (ignored while typing in a field)',
   'help.resetView': 'Reset view',
   'help.resetViewDesc': 'Press R to reset the view',
   'help.breadcrumb': 'Breadcrumb',
@@ -556,7 +571,8 @@ export const en: Record<TKey, string> = {
   'plan.toolVertex': 'Vertex',
   'plan.toolVertexTitle': 'Drag room corners to reshape (orthogonal + grid snap)',
   'plan.toolOpening': 'Openings',
-  'plan.toolOpeningTitle': 'Click a wall to add a door/window; click an existing opening to remove it',
+  'plan.toolOpeningTitle':
+    'Click a wall to add a door/window; click an existing opening to remove it',
   'plan.toolSplit': 'Split',
   'plan.toolSplitTitle': 'Draw a line inside a rectangular room to split it (door auto-added)',
   'plan.toolMerge': 'Merge',
@@ -568,7 +584,8 @@ export const en: Record<TKey, string> = {
   'plan.hintMove': 'Drag a room body to move it; edges snap to nearby walls',
   'plan.hintVertex': 'Click a room to select it, then drag a corner to reshape (grid-snapped)',
   'plan.hintOpening': 'Click a solid wall to add a {kind}; click an existing opening to remove it',
-  'plan.hintSplit': 'Press and drag inside a room to draw a line (horizontal/vertical); release to split',
+  'plan.hintSplit':
+    'Press and drag inside a room to draw a line (horizontal/vertical); release to split',
   'plan.hintMerge': 'Click the room to keep, then click the adjacent room to merge',
   'plan.mergeFail': 'The two rooms cannot merge: their union is not a rectangle',
   'plan.splitFail': 'Only rectangular rooms can be split, and each side must be ≥ 1m',
@@ -603,9 +620,9 @@ export const en: Record<TKey, string> = {
   // ---------- Errors ----------
   'error.httpRequestFailed':
     'Model request failed: {detail}. Test connectivity on the Settings page.',
-  'error.noJson': 'No JSON found in the model\'s reply, please retry',
-  'error.invalidJson': 'Couldn\'t parse the model\'s JSON, please retry',
-  'error.invalidSchema': 'The model\'s JSON doesn\'t match the v2 structure ({issues}), please retry',
+  'error.noJson': "No JSON found in the model's reply, please retry",
+  'error.invalidJson': "Couldn't parse the model's JSON, please retry",
+  'error.invalidSchema': "The model's JSON doesn't match the v2 structure ({issues}), please retry",
   'error.timeout': 'Request timed out. Check your network or try again later',
   'error.requestFailed': 'Request failed: {detail}',
   'error.httpStatus': 'HTTP {status}: {detail}',
@@ -613,11 +630,12 @@ export const en: Record<TKey, string> = {
   'error.noStream': 'Network error: the service returned no data stream',
   'error.streamInterrupted': 'Network error: response stream interrupted ({detail})',
   'error.network': 'Network error: {detail}',
-  'error.networkFallback': 'Network error: couldn\'t reach the service',
+  'error.networkFallback': "Network error: couldn't reach the service",
   'error.connected': 'Connected: model {model}',
   'error.unknownModel': 'unknown',
   'error.authFailed': 'Invalid or unauthorized API Key (401/403)',
-  'error.modelMissing': 'API reachable, but the model doesn\'t exist — check the model name and Base URL',
+  'error.modelMissing':
+    "API reachable, but the model doesn't exist — check the model name and Base URL",
   'error.boundaryTitle': 'Something went wrong',
   'error.boundaryDesc':
     'The app hit an unexpected error (usually corrupted local data). You can retry, or reset local data and start fresh.',
