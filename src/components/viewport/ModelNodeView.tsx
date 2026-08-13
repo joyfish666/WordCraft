@@ -7,15 +7,24 @@ import {
   furnitureKind,
   partsBounds,
 } from '../../lib/furniturePresets'
+import {
+  boxWallGeometry,
+  exteriorWallMaterial,
+  furnitureMaterial,
+  getTexture,
+  getWorldUvTexture,
+  materialParams,
+  roomFloorMaterial,
+  skirtingMaterial,
+  TEXTURE_TILE_METERS,
+} from '../../lib/materials'
 import { footprintBounds, houseLevelsBounds, roomCenter, roomDims } from '../../lib/footprint'
 import { isContainer } from '../../lib/modelTree'
 import {
   ENTRANCE_DOOR_COLOR,
-  ENTRANCE_MARKER_COLOR,
-  FURNITURE_COLOR,
-  FURNITURE_COLORBLIND,
-  FURNITURE_PART_DARK,
-  FURNITURE_PART_INK,
+  PLINTH_COLOR,
+  TRIM_COLOR,
+  WALL_INTERIOR_COLOR,
   roomFaceColor,
 } from '../../lib/palette'
 import {
@@ -25,15 +34,21 @@ import {
   nestedDoorDirection,
   wallGroupPosition,
   wallPlanWithDoor,
+  type DoorDirection,
   type WallPlan,
   type WallSegmentKind,
 } from '../../lib/roomGeometry'
 import { useModelStore } from '../../store/useModelStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
+import type { ColorMode } from '../../types/settings'
 import type { FurnitureNode, ModelNode, Position, RoomNode } from '../../types/model'
 
 /** 地板厚度：做成可见的实体板，墙体从地板顶面升起（墙的底部是地板） */
 export const FLOOR_THICKNESS = 0.12
+/** 墙/家具沉入地板顶面的嵌入量（2mm）：避免底面与地板顶面完全共面导致 z-fighting 闪烁 */
+export const FLOOR_EMBED = 0.002
+/** 墙/家具实际坐落的基准高度（地板顶面之下 2mm，底面藏进地板体积、永不渲染） */
+export const FLOOR_TOP_Y = FLOOR_THICKNESS - FLOOR_EMBED
 
 interface ShellMaterial {
   color: string
@@ -52,13 +67,37 @@ interface WallSegmentBoxProps {
   /** 是否为入户门（渲染醒目门扇） */
   entrance?: boolean
   material: ShellMaterial
+  /** 该墙段是否属外墙（edge.shared=false）：外侧面用外墙饰面材质 */
+  exterior: boolean
+  /** 外向法线方向（决定外墙面在局部 ±z 的哪一侧、踢脚线/门套凸向室内哪侧） */
+  dir: DoorDirection
+  /** 房间识别色（踢脚线加深用；虚化时用中性灰） */
+  roomColor: string
+  /** 是否虚化（聚焦其他房间时），踢脚线等装饰换灰 */
+  ghosted: boolean
 }
+
+/** 踢脚线高度（米） */
+const SKIRTING_H = 0.08
+/** 基座勒脚高度（米） */
+const PLINTH_H = 0.28
+/** 基座勒脚外凸（米） */
+const PLINTH_PROTRUDE = 0.03
+
+// 共面错位间隙（米）：z-fighting 只在「同法向 + 共面 + 重叠」的面之间发生
+// （反向共面会被背面剔除，不会互掐）。墙底/勒脚/踢脚线/门套的底面都朝下、
+// 外侧面都朝向房间内部墙面——必须逐一错开 1~2.5mm，肉眼不可见但彻底消除共面。
+const BASE_CLEARANCE = 0.001
+const POST_CLEAR = 0.0015
+const PLINTH_CLEAR = 0.0025
+/** 勒脚内侧面比踢脚线外侧面再深 0.5mm，两者不与墙面、也不互相共面 */
+const PLINTH_INNER_CLEAR = 0.0015
 
 /**
  * 渲染沿局部 X 轴的一段墙。
- * - 'wall'：实体墙
- * - 'door'：门洞（左右墙段 + 入户门扇/门头标识；室内门保持空门洞）
- * - 'window'：窗洞（下窗台 + 半透明玻璃 + 上楣），永远渲染为开洞（坑 2 原则）
+ * - 'wall'：实体墙（外墙外侧面用饰面材质 + 按米平铺纹理，内面暖白抹灰；内侧踢脚线）
+ * - 'door'：门洞（左右墙段 + 室内侧门套 + 入户门扇/门头标识；室内门保持空门洞）
+ * - 'window'：窗洞（下窗台 + 半透明玻璃 + 实体窗框 + 上楣），永远渲染为开洞（坑 2 原则）
  */
 function WallSegmentBox({
   from,
@@ -68,54 +107,180 @@ function WallSegmentBox({
   kind,
   entrance,
   material,
+  exterior,
+  dir,
+  roomColor,
+  ghosted,
 }: WallSegmentBoxProps) {
   if (kind === 'open') return null
   const len = to - from
   const center = (from + to) / 2
+  // 外向法线在局部 +z（north/west 墙）或 -z（south/east 墙）；室内侧取反
+  const outwardIsPlusZ = dir === 'north' || dir === 'west'
+  const inward = outwardIsPlusZ ? -1 : 1
+
+  // 墙材质：内面/隔墙统一暖白抹灰；虚化时沿用灰化色
+  const wallMaterial = { ...material, color: ghosted ? material.color : WALL_INTERIOR_COLOR }
+  // 外墙面材质需跟随透明/虚化/线框状态（聚焦看内部时外墙不能反而实心）
+  const exteriorParams = {
+    ...materialParams(exteriorWallMaterial()),
+    transparent: material.transparent,
+    opacity: material.opacity,
+    depthWrite: material.depthWrite,
+    wireframe: material.wireframe,
+  }
+  // 六面材质：±x 端面、±y 顶底面均为抹灰；±z 面中外侧面用外墙饰面
+  const faceMats: Record<number, THREE.MeshStandardMaterialParameters> = {
+    0: wallMaterial,
+    1: wallMaterial,
+    2: wallMaterial,
+    3: wallMaterial,
+    4: wallMaterial,
+    5: wallMaterial,
+  }
+  const outwardIdx = outwardIsPlusZ ? 4 : 5
+  faceMats[outwardIdx] = exteriorParams
+  const exteriorGeo = exterior
+    ? boxWallGeometry(len, height, thickness, TEXTURE_TILE_METERS.plasterWall)
+    : null
+
+  const trim = {
+    transparent: material.transparent,
+    opacity: material.opacity,
+    depthWrite: material.depthWrite,
+    wireframe: material.wireframe,
+  }
+  const skirtingParams = materialParams(skirtingMaterial(roomColor))
+
   if (kind === 'wall') {
     return (
-      <mesh position={[center, height / 2, 0]}>
-        <boxGeometry args={[len, height, thickness]} />
-        <meshStandardMaterial {...material} />
-      </mesh>
+      <>
+        <mesh position={[center, height / 2, 0]} castShadow receiveShadow>
+          {exteriorGeo ? (
+            <primitive object={exteriorGeo} attach="geometry" />
+          ) : (
+            <boxGeometry args={[len, height, thickness]} />
+          )}
+          {exteriorGeo ? (
+            <>
+              {([0, 1, 2, 3, 4, 5] as const).map((i) => (
+                <meshStandardMaterial key={i} attach={`material-${i}`} {...faceMats[i]} />
+              ))}
+            </>
+          ) : (
+            <meshStandardMaterial {...wallMaterial} />
+          )}
+        </mesh>
+        {/* 基座勒脚：外墙底部深色压边，外凸墙面（门段留空）；
+            底面 +2.5mm、内侧面深 1.5mm——与墙底/踢脚线外侧面均不共面 */}
+        {exterior && (
+          <mesh
+            position={[
+              center,
+              PLINTH_H / 2 + PLINTH_CLEAR,
+              (outwardIsPlusZ ? 1 : -1) * (PLINTH_PROTRUDE / 2 + PLINTH_INNER_CLEAR / 2),
+            ]}
+            castShadow
+          >
+            <boxGeometry
+              args={[len, PLINTH_H, thickness + PLINTH_PROTRUDE - PLINTH_INNER_CLEAR]}
+            />
+            <meshStandardMaterial color={PLINTH_COLOR} roughness={0.9} {...trim} />
+          </mesh>
+        )}
+        {/* 踢脚线：贴墙内侧，色 = 房间识别色加深；
+            底面 +1mm、外侧面内收 1mm——不与墙底/墙面/勒脚共面 */}
+        <mesh
+          position={[
+            center,
+            SKIRTING_H / 2 + BASE_CLEARANCE,
+            inward * (thickness / 2 - 0.01 - BASE_CLEARANCE),
+          ]}
+          castShadow
+        >
+          <boxGeometry args={[len, SKIRTING_H, 0.02]} />
+          <meshStandardMaterial
+            {...skirtingParams}
+            color={ghosted ? '#a29a88' : skirtingParams.color}
+            {...trim}
+          />
+        </mesh>
+      </>
     )
   }
   if (kind === 'window') {
-    // 窗洞：窗台（实体）+ 半透明玻璃（内含镂空示意线框）+ 窗楣（实体）
+    // 窗洞：窗台（实体）+ 半透明玻璃（含实体窗框）+ 窗楣（实体）
     const sillH = Math.min(0.9, height)
     const paneH = Math.max(0, Math.min(1.2, height - sillH))
     const rest = Math.max(0, height - sillH - paneH)
+    const frameTh = 0.05
+    const frameW = 0.04
     return (
       <>
+        {/* 基座勒脚延续（窗台下）；底面 +2.5mm、内侧面深 1.5mm 不共面 */}
+        {exterior && (
+          <mesh
+            position={[
+              center,
+              PLINTH_H / 2 + PLINTH_CLEAR,
+              (outwardIsPlusZ ? 1 : -1) * (PLINTH_PROTRUDE / 2 + PLINTH_INNER_CLEAR / 2),
+            ]}
+            castShadow
+          >
+            <boxGeometry
+              args={[len, PLINTH_H, thickness + PLINTH_PROTRUDE - PLINTH_INNER_CLEAR]}
+            />
+            <meshStandardMaterial color={PLINTH_COLOR} roughness={0.9} {...trim} />
+          </mesh>
+        )}
         {sillH > 0 && (
-          <mesh position={[center, sillH / 2, 0]}>
+          <mesh position={[center, sillH / 2, 0]} castShadow>
             <boxGeometry args={[len, sillH, thickness]} />
-            <meshStandardMaterial {...material} />
+            <meshStandardMaterial {...wallMaterial} />
           </mesh>
         )}
         {paneH > 0 && (
           <>
             <mesh position={[center, sillH + paneH / 2, 0]}>
               <boxGeometry args={[len, paneH, 0.04]} />
-              <meshStandardMaterial color="#8fd0ff" transparent opacity={0.45} depthWrite={false} />
-            </mesh>
-            {/* 窗框示意（网格线框，与玻璃不同面避免共面闪烁） */}
-            <mesh position={[center, sillH + paneH / 2, 0]}>
-              <boxGeometry args={[len, paneH, thickness]} />
               <meshStandardMaterial
-                color="#2f3542"
-                wireframe
+                color="#3a4a55"
+                metalness={0.85}
+                roughness={0.12}
                 transparent
-                opacity={0.3}
+                opacity={0.8}
                 depthWrite={false}
               />
             </mesh>
+            {/* 实体窗框：上下轨 + 左右立柱 + 大窗中梃（木色） */}
+            <mesh position={[center, sillH + frameW / 2, 0]}>
+              <boxGeometry args={[len, frameW, frameTh]} />
+              <meshStandardMaterial color={TRIM_COLOR} roughness={0.6} {...trim} />
+            </mesh>
+            <mesh position={[center, sillH + paneH - frameW / 2, 0]}>
+              <boxGeometry args={[len, frameW, frameTh]} />
+              <meshStandardMaterial color={TRIM_COLOR} roughness={0.6} {...trim} />
+            </mesh>
+            <mesh position={[from + frameW / 2, sillH + paneH / 2, 0]}>
+              <boxGeometry args={[frameW, paneH, frameTh]} />
+              <meshStandardMaterial color={TRIM_COLOR} roughness={0.6} {...trim} />
+            </mesh>
+            <mesh position={[to - frameW / 2, sillH + paneH / 2, 0]}>
+              <boxGeometry args={[frameW, paneH, frameTh]} />
+              <meshStandardMaterial color={TRIM_COLOR} roughness={0.6} {...trim} />
+            </mesh>
+            {len >= 1.6 && (
+              <mesh position={[center, sillH + paneH / 2, 0]}>
+                <boxGeometry args={[frameW, paneH, frameTh]} />
+                <meshStandardMaterial color={TRIM_COLOR} roughness={0.6} {...trim} />
+              </mesh>
+            )}
           </>
         )}
         {rest > 0 && (
-          <mesh position={[center, sillH + paneH + rest / 2, 0]}>
+          <mesh position={[center, sillH + paneH + rest / 2, 0]} castShadow>
             <boxGeometry args={[len, rest, thickness]} />
-            <meshStandardMaterial {...material} />
+            <meshStandardMaterial {...wallMaterial} />
           </mesh>
         )}
       </>
@@ -125,32 +290,71 @@ function WallSegmentBox({
   const doorW = Math.min(DOOR_WIDTH, len)
   const sideLen = (len - doorW) / 2
   const leafH = Math.min(height, 2.1)
+  // 门套：室内侧两立柱（去掉上横梁——门洞上沿不再有横杠）。
+  // 立柱外侧面内收 1.5mm（比踢脚线 1mm 再深 0.5mm）、底面 +1.5mm——不与墙面/踢脚线共面。
+  const casingZ = inward * (thickness / 2 - 0.025 - POST_CLEAR)
+  const casing = (
+    <>
+      <mesh position={[from + 0.03, leafH / 2 + POST_CLEAR, casingZ]} castShadow>
+        <boxGeometry args={[0.06, leafH, 0.05]} />
+        <meshStandardMaterial color={TRIM_COLOR} roughness={0.6} {...trim} />
+      </mesh>
+      <mesh position={[to - 0.03, leafH / 2 + POST_CLEAR, casingZ]} castShadow>
+        <boxGeometry args={[0.06, leafH, 0.05]} />
+        <meshStandardMaterial color={TRIM_COLOR} roughness={0.6} {...trim} />
+      </mesh>
+    </>
+  )
   return (
     <>
       {sideLen > 0 && (
         <>
-          <mesh position={[from + sideLen / 2, height / 2, 0]}>
+          <mesh position={[from + sideLen / 2, height / 2, 0]} castShadow receiveShadow>
             <boxGeometry args={[sideLen, height, thickness]} />
-            <meshStandardMaterial {...material} />
+            <meshStandardMaterial {...wallMaterial} />
           </mesh>
-          <mesh position={[to - sideLen / 2, height / 2, 0]}>
+          <mesh position={[to - sideLen / 2, height / 2, 0]} castShadow receiveShadow>
             <boxGeometry args={[sideLen, height, thickness]} />
-            <meshStandardMaterial {...material} />
+            <meshStandardMaterial {...wallMaterial} />
+          </mesh>
+          {/* 门洞两侧墙段也带踢脚线（贴室内侧）；底面 +1mm、外侧面内收 1mm 不共面 */}
+          <mesh
+            position={[
+              from + sideLen / 2,
+              SKIRTING_H / 2 + BASE_CLEARANCE,
+              inward * (thickness / 2 - 0.01 - BASE_CLEARANCE),
+            ]}
+          >
+            <boxGeometry args={[sideLen, SKIRTING_H, 0.02]} />
+            <meshStandardMaterial
+              {...skirtingParams}
+              color={ghosted ? '#a29a88' : skirtingParams.color}
+              {...trim}
+            />
+          </mesh>
+          <mesh
+            position={[
+              to - sideLen / 2,
+              SKIRTING_H / 2 + BASE_CLEARANCE,
+              inward * (thickness / 2 - 0.01 - BASE_CLEARANCE),
+            ]}
+          >
+            <boxGeometry args={[sideLen, SKIRTING_H, 0.02]} />
+            <meshStandardMaterial
+              {...skirtingParams}
+              color={ghosted ? '#a29a88' : skirtingParams.color}
+              {...trim}
+            />
           </mesh>
         </>
       )}
-      {/* 入户门：实心暖色门扇 + 门头亮黄标识（在墙内，不悬浮） */}
+      {casing}
+      {/* 入户门：实心暖色门扇（门头不再放标识牌） */}
       {entrance && (
-        <>
-          <mesh position={[center, leafH / 2, 0]}>
-            <boxGeometry args={[doorW, leafH, 0.12]} />
-            <meshStandardMaterial color={ENTRANCE_DOOR_COLOR} />
-          </mesh>
-          <mesh position={[center, leafH + 0.18, 0]}>
-            <boxGeometry args={[doorW + 0.3, 0.16, 0.22]} />
-            <meshStandardMaterial color={ENTRANCE_MARKER_COLOR} />
-          </mesh>
-        </>
+        <mesh position={[center, leafH / 2, 0]} castShadow>
+          <boxGeometry args={[doorW, leafH, 0.12]} />
+          <meshStandardMaterial color={ENTRANCE_DOOR_COLOR} roughness={0.45} />
+        </mesh>
       )}
     </>
   )
@@ -191,6 +395,14 @@ interface RoomShellProps {
   nested?: boolean
   /** 截图净化：隐藏选中轮廓等辅助元素 */
   screenshotMode?: boolean
+  /** 房间识别色（踢脚线/地板 tint 用） */
+  roomColor: string
+  /** 兄弟容器索引（地板材质按房间类型+索引取识别色 tint） */
+  siblingIndex: number
+  /** 是否虚化（聚焦其他房间时地板/踢脚线换灰） */
+  ghosted: boolean
+  /** 视觉模式（标准/色盲） */
+  colorMode: ColorMode
 }
 
 /** 房间外壳：足迹实体地板（外扩覆盖墙脚）+ 沿足迹边分段实心墙（门洞/窗洞留空） */
@@ -201,6 +413,10 @@ function RoomShell({
   plan,
   nested = false,
   screenshotMode = false,
+  roomColor,
+  siblingIndex,
+  ghosted,
+  colorMode,
 }: RoomShellProps) {
   const H = room.height
   const bounds = footprintBounds(room.footprint)
@@ -209,17 +425,21 @@ function RoomShell({
   const cx = (bounds.minX + bounds.maxX) / 2
   const cz = (bounds.minZ + bounds.maxZ) / 2
   const baseY = 0
-  const wallBaseY = baseY + FLOOR_THICKNESS
+  // 墙底沉入地板顶面 2mm：墙底/勒脚/踢脚线底面不与地板顶面共面，消除连接处闪烁
+  const wallBaseY = baseY + FLOOR_TOP_Y
   const floorLift = nested ? 0.012 : 0
 
   // 地板形状：Shape 位于 XY 平面，经 -90° X 旋转铺平到 XZ（shape 坐标 y = -世界 z）
   const floorShape = new THREE.Shape(
     floorPolygon(room, plan).map((p) => new THREE.Vector2(p.x, -p.z)),
   )
+  // 地板材质：按房间类型匹配 木纹/瓷砖/混凝土，乘房间识别色淡化 tint
+  const floor = roomFloorMaterial(room.name, colorMode, siblingIndex)
 
   const wall = (edge: (typeof plan.edges)[number], idx: number) => {
     const isX = edge.axis === 'x'
     const pos = wallGroupPosition(edge, wallBaseY)
+    const exterior = !edge.shared
     return (
       <group key={idx} position={pos} rotation={isX ? [0, 0, 0] : [0, -Math.PI / 2, 0]}>
         {edge.segments.map((seg, i) => (
@@ -232,6 +452,10 @@ function RoomShell({
             kind={seg.kind}
             entrance={seg.entrance}
             material={material}
+            exterior={exterior}
+            dir={edge.dir}
+            roomColor={roomColor}
+            ghosted={ghosted}
           />
         ))}
       </group>
@@ -241,9 +465,18 @@ function RoomShell({
   return (
     <>
       {/* 足迹实体地板（嵌套子房间的地板略微抬高，避免与父地板重叠闪烁） */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, baseY + floorLift, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, baseY + floorLift, 0]} receiveShadow>
         <extrudeGeometry args={[floorShape, { depth: FLOOR_THICKNESS, bevelEnabled: false }]} />
-        <meshStandardMaterial {...material} side={THREE.DoubleSide} />
+        <meshStandardMaterial
+          map={getWorldUvTexture(floor.map!)}
+          color={ghosted ? '#cfc8b8' : floor.color}
+          roughness={floor.roughness}
+          side={THREE.DoubleSide}
+          transparent={material.transparent}
+          opacity={material.opacity}
+          depthWrite={material.depthWrite}
+          wireframe={material.wireframe}
+        />
       </mesh>
 
       {/* 沿足迹边渲染墙段：轴 'x' 平放、轴 'z' -90° 旋转，局部方向与墙段坐标统一（避免镜像） */}
@@ -396,6 +629,10 @@ export function ModelNodeView({
           plan={plan}
           nested={isNestedRoom}
           screenshotMode={screenshotMode}
+          roomColor={baseColor}
+          siblingIndex={siblingIndex}
+          ghosted={ghosted}
+          colorMode={colorMode}
         />
         {node.furniture.map((child) => (
           <ModelNodeView
@@ -427,7 +664,6 @@ export function ModelNodeView({
   // 朝向由家具在父房间内贴靠（或最近）的墙决定——床头板朝墙、柜门朝房间内
   // 平面图模式：3D 家具网格不渲染（由 PlanEnhancements 以 2D 足迹呈现）
   if (planMode) return null
-  const fill = colorMode === 'colorblind' ? FURNITURE_COLORBLIND : FURNITURE_COLOR
   const kind = furnitureKind(node.name)
   const facing = parentRoom
     ? facingFromRoom(
@@ -460,7 +696,7 @@ export function ModelNodeView({
     <group
       position={[
         furnitureNode.position.x,
-        furnitureNode.position.y + FLOOR_THICKNESS,
+        furnitureNode.position.y + FLOOR_TOP_Y,
         furnitureNode.position.z,
       ]}
       onClick={(e) => {
@@ -469,27 +705,27 @@ export function ModelNodeView({
         handleClick()
       }}
     >
-      {parts.map((part, i) => (
-        <mesh key={i} position={part.center}>
-          {part.shape === 'cylinder' ? (
-            <cylinderGeometry args={[part.size[0], part.size[0], part.size[1], 24]} />
-          ) : (
-            <boxGeometry args={part.size} />
-          )}
-          <meshStandardMaterial
-            color={
-              part.shade === 'dark'
-                ? FURNITURE_PART_INK
-                : part.shade === 'secondary'
-                  ? FURNITURE_PART_DARK
-                  : fill
-            }
-            transparent={ghosted}
-            opacity={ghosted ? 0.2 : 1}
-            wireframe={wireframeEnabled}
-          />
-        </mesh>
-      ))}
+      {parts.map((part, i) => {
+        const mat = furnitureMaterial(kind, part.shade, colorMode)
+        return (
+          <mesh key={i} position={part.center} castShadow>
+            {part.shape === 'cylinder' ? (
+              <cylinderGeometry args={[part.size[0], part.size[0], part.size[1], 24]} />
+            ) : (
+              <boxGeometry args={part.size} />
+            )}
+            <meshStandardMaterial
+              map={mat.map ? getTexture(mat.map) : undefined}
+              color={mat.color}
+              roughness={mat.roughness}
+              metalness={mat.metalness}
+              transparent={ghosted}
+              opacity={ghosted ? 0.2 : 1}
+              wireframe={wireframeEnabled}
+            />
+          </mesh>
+        )
+      })}
       {/* 并集包围盒轮廓（不参与射线检测：否则会挡在部件上，使部件点不到） */}
       {showOutline && (
         <mesh position={outlineCenter} raycast={() => null}>

@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import { nodeDims, nodePosition } from '../../lib/footprint'
 import { getSelectedNode, useModelStore } from '../../store/useModelStore'
 import type { Dimensions, ModelNode, SceneModel } from '../../types/model'
-import { FLOOR_THICKNESS } from './ModelNodeView'
+import { FLOOR_TOP_Y } from './ModelNodeView'
 
 /** 是否为可 Gizmo 编辑的实体（家具）：代理 y 需折算地板厚度；房间直接用其自身中心 */
 function isFurnitureLike(n: ModelNode): boolean {
@@ -55,7 +55,7 @@ export function GizmoControls({ planMode = false }: GizmoControlsProps) {
     if (!g || !selected) return
     const isMesh = isFurnitureLike(selected)
     const pos = nodePosition(selected)
-    g.position.set(-pos.x, pos.y + (isMesh ? FLOOR_THICKNESS : 0), pos.z)
+    g.position.set(-pos.x, pos.y + (isMesh ? FLOOR_TOP_Y : 0), pos.z)
     g.scale.set(1, 1, 1)
   }, [selectedId, gizmoMode, selected])
 
@@ -80,7 +80,7 @@ export function GizmoControls({ planMode = false }: GizmoControlsProps) {
       previewSelected({
         position: {
           x: -g.position.x,
-          y: g.position.y - (base.isMesh ? FLOOR_THICKNESS : 0),
+          y: g.position.y - (base.isMesh ? FLOOR_TOP_Y : 0),
           z: g.position.z,
         },
       })

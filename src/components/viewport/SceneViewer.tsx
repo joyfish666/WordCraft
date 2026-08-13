@@ -1,12 +1,15 @@
-import { OrbitControls, OrthographicCamera } from '@react-three/drei'
+import { OrbitControls, OrthographicCamera, Sky } from '@react-three/drei'
 import { Canvas, useThree } from '@react-three/fiber'
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react'
 import type { MutableRefObject } from 'react'
-import { PerspectiveCamera, Vector3 } from 'three'
+import { ACESFilmicToneMapping, PMREMGenerator, PerspectiveCamera, Vector3 } from 'three'
 import type * as THREE from 'three'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import type { OrthographicCamera as OrthographicCameraImpl } from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
+import { houseLevelsBounds } from '../../lib/footprint'
 import { useModelStore } from '../../store/useModelStore'
+import { useSettingsStore } from '../../store/useSettingsStore'
 import { CornerCompassRose, CornerCompassSensor, WorldCompass } from './Compass'
 import { GizmoControls } from './GizmoControls'
 import { PlanAnnotations } from './PlanAnnotations'
@@ -21,6 +24,27 @@ function ScreenshotBridge({ glRef }: { glRef: MutableRefObject<THREE.WebGLRender
   useEffect(() => {
     glRef.current = gl
   }, [gl, glRef])
+  return null
+}
+
+/**
+ * 环境反射桥接：PMREMGenerator + RoomEnvironment（three 自带，零外部资源）
+ * 写入 scene.environment，玻璃/金属材质获得可反射的内容。
+ */
+function EnvironmentBridge() {
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  useEffect(() => {
+    const pmrem = new PMREMGenerator(gl)
+    const env = pmrem.fromScene(new RoomEnvironment(), 0.04)
+    scene.environment = env.texture
+    scene.environmentIntensity = 0.4
+    return () => {
+      scene.environment = null
+      env.dispose()
+      pmrem.dispose()
+    }
+  }, [gl, scene])
   return null
 }
 
@@ -57,6 +81,16 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
   const compassRef = useRef<HTMLDivElement>(null)
   const glRef = useRef<THREE.WebGLRenderer | null>(null)
   const planGroupRef = useRef<THREE.Group>(null)
+  const shadows = useSettingsStore((s) => s.shadows)
+  const sceneModel = useModelStore((s) => s.scene)
+
+  // 阴影贴图边界随房屋尺寸动态伸缩（过大浪费精度、过小截断阴影）
+  const shadowBounds = useMemo(() => {
+    const b = sceneModel ? houseLevelsBounds(sceneModel.root) : null
+    if (!b) return { left: -18, right: 18, top: 18, bottom: -18 }
+    const half = Math.max(b.maxX - b.minX, b.maxZ - b.minZ) / 2 + 4
+    return { left: -half, right: half, top: half, bottom: -half }
+  }, [sceneModel])
 
   useImperativeHandle(ref, () => ({
     resetView: () => controlsRef.current?.reset(),
@@ -129,10 +163,18 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
         // 初始视角：房屋正南侧斜向下，完整看到南立面（含入户门）。
         // 世界 +x=东、+z=北 为左手系（坑 26），内容组整体沿 X 镜像后，
         // 从南侧朝北看呈现「上北下南、左西右东」——与平面图（标准地图）一致。
-        camera={{ position: [0, 9, -10], fov: 50 }}
+        camera={{ position: [0, 9, -10], fov: 50, far: 10000 }}
         dpr={[1, 2]}
-        // preserveDrawingBuffer：截图 toDataURL 需要读取绘制缓冲（antialias 默认已开）
-        gl={{ preserveDrawingBuffer: true, antialias: true }}
+        // preserveDrawingBuffer：截图 toDataURL 需要读取绘制缓冲（antialias 默认已开）；
+        // ACES 色调映射压住总光（ambient+hemi+dir ≈ 2.1），避免高光过曝；
+        // shadows='soft'：PCFSoftShadowMap（设置开关关断时连 shadowMap 一起禁用）
+        gl={{
+          preserveDrawingBuffer: true,
+          antialias: true,
+          toneMapping: ACESFilmicToneMapping,
+          toneMappingExposure: 1.05,
+        }}
+        shadows={shadows ? 'soft' : false}
         onPointerMissed={() => {
           useModelStore.getState().selectNode(null)
           useModelStore.getState().setFocus(null)
@@ -148,9 +190,41 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
             up={[0, 0, 1]}
           />
         )}
-        <ambientLight intensity={0.7} />
-        <directionalLight position={[6, 10, 6]} intensity={0.9} />
+        {/* 程序化天空 + 地平线雾：雾色取天际线暖白，地面边缘融进地平线（平面图模式保持纯净） */}
+        {!planMode && (
+          <>
+            <Sky
+              ref={(sky: (THREE.Mesh & { material: THREE.ShaderMaterial }) | null) => {
+                if (sky?.material) sky.material.fog = false
+              }}
+              distance={3000}
+              sunPosition={[6, 10, 6]}
+              turbidity={5}
+              rayleigh={1.8}
+              mieCoefficient={0.003}
+              mieDirectionalG={0.75}
+            />
+            <fog attach="fog" args={['#e8e3d4', 30, 120]} />
+          </>
+        )}
+        <ambientLight intensity={0.35} />
+        <hemisphereLight intensity={0.35} color="#f2f6ff" groundColor="#8d8570" />
+        {/* 主光 + 实时阴影（设置可关；关闭时仅省阴影贴图开销） */}
+        <directionalLight
+          position={[6, 10, 6]}
+          intensity={1.4}
+          castShadow={shadows}
+          shadow-mapSize={[2048, 2048]}
+          shadow-camera-left={shadowBounds.left}
+          shadow-camera-right={shadowBounds.right}
+          shadow-camera-top={shadowBounds.top}
+          shadow-camera-bottom={shadowBounds.bottom}
+          shadow-camera-near={1}
+          shadow-camera-far={60}
+          shadow-bias={-0.0004}
+        />
         <ScreenshotBridge glRef={glRef} />
+        <EnvironmentBridge />
         {/* 世界坐标 +x=东、+z=北 是左手系（坑 26），内容整体沿 X 镜像：
             3D 与 2D 平面图一致呈现「上北下南、左西右东」（标准地图方向）——
             南视角正对入户门时东在右侧、北在远处上方。P4 编辑层在镜像组内渲染：

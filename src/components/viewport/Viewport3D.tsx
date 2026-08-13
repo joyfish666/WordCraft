@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { computeAllWallPlansCached, type WallPlan } from '../../lib/roomGeometry'
 import { useModelStore } from '../../store/useModelStore'
 import type { SceneModel } from '../../types/model'
+import { GroundView } from './GroundView'
 import { ModelNodeView } from './ModelNodeView'
 
 /** 入口方向（默认南侧/地图下方）；入户门开在入口房间该方向的外墙（setHouse.entranceDir 可改） */
@@ -26,10 +27,13 @@ export function Viewport3D({ planMode = false }: { planMode?: boolean }) {
 
   return (
     <>
-      <color attach="background" args={['#d6cfbf']} />
-      {!screenshotMode && <gridHelper args={[20, 20, '#a9a290', '#c8c1ac']} />}
+      {/* 平面图模式平色背景；3D 视图由 Sky + 雾构成天空（SceneViewer） */}
+      {planMode && <color attach="background" args={['#d6cfbf']} />}
+      {/* 网格放地面平面下方（地面存在时被覆盖；空场景时仍可见） */}
+      {!screenshotMode && <gridHelper position={[0, -0.03, 0]} args={[20, 20, '#a9a290', '#c8c1ac']} />}
       {!screenshotMode && <axesHelper args={[5]} />}
       {scene && <ModelNodeView node={scene.root} wallPlan={wallPlan} planMode={planMode} />}
+      {scene && <GroundView planMode={planMode} wallPlan={wallPlan} />}
     </>
   )
 }
