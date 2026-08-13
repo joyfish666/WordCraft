@@ -5,7 +5,7 @@ describe('createSampleModel（示例模型）', () => {
   it('走布局引擎生成：整屋可迁移校验通过，房间与家具齐全', () => {
     const model = createSampleModel()
     expect(model.version).toBe(3)
-    const rooms = model.root.levels[0].rooms
+    const rooms = model.root.levels[0]!.rooms
     // 6 个房间 + 1 条走廊（走廊也作为房间节点参与布局）
     expect(rooms.length).toBe(7)
     expect(rooms.some((r) => r.id === 'room-living')).toBe(true)

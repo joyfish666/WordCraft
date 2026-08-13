@@ -47,8 +47,8 @@ export function pointInFootprint(fp: Point2D[], x: number, z: number): boolean {
   let inside = false
   const n = fp.length
   for (let i = 0, j = n - 1; i < n; j = i++) {
-    const a = fp[i]
-    const b = fp[j]
+    const a = fp[i]!
+    const b = fp[j]!
     if (a.z > z !== b.z > z && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) {
       inside = !inside
     }
@@ -118,8 +118,8 @@ export function footprintValid(fp: Point2D[], opts?: { minEdge?: number }): bool
   const n = fp.length
   if (n < 4) return false
   for (let i = 0; i < n; i++) {
-    const a = fp[i]
-    const b = fp[(i + 1) % n]
+    const a = fp[i]!
+    const b = fp[(i + 1) % n]!
     const h = Math.abs(a.z - b.z) < EPS
     const v = Math.abs(a.x - b.x) < EPS
     if (!h && !v) return false
@@ -131,7 +131,7 @@ export function footprintValid(fp: Point2D[], opts?: { minEdge?: number }): bool
     for (let k = i + 2; k < n; k++) {
       const l = (k + 1) % n
       if (j === k || i === l) continue // 相邻边共享顶点，跳过
-      if (segmentsIntersect(fp[i], fp[j], fp[k], fp[l])) return false
+      if (segmentsIntersect(fp[i]!, fp[j]!, fp[k]!, fp[l]!)) return false
     }
   }
   return true
@@ -147,9 +147,9 @@ export function dragVertexFootprint(fp: Point2D[], i: number, target: Point2D): 
   const n = fp.length
   if (n < 4) return null
   const idx = ((i % n) + n) % n
-  const p = fp[idx]
-  const prev = fp[(idx - 1 + n) % n]
-  const next = fp[(idx + 1) % n]
+  const p = fp[idx]!
+  const prev = fp[(idx - 1 + n) % n]!
+  const next = fp[(idx + 1) % n]!
   const t = snapPoint(target)
   const out = fp.map((pt) => ({ ...pt }))
   const prevEdgeH = Math.abs(prev.z - p.z) < EPS // 边 idx-1 水平
@@ -179,7 +179,7 @@ export function nearestFootprintVertex(
   let best = -1
   let bestD = maxDist
   for (let i = 0; i < fp.length; i++) {
-    const d = Math.hypot(fp[i].x - x, fp[i].z - z)
+    const d = Math.hypot(fp[i]!.x - x, fp[i]!.z - z)
     if (d <= bestD) {
       bestD = d
       best = i
@@ -214,8 +214,8 @@ export function snapRoomTranslation(
     const x: Edge[] = []
     const z: Edge[] = []
     for (let i = 0; i < f.length; i++) {
-      const p = f[i]
-      const q = f[(i + 1) % f.length]
+      const p = f[i]!
+      const q = f[(i + 1) % f.length]!
       if (Math.abs(p.z - q.z) < EPS) {
         x.push({ line: p.z, a: Math.min(p.x, q.x), b: Math.max(p.x, q.x) })
       } else {
@@ -259,8 +259,8 @@ export function snapRoomTranslation(
 function edgeDirOf(fp: Point2D[], i: number): Dir | null {
   const n = fp.length
   const idx = ((i % n) + n) % n
-  const a = fp[idx]
-  const b = fp[(idx + 1) % n]
+  const a = fp[idx]!
+  const b = fp[(idx + 1) % n]!
   const h = Math.abs(a.z - b.z) < EPS
   const v = Math.abs(a.x - b.x) < EPS
   if (!h && !v) return null
@@ -568,8 +568,8 @@ function ringIndexOf(
   e: { axis: 'x' | 'z'; line: number; start: number; length: number },
 ): number {
   for (let i = 0; i < fp.length; i++) {
-    const a = fp[i]
-    const b = fp[(i + 1) % fp.length]
+    const a = fp[i]!
+    const b = fp[(i + 1) % fp.length]!
     let axis: 'x' | 'z'
     let line: number
     let start: number

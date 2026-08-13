@@ -390,8 +390,8 @@ function floorPolygon(room: RoomNode, plan: WallPlan): { x: number; z: number }[
   })
   const pts: { x: number; z: number }[] = []
   for (let i = 0; i < n; i++) {
-    const prev = offset[(i - 1 + n) % n]
-    const cur = offset[i]
+    const prev = offset[(i - 1 + n) % n]!
+    const cur = offset[i]!
     if (prev.axis === cur.axis) continue // 退化（共线边）跳过
     pts.push({
       x: prev.axis === 'z' ? prev.line : cur.line,

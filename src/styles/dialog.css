@@ -42,4 +42,13 @@
 .dialog__actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 确认/提示对话框（ConfirmDialog）：说明文案换行，与按钮间留距 */
+.dialog__message {
+  margin: 0 0 16px;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.6;
 }

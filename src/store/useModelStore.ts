@@ -5,6 +5,7 @@ import { editDiffToOps } from '../lib/editOps'
 import { executeOps } from '../lib/executor'
 import { nodePosition } from '../lib/footprint'
 import { migrateModel } from '../lib/migration'
+import { safeLocalStorage } from '../lib/safeStorage'
 import {
   findNodeById,
   normalizeContainment,
@@ -29,11 +30,11 @@ import { syncDirtyWithSaved } from './useProjectStore'
  */
 const persistEnabled = { current: true }
 const previewAwareStorage: StateStorage = {
-  getItem: (name) => localStorage.getItem(name),
+  getItem: (name) => safeLocalStorage.getItem(name),
   setItem: (name, value) => {
-    if (persistEnabled.current) localStorage.setItem(name, value)
+    if (persistEnabled.current) safeLocalStorage.setItem(name, value)
   },
-  removeItem: (name) => localStorage.removeItem(name),
+  removeItem: (name) => safeLocalStorage.removeItem(name),
 }
 /** 预览期间调用：set 更新场景但不触发 localStorage 写入；支持嵌套调用（配对使用） */
 function withoutPersist(fn: () => void): void {
@@ -292,7 +293,7 @@ export const useModelStore = create<ModelState>()(
       undo: () =>
         set((state) => {
           if (state.past.length === 0) return state
-          const previous = state.past[state.past.length - 1]
+          const previous = state.past[state.past.length - 1]!
           const future = state.scene
             ? [...state.future, state.scene].slice(-HISTORY_LIMIT)
             : state.future
@@ -304,7 +305,7 @@ export const useModelStore = create<ModelState>()(
       redo: () =>
         set((state) => {
           if (state.future.length === 0) return state
-          const next = state.future[state.future.length - 1]
+          const next = state.future[state.future.length - 1]!
           const past = state.scene ? [...state.past, state.scene].slice(-HISTORY_LIMIT) : state.past
           syncDirtyWithSaved(next)
           return { scene: next, past, future: state.future.slice(0, -1) }

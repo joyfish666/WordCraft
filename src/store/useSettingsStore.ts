@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import { createId } from '../lib/id'
+import { safeLocalStorage } from '../lib/safeStorage'
 import type { ApiKeyEntry, AppSettings, ColorMode, Language, ThinkingMode } from '../types/settings'
 
 interface SettingsState extends AppSettings {
@@ -75,6 +76,8 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: STORAGE_KEY,
+      // 写入失败（配额/隐私模式）降级为静默跳过，不打断编辑（safeStorage.ts）
+      storage: createJSONStorage(() => safeLocalStorage),
       version: 5,
       // v2 起默认关闭线框；v3 起新增语言字段（旧数据缺省为中文）；
       // v4 起新增屋顶/阴影开关；v5 起移除屋顶渲染（一层户型被檐口遮挡内部），

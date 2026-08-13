@@ -190,8 +190,8 @@ describe('applyFurnitureConventions', () => {
     // 两两不重叠（容差 1e-6，贴边允许）
     for (let i = 0; i < furnitureList.length; i++) {
       for (let j = i + 1; j < furnitureList.length; j++) {
-        const a = furnitureList[i]
-        const b = furnitureList[j]
+        const a = furnitureList[i]!
+        const b = furnitureList[j]!
         const noOverlap =
           a.position.x + a.dimensions.length / 2 <= b.position.x - b.dimensions.length / 2 + 1e-6 ||
           a.position.x - a.dimensions.length / 2 >= b.position.x + b.dimensions.length / 2 - 1e-6 ||

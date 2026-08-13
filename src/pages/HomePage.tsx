@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { ChatDrawer, type ChatDrawerHandle } from '../components/ui/ChatDrawer'
+import { useConfirm } from '../components/ui/useConfirm'
 import { DebugPanel } from '../components/ui/DebugPanel'
 import { EmptyStateCard } from '../components/ui/EmptyStateCard'
 import { HelpDialog } from '../components/ui/HelpDialog'
@@ -76,6 +77,7 @@ export function HomePage() {
   const chatRef = useRef<ChatDrawerHandle>(null)
 
   const t = useT()
+  const { confirm, alertMessage } = useConfirm()
   const projectDirty = useProjectStore((s) => s.dirty)
 
   // 项目库脏标记（坑 B7）：场景变化订阅只在「干净 → 变化」时做一次快照比对，
@@ -110,13 +112,21 @@ export function HomePage() {
   }
 
   /** 丢弃当前场景前的未保存守卫。includeOrphan：是否也警告未入库的游离新场景 */
-  const confirmDiscardUnsaved = (includeOrphan: boolean): boolean => {
+  const confirmDiscardUnsaved = async (includeOrphan: boolean): Promise<boolean> => {
     const { currentId, dirty } = useProjectStore.getState()
     if (currentId !== null && dirty) {
-      return window.confirm(t('home.confirmDiscardProject'))
+      return confirm({
+        title: t('home.discardTitle'),
+        message: t('home.confirmDiscardProject'),
+        danger: true,
+      })
     }
     if (includeOrphan && currentId === null && useModelStore.getState().scene !== null) {
-      return window.confirm(t('home.confirmDiscardScene'))
+      return confirm({
+        title: t('home.discardTitle'),
+        message: t('home.confirmDiscardScene'),
+        danger: true,
+      })
     }
     return true
   }
@@ -135,20 +145,20 @@ export function HomePage() {
   }
 
   const handleOpenProject = async (id: number, name: string) => {
-    if (!confirmDiscardUnsaved(true)) return
+    if (!(await confirmDiscardUnsaved(true))) return
     const rec = await getProject(id)
     if (!rec) return
     let parsed: unknown
     try {
       parsed = JSON.parse(rec.data)
     } catch {
-      window.alert(t('home.alertCorrupt'))
+      await alertMessage({ title: t('home.openFailedTitle'), message: t('home.alertCorrupt') })
       return
     }
     // 读取时迁移：旧项目（v1 盒子模型）自动升为 v3 足迹模型（design.md §3.4）
     const model = migrateModel(parsed)
     if (!model) {
-      window.alert(t('home.alertInvalid'))
+      await alertMessage({ title: t('home.openFailedTitle'), message: t('home.alertInvalid') })
       return
     }
     setScene(model)
@@ -184,7 +194,10 @@ export function HomePage() {
   const handleScreenshot = async () => {
     const shot = await viewportRef.current?.captureScreenshot?.()
     if (!shot) {
-      window.alert(t('home.screenshotFailed'))
+      await alertMessage({
+        title: t('home.screenshotFailedTitle'),
+        message: t('home.screenshotFailed'),
+      })
       return
     }
     const a = document.createElement('a')
@@ -194,8 +207,8 @@ export function HomePage() {
   }
 
   /** 从分享口令还原模型：未保存守卫 → setScene，成为游离场景（不属于任何项目） */
-  const restoreFromShare = (model: SceneModel) => {
-    if (!confirmDiscardUnsaved(true)) return
+  const restoreFromShare = async (model: SceneModel) => {
+    if (!(await confirmDiscardUnsaved(true))) return
     setScene(model)
     useProjectStore.getState().clearProject()
     useChatStore.getState().clearGenerationHistory()
@@ -209,8 +222,8 @@ export function HomePage() {
   }
 
   /** 加载示例模型（顶栏按钮与空态卡共用）：未保存守卫 → 解绑项目 → setScene */
-  const loadSample = () => {
-    if (!confirmDiscardUnsaved(true)) return
+  const loadSample = async () => {
+    if (!(await confirmDiscardUnsaved(true))) return
     useProjectStore.getState().clearProject()
     useChatStore.getState().clearGenerationHistory()
     setScene(createSampleModel())
@@ -228,12 +241,14 @@ export function HomePage() {
         saveTitle={projectDirty ? t('home.saveTitleDirty') : t('home.saveTitle')}
         chatCollapsed={chatCollapsed}
         hasApiKey={hasApiKey}
-        onLoadSample={loadSample}
+        onLoadSample={() => void loadSample()}
         onClearScene={() => {
-          if (!confirmDiscardUnsaved(false)) return
-          useProjectStore.getState().clearProject()
-          useChatStore.getState().clearGenerationHistory()
-          resetScene()
+          void (async () => {
+            if (!(await confirmDiscardUnsaved(false))) return
+            useProjectStore.getState().clearProject()
+            useChatStore.getState().clearGenerationHistory()
+            resetScene()
+          })()
         }}
         onUndo={undo}
         onRedo={redo}
@@ -284,7 +299,7 @@ export function HomePage() {
             <EmptyStateCard
               hasApiKey={hasApiKey}
               onExample={applyExample}
-              onLoadSample={loadSample}
+              onLoadSample={() => void loadSample()}
             />
           )}
           {selected && <PropertyPanel node={selected} />}

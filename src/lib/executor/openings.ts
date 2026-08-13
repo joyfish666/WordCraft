@@ -16,8 +16,8 @@ function findEdgeBySide(room: RoomNode, dir: Dir): { edgeIndex: number; length: 
   const EPS = 1e-6
   let best: { edgeIndex: number; length: number } | null = null
   for (let i = 0; i < n; i++) {
-    const a = fp[i]
-    const b = fp[(i + 1) % n]
+    const a = fp[i]!
+    const b = fp[(i + 1) % n]!
     const horizontal = Math.abs(a.z - b.z) < EPS
     const length = horizontal ? Math.abs(b.x - a.x) : Math.abs(b.z - a.z)
     if (length < EPS) continue
@@ -41,8 +41,8 @@ function edgeByIndex(room: RoomNode, index: number): { edgeIndex: number; length
   const n = fp.length
   if (n === 0) return null
   const idx = ((index % n) + n) % n
-  const a = fp[idx]
-  const b = fp[(idx + 1) % n]
+  const a = fp[idx]!
+  const b = fp[(idx + 1) % n]!
   if (Math.abs(a.z - b.z) < 1e-6) return { edgeIndex: idx, length: Math.abs(b.x - a.x) }
   if (Math.abs(a.x - b.x) < 1e-6) return { edgeIndex: idx, length: Math.abs(b.z - a.z) }
   return null

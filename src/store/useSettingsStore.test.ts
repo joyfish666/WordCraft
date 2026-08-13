@@ -125,7 +125,7 @@ describe('useSettingsStore', () => {
     const saved = JSON.parse(raw as string) as {
       state: { apiKeys: { name: string }[]; colorMode: string; wireframe: { enabled: boolean } }
     }
-    expect(saved.state.apiKeys[0].name).toBe('DeepSeek')
+    expect(saved.state.apiKeys[0]!.name).toBe('DeepSeek')
     expect(saved.state.colorMode).toBe('colorblind')
     // 默认关闭线框，toggle 后开启
     expect(saved.state.wireframe.enabled).toBe(true)

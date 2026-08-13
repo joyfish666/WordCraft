@@ -9,6 +9,21 @@
     />
     <title>言筑 WordCraft</title>
     <script>
+      // 单页应用深链接还原（与 404.html 配对）：GitHub Pages 对未命中路径返回 404.html，
+      // 它以 /WordCraft/?/settings 形式重定向到这里——把路径从查询串还原给应用路由
+      // （history.replaceState 后 BrowserRouter 读到真实路径），深链接刷新不丢页面。
+      ;(function () {
+        var s = window.location.search
+        if (s.indexOf('?/') === 0) {
+          var decoded = s.slice(2)
+          try {
+            decoded = decodeURIComponent(decoded)
+          } catch (e) {}
+          window.history.replaceState(null, '', '/' + decoded.replace(/^\/+/, '') + window.location.hash)
+        }
+      })()
+    </script>
+    <script>
       // 首帧前预判移动端紧凑布局（对应 OrientationGuard 的 wc-compact，避免横屏手机
       // 首帧闪出桌面布局；CSS 样式由 document.documentElement 上的 wc-compact 类门控）
       try {

@@ -3,6 +3,7 @@ import { useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plane, Raycaster, Vector3 } from 'three'
 import type * as THREE from 'three'
+import { useConfirm } from '../ui/useConfirm'
 import { t } from '../../i18n'
 import { executeOps } from '../../lib/executor'
 import { footprintCenter } from '../../lib/footprint'
@@ -85,6 +86,7 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
   const raycasterRef = useRef<Raycaster | null>(null)
   const planeRef = useRef<Plane>(new Plane(new Vector3(0, 1, 0), 0))
   const localOutRef = useRef(new Vector3())
+  const { alertMessage } = useConfirm()
 
   const [drag, setDrag] = useState<DragState | null>(null)
   const [split, setSplit] = useState<SplitState | null>(null)
@@ -273,7 +275,7 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
             return true
           }
           const ok = tryMerge(mergeKeepId, hit.node.id) || tryMerge(hit.node.id, mergeKeepId)
-          if (!ok) window.alert(t('plan.mergeFail'))
+          if (!ok) void alertMessage({ title: t('plan.failTitle'), message: t('plan.mergeFail') })
           setMergeKeepId(null)
         }
         break
@@ -307,7 +309,8 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
       if (before) {
         const op: Op = { op: 'splitRoom', id: roomId, axis, position }
         const result = executeOps(before, [op])
-        if (result.applied === 0) window.alert(t('plan.splitFail'))
+        if (result.applied === 0)
+          void alertMessage({ title: t('plan.failTitle'), message: t('plan.splitFail') })
         else useModelStore.getState().applyPlanOps([op])
       }
       setSplit(null)
@@ -439,7 +442,7 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
             <Line
               points={[
                 ...pts.map((p) => [p.x, 0.9, p.z] as [number, number, number]),
-                [pts[0].x, 0.9, pts[0].z],
+                [pts[0]!.x, 0.9, pts[0]!.z],
               ]}
               color="#2f8f5b"
               lineWidth={3}

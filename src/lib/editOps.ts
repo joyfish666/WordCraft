@@ -78,7 +78,7 @@ export function editDiffToOps(before: SceneModel, after: SceneModel, id: string)
   }
 
   if (beforeNode.type === 'furniture' && afterNode.type === 'furniture') {
-    const room = findFurnitureRoom(after.root.levels[0].rooms, id)
+    const room = findFurnitureRoom(after.root.levels[0]!.rooms, id)
     if (!room) return []
     const patch: {
       name?: string

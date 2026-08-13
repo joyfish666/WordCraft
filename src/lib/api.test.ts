@@ -82,7 +82,7 @@ describe('testConnection', () => {
     const result = await testConnection({ apiKey: 'sk-test', model: 'o1-mini' })
     expect(result.ok).toBe(true)
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    const secondBody = JSON.parse(fetchMock.mock.calls[1][1]!.body as string) as Record<
+    const secondBody = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string) as Record<
       string,
       unknown
     >

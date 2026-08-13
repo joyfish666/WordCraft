@@ -65,12 +65,12 @@ describe('dimensionLines', () => {
     const bounds = houseBounds(scene)
     const lines = dimensionLines(bounds, { y: 3.5 })
     expect(lines).toHaveLength(2)
-    expect(lines[0].label).toBe('总长 12.3m')
-    expect(lines[0].from).toEqual([-6.15, 3.5, -5.6])
-    expect(lines[0].to).toEqual([6.15, 3.5, -5.6])
-    expect(lines[1].label).toBe('总宽 10m')
-    expect(lines[1].from).toEqual([6.75, 3.5, -5])
-    expect(lines[1].to).toEqual([6.75, 3.5, 5])
+    expect(lines[0]!.label).toBe('总长 12.3m')
+    expect(lines[0]!.from).toEqual([-6.15, 3.5, -5.6])
+    expect(lines[0]!.to).toEqual([6.15, 3.5, -5.6])
+    expect(lines[1]!.label).toBe('总宽 10m')
+    expect(lines[1]!.from).toEqual([6.75, 3.5, -5])
+    expect(lines[1]!.to).toEqual([6.75, 3.5, 5])
   })
 })
 
@@ -104,7 +104,7 @@ describe('门窗符号（doorLeafLine / doorArcPoints / windowHatchLines）', ()
   }
 
   it('门扇线：从铰链端垂直进入房间（南墙 → +z），长度 = 门洞宽', () => {
-    const [a, e] = doorLeafLine(southEdge, southEdge.segments[0], 0.2)
+    const [a, e] = doorLeafLine(southEdge, southEdge.segments[0]!, 0.2)
     expect(a).toEqual([-1, 0.2, -1.5])
     expect(e[0]).toBeCloseTo(-1, 5)
     expect(e[2]).toBeCloseTo(-0.6, 5)
@@ -117,7 +117,7 @@ describe('门窗符号（doorLeafLine / doorArcPoints / windowHatchLines）', ()
       dir: 'north',
       segments: [{ from: 2, to: 2.9, kind: 'door' }],
     }
-    const [, e] = doorLeafLine(northEdge, northEdge.segments[0], 0.2)
+    const [, e] = doorLeafLine(northEdge, northEdge.segments[0]!, 0.2)
     expect(e[2]).toBeCloseTo(1.5 - 0.9, 5)
   })
 
@@ -131,28 +131,28 @@ describe('门窗符号（doorLeafLine / doorArcPoints / windowHatchLines）', ()
       shared: false,
       segments: [{ from: 1, to: 1.9, kind: 'door' }],
     }
-    const [a, e] = doorLeafLine(eastEdge, eastEdge.segments[0], 0.2)
+    const [a, e] = doorLeafLine(eastEdge, eastEdge.segments[0]!, 0.2)
     expect(a).toEqual([2, 0.2, -0.5])
     expect(e[0]).toBeLessThan(2)
   })
 
   it('开启弧线：以铰链端为圆心扫到洞口另一端，全程在房间内且不越出洞口区间', () => {
-    const pts = doorArcPoints(southEdge, southEdge.segments[0], 0.2)
+    const pts = doorArcPoints(southEdge, southEdge.segments[0]!, 0.2)
     expect(pts).toHaveLength(11)
     // 首点 = 门扇端点，末点 = 洞口另一端（墙线上）
-    expect(pts[0][0]).toBeCloseTo(-1, 5)
-    expect(pts[0][2]).toBeCloseTo(-0.6, 5)
-    expect(pts[10][0]).toBeCloseTo(-0.1, 5)
-    expect(pts[10][2]).toBeCloseTo(-1.5, 5)
+    expect(pts[0]![0]).toBeCloseTo(-1, 5)
+    expect(pts[0]![2]).toBeCloseTo(-0.6, 5)
+    expect(pts[10]![0]).toBeCloseTo(-0.1, 5)
+    expect(pts[10]![2]).toBeCloseTo(-1.5, 5)
     // 半径恒 = 门洞宽
     for (const p of pts) {
-      expect(Math.hypot(p[0] - -1, p[2] - -1.5)).toBeCloseTo(0.9, 5)
+      expect(Math.hypot(p[0]! - -1, p[2]! - -1.5)).toBeCloseTo(0.9, 5)
     }
     // 全程在房间内（z ≥ 墙线）且沿墙方向不越出洞口（x ∈ [-1, -0.1]）
     for (const p of pts) {
-      expect(p[2]).toBeGreaterThanOrEqual(-1.5 - 1e-9)
-      expect(p[0]).toBeGreaterThanOrEqual(-1 - 1e-9)
-      expect(p[0]).toBeLessThanOrEqual(-0.1 + 1e-9)
+      expect(p[2]!).toBeGreaterThanOrEqual(-1.5 - 1e-9)
+      expect(p[0]!).toBeGreaterThanOrEqual(-1 - 1e-9)
+      expect(p[0]!).toBeLessThanOrEqual(-0.1 + 1e-9)
     }
   })
 
@@ -160,10 +160,10 @@ describe('门窗符号（doorLeafLine / doorArcPoints / windowHatchLines）', ()
     const seg = { from: 2, to: 3.5, kind: 'window' as const }
     const lines = windowHatchLines(southEdge, seg, 0.2)
     expect(lines).toHaveLength(2)
-    expect(lines[0][0]).toEqual([0, 0.2, -1.4])
-    expect(lines[0][1]).toEqual([1.5, 0.2, -1.4])
-    expect(lines[1][0]).toEqual([0, 0.2, -1.28])
-    expect(lines[1][1]).toEqual([1.5, 0.2, -1.28])
+    expect(lines[0]![0]).toEqual([0, 0.2, -1.4])
+    expect(lines[0]![1]).toEqual([1.5, 0.2, -1.4])
+    expect(lines[1]![0]).toEqual([0, 0.2, -1.28])
+    expect(lines[1]![1]).toEqual([1.5, 0.2, -1.28])
   })
 
   it('与墙体方案同源：入户门段落在入口房间南墙，符号指向房间内部', () => {
@@ -203,12 +203,12 @@ describe('roomDimLines', () => {
     }
     const lines = roomDimLines(room, { y: 0.35 })
     expect(lines).toHaveLength(2)
-    expect(lines[0].from).toEqual([-1.6, 0.35, -1.1])
-    expect(lines[0].to).toEqual([1.6, 0.35, -1.1])
-    expect(lines[0].label).toBe('4')
-    expect(lines[1].from).toEqual([-1.6, 0.35, -1.1])
-    expect(lines[1].to).toEqual([-1.6, 0.35, 1.1])
-    expect(lines[1].label).toBe('3')
+    expect(lines[0]!.from).toEqual([-1.6, 0.35, -1.1])
+    expect(lines[0]!.to).toEqual([1.6, 0.35, -1.1])
+    expect(lines[0]!.label).toBe('4')
+    expect(lines[1]!.from).toEqual([-1.6, 0.35, -1.1])
+    expect(lines[1]!.to).toEqual([-1.6, 0.35, 1.1])
+    expect(lines[1]!.label).toBe('3')
   })
 
   it('过小的边（< 2m）跳过尺寸线', () => {

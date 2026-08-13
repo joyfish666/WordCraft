@@ -47,7 +47,7 @@ function scene(root: Partial<SceneModelV2['root']> & { children: RoomNodeV2[] })
 
 /** 顶层房间列表 */
 function topRooms(model: ReturnType<typeof resolveLayout>): RoomNode[] {
-  return model.root.levels[0].rooms
+  return model.root.levels[0]!.rooms
 }
 
 describe('resolveLayout - corridor 走廊型', () => {
@@ -476,8 +476,8 @@ describe('resolveLayout - 两卫生间布局', () => {
     // 家具两两不重叠（历史 bug：衣柜滑上北墙与床重叠、床头柜被夹进门区与床重叠）
     for (let i = 0; i < furn.length; i++) {
       for (let j = i + 1; j < furn.length; j++) {
-        const a = furn[i]
-        const b = furn[j]
+        const a = furn[i]!
+        const b = furn[j]!
         const overlap =
           a.position.x + a.dimensions.length / 2 > b.position.x - b.dimensions.length / 2 + 1e-6 &&
           a.position.x - a.dimensions.length / 2 < b.position.x + b.dimensions.length / 2 - 1e-6 &&
@@ -487,7 +487,7 @@ describe('resolveLayout - 两卫生间布局', () => {
       }
     }
     // 家具不落入内卫占地（坑 15：嵌套房间禁入）
-    const bath = master.nestedRooms[0]
+    const bath = master.nestedRooms[0]!
     const bb = roomBoundsOf(bath)
     for (const f of furn) {
       const overlap =

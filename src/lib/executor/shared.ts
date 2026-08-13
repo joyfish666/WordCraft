@@ -30,7 +30,7 @@ export function replaceRoom(scene: SceneModel, id: string, rooms: RoomNode[]): S
     }
     return out
   }
-  const level = scene.root.levels[0]
+  const level = scene.root.levels[0]!
   return {
     ...scene,
     root: { ...scene.root, levels: [{ ...level, rooms: replaceList(level.rooms) }] },
@@ -42,8 +42,8 @@ export function edgeDirIndex(fp: Point2D[], dir: 'north' | 'south' | 'east' | 'w
   const n = fp.length
   const c = footprintCenter(fp)
   for (let i = 0; i < n; i++) {
-    const a = fp[i]
-    const b = fp[(i + 1) % n]
+    const a = fp[i]!
+    const b = fp[(i + 1) % n]!
     if (Math.abs(a.z - b.z) < EPSILON) {
       if (dir === 'north' && a.z > c.z + EPSILON) return i
       if (dir === 'south' && a.z < c.z - EPSILON) return i
@@ -74,7 +74,7 @@ export function liftToTopLevel(root: SceneModel['root'], room: RoomNode): SceneM
  * 因此 id 未命中时回退按名称匹配（遍历顺序首次命中，确定性）。
  */
 export function findRoom(scene: SceneModel, ref: string): RoomNode | null {
-  return findRoomInList(scene.root.levels[0].rooms, ref)
+  return findRoomInList(scene.root.levels[0]!.rooms, ref)
 }
 
 /** 不可变更新指定房间（含嵌套），fn 返回新房间 */

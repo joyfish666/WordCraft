@@ -141,8 +141,8 @@ export function footprintEdges(room: RoomNode): WallEdge[] {
   const edges: WallEdge[] = []
   const n = fp.length
   for (let i = 0; i < n; i++) {
-    const a = fp[i]
-    const b = fp[(i + 1) % n]
+    const a = fp[i]!
+    const b = fp[(i + 1) % n]!
     let axis: 'x' | 'z'
     let line: number
     let start: number
@@ -389,7 +389,7 @@ export function computeWallPlan(
   for (const R of rooms) {
     const p = plan.get(R.id)!
     for (let i = 0; i < p.edges.length; i++) {
-      const edge = p.edges[i]
+      const edge = p.edges[i]!
       const neighbors = neighborsAlongEdge(edge, rooms, edgesByRoom)
       if (neighbors.length === 0) continue
       edge.shared = true
@@ -621,7 +621,7 @@ export function nestedWallPlan(
     }
     segs = cleanSegments(segs)
     // 整面被覆盖 → 单段 open 且 shared:true（地板不再外扩，贴外墙内侧）
-    const fullyOpen = segs.length === 1 && segs[0].kind === 'open'
+    const fullyOpen = segs.length === 1 && segs[0]!.kind === 'open'
     edge.shared = fullyOpen
     edge.segments = segs
   }

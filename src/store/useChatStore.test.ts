@@ -99,7 +99,7 @@ describe('useChatStore 编辑操作日志（P3 双向同步）', () => {
     expect(persisted.state.messages).toHaveLength(2)
     for (const m of persisted.state.messages) expect(m.model).toBeUndefined()
     // 内存中 model 仍保留（撤销生成依赖），持久化剥离不影响运行时
-    expect(useChatStore.getState().messages[1].model).toBe(modelA)
+    expect(useChatStore.getState().messages[1]!.model).toBe(modelA)
   })
 })
 

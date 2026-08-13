@@ -4,6 +4,7 @@ import { compressObject, encodeShareCode } from '../../lib/compression'
 import { createSampleModel } from '../../lib/sampleModel'
 import { useShareStore } from '../../store/useShareStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
+import { ConfirmProvider } from './ConfirmDialog'
 import { ShareDialog } from './ShareDialog'
 
 const onRestore = vi.fn()
@@ -11,14 +12,16 @@ const onClose = vi.fn()
 
 function renderDialog(overrides: Partial<Parameters<typeof ShareDialog>[0]> = {}) {
   return render(
-    <ShareDialog
-      open
-      onClose={onClose}
-      code="test-code"
-      screenshot="data:image/png;base64,abc"
-      onRestore={onRestore}
-      {...overrides}
-    />,
+    <ConfirmProvider>
+      <ShareDialog
+        open
+        onClose={onClose}
+        code="test-code"
+        screenshot="data:image/png;base64,abc"
+        onRestore={onRestore}
+        {...overrides}
+      />
+    </ConfirmProvider>,
   )
 }
 
@@ -72,7 +75,7 @@ describe('ShareDialog（分享与口令）', () => {
     fireEvent.change(input, { target: { value: code } })
     fireEvent.click(screen.getByRole('button', { name: '还原' }))
     expect(onRestore).toHaveBeenCalledTimes(1)
-    expect(onRestore.mock.calls[0][0].root.name).toBe('示例小屋')
+    expect(onRestore.mock.calls[0]![0].root.name).toBe('示例小屋')
     expect(screen.getByText(/模型已还原/)).toBeInTheDocument()
   })
 
@@ -104,23 +107,24 @@ describe('ShareDialog（分享与口令）', () => {
     fireEvent.change(input, { target: { value: legacyCode } })
     fireEvent.click(screen.getByRole('button', { name: '还原' }))
     expect(onRestore).toHaveBeenCalledTimes(1)
-    const restored = onRestore.mock.calls[0][0] as {
+    const restored = onRestore.mock.calls[0]![0] as {
       version: number
       root: { name: string; levels: { rooms: unknown[] }[] }
     }
     expect(restored.version).toBe(3)
     expect(restored.root.name).toBe('旧房子')
-    expect(restored.root.levels[0].rooms).toHaveLength(1)
+    expect(restored.root.levels[0]!.rooms).toHaveLength(1)
     expect(screen.getByText(/模型已还原/)).toBeInTheDocument()
   })
 
-  it('历史列表显示并可删除', () => {
+  it('历史列表显示并可删除', async () => {
     useShareStore.getState().addRecord({ name: '旧模型', code: 'old-code' })
     renderDialog()
     expect(screen.getByText('旧模型')).toBeInTheDocument()
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     fireEvent.click(screen.getByTitle('删除'))
-    expect(screen.getByText(/暂无历史口令/)).toBeInTheDocument()
-    confirmSpy.mockRestore()
+    // 确认对话框（danger）出现，点「确定」删除（removeRecord 在 promise 微任务中执行，异步断言）
+    expect(await screen.findByRole('heading', { name: '删除口令记录' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '确定' }))
+    expect(await screen.findByText(/暂无历史口令/)).toBeInTheDocument()
   })
 })

@@ -19,6 +19,11 @@ export const zh = {
   'lang.switchToZh': '切换为中文',
   'lang.switchToEn': '切换为英文',
 
+  // ---------- 通用确认/提示对话框 ----------
+  'dialog.confirm': '确定',
+  'dialog.cancel': '取消',
+  'dialog.ok': '好',
+
   // ---------- HomePage 工具栏 ----------
   'home.loadSample': '示例',
   'home.loadSampleTitle': '加载示例模型',
@@ -56,7 +61,7 @@ export const zh = {
   'chat.generating': '正在生成模型…（已 {elapsed} 秒）',
   'chat.generatingBtn': '生成中…（已 {elapsed}s）',
   'chat.generateBtn': '生成模型',
-  'chat.placeholder': '例如：帮我设计一个 3×3 米的卧室，放一张双人床…',
+  'chat.placeholder': '例如：帮我设计一套房子，包含客厅、厨房、卧室和卫生间…',
   'chat.ariaLog': '对话记录',
   'chat.apiMissingHint': '尚未配置 API Key，暂时无法生成。',
   'chat.generatedModel':
@@ -67,7 +72,7 @@ export const zh = {
   'home.emptyDesc': '描述房间、风格与朝向，AI 会为你搭建 3D 模型，之后可随时微调。试试这些：',
   'home.emptyFoot': '数据全在本地 · 隐私安全',
   'home.emptyApiHint': '尚未配置 API Key，可先加载示例模型体验：',
-  'home.example1': '三室一厅一厨，主卧带卫生间',
+  'home.example1': '三室一厅一厨，一个公共卫生间',
   'home.example1Label': '三室一厅一厨',
   'home.example2': '现代简约独栋小屋，两室一厅，朝南',
   'home.example2Label': '现代简约小屋',
@@ -98,12 +103,16 @@ export const zh = {
   'home.selectHint': '点击模型模块查看尺寸信息',
 
   // ---------- HomePage 确认/提示 ----------
+  'home.discardTitle': '放弃未保存的修改',
   'home.confirmDiscardProject': '当前项目有未保存的修改，此操作将放弃这些修改，确定继续吗？',
   'home.confirmDiscardScene': '当前场景尚未保存到项目库，此操作将覆盖当前场景，确定继续吗？',
+  'home.openFailedTitle': '无法打开项目',
   'home.alertCorrupt': '项目数据损坏，无法打开',
   'home.alertInvalid': '项目数据格式不正确，无法打开',
+  'home.screenshotFailedTitle': '截图失败',
   'home.noApiKey': '尚未配置 API Key，请先前往设置页配置后再试。',
   'home.genFailed': '生成失败，请重试',
+  'home.genConflictTitle': '生成结果与当前编辑冲突',
   'home.genConflictApply':
     '生成期间你手动编辑了场景。仍要应用生成结果覆盖当前编辑吗？（建议选「取消」以保留你的修改）',
   'home.genConflictAborted': '生成结果已丢弃：生成期间场景发生了变化，已保留你的手动编辑',
@@ -196,6 +205,7 @@ export const zh = {
   'project.delete': '删除',
   'project.close': '关闭',
   'project.deleteConfirm': '确定删除项目「{name}」吗？删除后无法恢复。',
+  'project.deleteTitle': '删除项目',
 
   // ---------- 属性面板 ----------
   'property.closeTitle': '关闭属性面板',
@@ -263,6 +273,7 @@ export const zh = {
   'plan.hintMerge': '先点要保留的房间，再点与之相邻的房间完成合并',
   'plan.mergeFail': '两房间并集不是矩形，无法合并',
   'plan.splitFail': '只能拆分矩形房间，且切线两侧需各 ≥ 1m',
+  'plan.failTitle': '无法完成该操作',
   'plan.openingFail': '该处无法开洞（不是实心墙）',
 
   // ---------- 分享与口令 ----------
@@ -283,6 +294,7 @@ export const zh = {
   'share.unnamed': '未命名模型',
   'share.delete': '删除',
   'share.deleteConfirm': '删除这条历史口令吗？',
+  'share.deleteTitle': '删除口令记录',
   'share.close': '关闭',
 
   // ---------- 竖屏横屏引导 ----------
@@ -328,6 +340,11 @@ export const en: Record<TKey, string> = {
   'lang.switchToZh': 'Switch to Chinese',
   'lang.switchToEn': 'Switch to English',
 
+  // ---------- Shared confirm / alert dialog ----------
+  'dialog.confirm': 'Confirm',
+  'dialog.cancel': 'Cancel',
+  'dialog.ok': 'OK',
+
   // ---------- HomePage toolbar ----------
   'home.loadSample': 'Sample',
   'home.loadSampleTitle': 'Load the sample house',
@@ -367,7 +384,7 @@ export const en: Record<TKey, string> = {
   'chat.generating': 'Generating model… ({elapsed}s elapsed)',
   'chat.generatingBtn': 'Generating… ({elapsed}s)',
   'chat.generateBtn': 'Generate',
-  'chat.placeholder': 'e.g. Design a 3×3 m bedroom with a double bed…',
+  'chat.placeholder': 'e.g. Design a house with a living room, a kitchen, bedrooms and a bathroom…',
   'chat.ariaLog': 'Chat log',
   'chat.apiMissingHint': 'No API Key configured yet — generation is disabled.',
   'chat.generatedModel':
@@ -379,7 +396,7 @@ export const en: Record<TKey, string> = {
     'Describe rooms, style and orientation — the AI builds a 3D model you can refine later. Try one:',
   'home.emptyFoot': 'All data stays local · Private by design',
   'home.emptyApiHint': 'No API Key configured yet — try the sample model first:',
-  'home.example1': 'Three bedrooms, one living room, one kitchen, with an ensuite master bedroom',
+  'home.example1': 'Three bedrooms, one living room, one kitchen, with a shared public bathroom',
   'home.example1Label': '3+1 with kitchen',
   'home.example2': 'A modern minimalist house, two bedrooms and a living room, south-facing',
   'home.example2Label': 'Modern minimalist house',
@@ -411,13 +428,17 @@ export const en: Record<TKey, string> = {
   'home.selectHint': 'Click a module to see its dimensions',
 
   // ---------- HomePage confirms / alerts ----------
+  'home.discardTitle': 'Discard unsaved changes',
   'home.confirmDiscardProject': 'This project has unsaved changes. Discard them and continue?',
   'home.confirmDiscardScene':
     "The current scene isn't saved to the project library. Overwrite it and continue?",
+  'home.openFailedTitle': 'Cannot open project',
   'home.alertCorrupt': "Project data is corrupted and can't be opened",
   'home.alertInvalid': 'Project data has an invalid format',
+  'home.screenshotFailedTitle': 'Screenshot failed',
   'home.noApiKey': 'No API Key configured yet. Configure one on the Settings page first.',
   'home.genFailed': 'Generation failed, please try again',
+  'home.genConflictTitle': 'Generation conflicts with your current edits',
   'home.genConflictApply':
     'The scene was edited while generating. Apply the generated result anyway and overwrite your edits? (Choose "Cancel" to keep your edits)',
   'home.genConflictAborted':
@@ -517,6 +538,7 @@ export const en: Record<TKey, string> = {
   'project.delete': 'Delete',
   'project.close': 'Close',
   'project.deleteConfirm': 'Delete project "{name}"? This can\'t be undone.',
+  'project.deleteTitle': 'Delete project',
 
   // ---------- Property panel ----------
   'property.closeTitle': 'Close property panel',
@@ -586,6 +608,7 @@ export const en: Record<TKey, string> = {
   'plan.hintMerge': 'Click the room to keep, then click the adjacent room to merge',
   'plan.mergeFail': 'The two rooms cannot merge: their union is not a rectangle',
   'plan.splitFail': 'Only rectangular rooms can be split, and each side must be ≥ 1m',
+  'plan.failTitle': 'Cannot perform this operation',
   'plan.openingFail': 'Cannot place an opening here (not a solid wall)',
 
   // ---------- Share & code ----------
@@ -606,6 +629,7 @@ export const en: Record<TKey, string> = {
   'share.unnamed': 'Unnamed model',
   'share.delete': 'Delete',
   'share.deleteConfirm': 'Delete this share record?',
+  'share.deleteTitle': 'Delete share record',
   'share.close': 'Close',
 
   // ---------- Portrait orientation guard ----------

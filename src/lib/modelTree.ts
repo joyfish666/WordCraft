@@ -91,12 +91,12 @@ function footprintTranslation(
   after: Point2D[],
 ): { dx: number; dz: number } | null {
   if (before.length !== after.length || before.length === 0) return null
-  const dx = after[0].x - before[0].x
-  const dz = after[0].z - before[0].z
+  const dx = after[0]!.x - before[0]!.x
+  const dz = after[0]!.z - before[0]!.z
   if (dx === 0 && dz === 0) return null
   for (let i = 1; i < before.length; i++) {
-    if (Math.abs(after[i].x - before[i].x - dx) > 1e-9) return null
-    if (Math.abs(after[i].z - before[i].z - dz) > 1e-9) return null
+    if (Math.abs(after[i]!.x - before[i]!.x - dx) > 1e-9) return null
+    if (Math.abs(after[i]!.z - before[i]!.z - dz) > 1e-9) return null
   }
   return { dx, dz }
 }
@@ -163,7 +163,7 @@ export function updateNodeFootprint(root: ModelNode, id: string, footprint: Poin
 export function removeNode(root: ModelNode, id: string): ModelNode {
   if (root.id === id) return root
   if (root.type === 'house') {
-    const level = root.levels[0]
+    const level = root.levels[0]!
     const rooms = level.rooms
     const remaining = rooms.filter((r) => r.id !== id)
     if (remaining.length < rooms.length) {
@@ -211,7 +211,7 @@ export function removeNode(root: ModelNode, id: string): ModelNode {
 function rebuildContainer(root: HouseNode | RoomNode, children: ModelNode[]): ModelNode {
   if (root.type === 'house') {
     const rooms = children as RoomNode[]
-    const level = root.levels[0]
+    const level = root.levels[0]!
     if (level.rooms.length === rooms.length) {
       return { ...root, levels: [{ ...level, rooms }] }
     }

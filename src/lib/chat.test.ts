@@ -5,7 +5,9 @@ import {
   buildSceneSummary,
   extractModelJson,
   generateModelFromChat,
+  repairLenientJson,
   repairTruncatedJson,
+  tryParseModelJson,
 } from './chat'
 import { emptyScene } from './executor'
 import type { SceneModel } from '../types/model'
@@ -219,6 +221,95 @@ describe('repairTruncatedJson（截断容错）', () => {
   })
 })
 
+describe('tryParseModelJson（解析容错链）', () => {
+  const valid = '{"version":3,"ops":[]}'
+
+  it('原样可解析时直接返回（recovery: raw）', () => {
+    expect(tryParseModelJson(valid)).toEqual({ value: { version: 3, ops: [] }, recovery: 'raw' })
+  })
+
+  it('截断缺闭合符 → 补全后解析（recovery: repair）', () => {
+    const parsed = tryParseModelJson('{"version":3,"ops":[]')
+    expect(parsed?.recovery).toBe('repair')
+    expect(parsed?.value).toEqual({ version: 3, ops: [] })
+  })
+
+  it('双编码（转义引号）→ 还原后解析（recovery: unescape）', () => {
+    const escaped = '{\\"version\\":3,\\"ops\\":[]}'
+    const parsed = tryParseModelJson(escaped)
+    expect(parsed?.recovery).toBe('unescape')
+    expect(parsed?.value).toEqual({ version: 3, ops: [] })
+  })
+
+  it('双编码 + 截断 → 还原并补全后解析（recovery: unescape-repair）', () => {
+    const parsed = tryParseModelJson('{\\"version\\":3,\\"ops\\":[{\\"op\\":\\"addRoom\\"')
+    expect(parsed?.recovery).toBe('unescape-repair')
+    expect(parsed?.value).toEqual({ version: 3, ops: [{ op: 'addRoom' }] })
+  })
+
+  it('尾部多余闭合符（模型多打 }）→ 宽松修复跳过（recovery: lenient）', () => {
+    // 完整 JSON 后多打一个右括号：repairTruncatedJson 在空栈 pop 会拒绝，宽松修复跳过该闭合符
+    const extra = valid + '}'
+    const parsed = tryParseModelJson(extra)
+    expect(parsed?.recovery).toBe('lenient')
+    expect(parsed?.value).toEqual({ version: 3, ops: [] })
+  })
+
+  it('尾部截断残留（半截垃圾）→ 修剪后解析（recovery: trim）', () => {
+    const junk = '{"version":3,"ops":[]}xxxxxx'
+    const parsed = tryParseModelJson(junk)
+    expect(parsed?.recovery).toBe('trim')
+    expect(parsed?.value).toEqual({ version: 3, ops: [] })
+  })
+
+  it('错配闭合符（少 ] 多 }，用户反馈复现）→ 宽松修复后解析（recovery: lenient）', () => {
+    // 用户日志尾部 `...}}]}]}}}`：合法结尾 `...}}]}]}}]}` 被写成「少 ] 多 }」——
+    // repairTruncatedJson 遇错配拒绝，靠宽松修复跳过错配闭合符并补全
+    const anomalous =
+      '{"version":3,"ops":[{"op":"macro","name":"corridor","params":{"rooms":[{"id":"a","name":"A","dimensions":{"length":2,"width":2,"height":2.8},"furniture":[{"id":"f","name":"马桶","dimensions":{"length":0.6,"width":0.4,"height":0.7},"position":{"x":0,"y":0.35,"z":0}}]}]}}'
+    const parsed = tryParseModelJson(anomalous + '}')
+    expect(parsed?.recovery).toBe('lenient')
+    expect(parsed?.value).toMatchObject({ version: 3, ops: [{ op: 'macro' }] })
+  })
+
+  it('无法恢复的畸形文本返回 null', () => {
+    expect(tryParseModelJson('{"a":"未闭合')).toBeNull()
+    expect(tryParseModelJson('{{{')).toBeNull()
+    expect(tryParseModelJson('垃圾文本')).toBeNull()
+  })
+})
+
+describe('repairLenientJson（宽松括号修复，坑 94）', () => {
+  it('错配闭合符（少 ] 多 }，用户"三室一厅一厨"报错形态）修复成功', () => {
+    const valid = '{"version":3,"ops":[{"op":"macro"}]}'
+    // 模型把 ops 数组的 ] 写成 } 并在收尾多打一个 }：`...}]}` → `...}}`
+    const anomalous = '{"version":3,"ops":[{"op":"macro"}}'
+    expect(repairLenientJson(anomalous)).toBe(valid)
+  })
+
+  it('多余闭合符被跳过（完整 JSON 后多打 }）', () => {
+    expect(repairLenientJson('{"a":1}}')).toBe('{"a":1}')
+  })
+
+  it('缺闭合符照常补全（与 repairTruncatedJson 同效）', () => {
+    expect(repairLenientJson('{"version":3,"ops":[{"op":"macro","name":"corridor"')).toBe(
+      '{"version":3,"ops":[{"op":"macro","name":"corridor"}]}',
+    )
+    // 末尾逗号先剔除再补全
+    expect(repairLenientJson('{"version":3,"ops":[{"op":"addRoom","id":"a"},')).toBe(
+      '{"version":3,"ops":[{"op":"addRoom","id":"a"}]}',
+    )
+  })
+
+  it('字符串未闭合无法修复，返回 null', () => {
+    expect(repairLenientJson('{"a":"未闭合')).toBeNull()
+  })
+
+  it('字符串内的括号不参与配对', () => {
+    expect(repairLenientJson('{"a":"{x"')).toBe('{"a":"{x"}')
+  })
+})
+
 describe('generateModelFromChat', () => {
   it('ops 响应经执行器解析后返回模型（macro 平铺出走廊）', async () => {
     respondWith(validOpsJson())
@@ -228,13 +319,13 @@ describe('generateModelFromChat', () => {
       userInput: '设计一个带走廊的两居室',
     })
     expect(result.model.root.name).toBe('示例房')
-    const rooms = result.model.root.levels[0].rooms
+    const rooms = result.model.root.levels[0]!.rooms
     expect(rooms.some((c) => c.name === '走廊')).toBe(true)
     expect(rooms.some((c) => c.name === '主卧')).toBe(true)
     // 家具经常理摆放仍存在（macro auto 批次触发 furnitureConventions）
-    const bed = result.model.root.levels[0].rooms
-      .flatMap((r) => r.furniture)
-      .find((f) => f.id === 'bed')
+    const bed = result.model.root.levels[0]!.rooms.flatMap((r) => r.furniture).find(
+      (f) => f.id === 'bed',
+    )
     expect(bed).toBeDefined()
   })
 
@@ -246,7 +337,7 @@ describe('generateModelFromChat', () => {
       userInput: '设计一个带走廊的两居室',
     })
     expect(result.model.root.name).toBe('示例房')
-    const rooms = result.model.root.levels[0].rooms
+    const rooms = result.model.root.levels[0]!.rooms
     expect(rooms.some((c) => c.name === '走廊')).toBe(true)
     expect(rooms.some((c) => c.name === '客厅')).toBe(true)
   })
@@ -303,7 +394,7 @@ describe('generateModelFromChat', () => {
     const body = JSON.parse(init.body) as { messages: { role: string; content: string }[] }
     // system + 摘要 + 用户输入
     expect(body.messages.map((m) => m.role)).toEqual(['system', 'user', 'user'])
-    const summary = body.messages[1].content
+    const summary = body.messages[1]!.content
     expect(summary).toContain('当前房屋状态')
     expect(summary).toContain('living 客厅')
     expect(summary).toContain('sofa 沙发')
@@ -328,12 +419,12 @@ describe('generateModelFromChat', () => {
     expect(body.thinking).toEqual({ type: 'disabled' })
     expect(body.messages.map((m) => m.role)).toEqual(['system', 'user', 'user'])
     // 提示词已动词化：要求输出操作序列
-    expect(body.messages[0].content).toContain('op')
-    expect(body.messages[0].content).toContain('macro')
-    expect(body.messages[0].content).toContain('addRoom')
+    expect(body.messages[0]!.content).toContain('op')
+    expect(body.messages[0]!.content).toContain('macro')
+    expect(body.messages[0]!.content).toContain('addRoom')
     // 入户门可迁移：setHouse 支持 entranceRoomId / entranceDir
-    expect(body.messages[0].content).toContain('entranceDir')
-    expect(body.messages[0].content).toContain('entranceRoomId')
+    expect(body.messages[0]!.content).toContain('entranceDir')
+    expect(body.messages[0]!.content).toContain('entranceRoomId')
   })
 
   it('P3 双向同步：手动编辑日志随上下文注入（摘要 + 编辑日志 + 用户输入）', async () => {
@@ -389,7 +480,7 @@ describe('generateModelFromChat', () => {
     const body = JSON.parse(init.body) as { messages: { role: string; content: string }[] }
     // system + 场景摘要 + 编辑日志 + 用户输入
     expect(body.messages.map((m) => m.role)).toEqual(['system', 'user', 'user', 'user'])
-    const log = body.messages[2].content
+    const log = body.messages[2]!.content
     expect(log).toContain('手动编辑历史')
     expect(log).toContain('updateFurniture')
     expect(log).toContain('sofa')
@@ -408,7 +499,7 @@ describe('generateModelFromChat', () => {
     const [, init] = mockFetch.mock.calls[0] as [string, { body: string }]
     const body = JSON.parse(init.body) as { messages: { role: string; content: string }[] }
     expect(body.messages.map((m) => m.role)).toEqual(['system', 'user'])
-    expect(body.messages[1].content).not.toContain('手动编辑历史')
+    expect(body.messages[1]!.content).not.toContain('手动编辑历史')
   })
 
   it('思考模式为 default 时不发送 thinking 字段', async () => {
@@ -440,7 +531,7 @@ describe('generateModelFromChat', () => {
       history: [],
       userInput: 'x',
     })
-    const rooms = result.model.root.levels[0].rooms.map((r) => r.id)
+    const rooms = result.model.root.levels[0]!.rooms.map((r) => r.id)
     // macro 生效、addRoom 生效、无效的 updateRoom/unknown 被跳过
     expect(rooms).toContain('a')
     expect(rooms).toContain('b')
@@ -480,12 +571,12 @@ describe('generateModelFromChat', () => {
     const result = await generateModelFromChat({
       apiKey: 'sk-test',
       history: [],
-      userInput: '三室一厅一厨，主卧带卫生间',
+      userInput: '三室一厅一厨，一个公共卫生间',
     })
     // 修复后按 corridor 平铺：整屋名保留、出现走廊与客厅
     expect(result.model.root.name).toBe('三室一厅一厨')
-    expect(result.model.root.levels[0].rooms.some((r) => r.name === '走廊')).toBe(true)
-    expect(result.model.root.levels[0].rooms.some((r) => r.name === '客厅')).toBe(true)
+    expect(result.model.root.levels[0]!.rooms.some((r) => r.name === '走廊')).toBe(true)
+    expect(result.model.root.levels[0]!.rooms.some((r) => r.name === '客厅')).toBe(true)
   })
 
   it('macro.name 缺省但 params 含 corridor 时也能推断布局类型', async () => {
@@ -521,9 +612,9 @@ describe('generateModelFromChat', () => {
       userInput: '两室',
     })
     // 推断为 corridor 后正常平铺：出现走廊与两间房
-    expect(result.model.root.levels[0].rooms.some((r) => r.name === '走廊')).toBe(true)
-    expect(result.model.root.levels[0].rooms.some((r) => r.name === '房A')).toBe(true)
-    expect(result.model.root.levels[0].rooms.some((r) => r.name === '房B')).toBe(true)
+    expect(result.model.root.levels[0]!.rooms.some((r) => r.name === '走廊')).toBe(true)
+    expect(result.model.root.levels[0]!.rooms.some((r) => r.name === '房A')).toBe(true)
+    expect(result.model.root.levels[0]!.rooms.some((r) => r.name === '房B')).toBe(true)
   })
 
   it('未找到 JSON 时抛出 no-json 错误', async () => {
@@ -543,7 +634,7 @@ describe('generateModelFromChat', () => {
     })
     // 截断修复后照常执行 macro，与完整回复一致
     expect(result.model.root.name).toBe('示例房')
-    expect(result.model.root.levels[0].rooms.some((c) => c.name === '走廊')).toBe(true)
+    expect(result.model.root.levels[0]!.rooms.some((c) => c.name === '走廊')).toBe(true)
   })
 
   it('模型把 JSON 包进 JSON 字符串（双编码）时也能解析', async () => {
@@ -554,7 +645,59 @@ describe('generateModelFromChat', () => {
       userInput: '设计一个带走廊的两居室',
     })
     expect(result.model.root.name).toBe('示例房')
-    expect(result.model.root.levels[0].rooms.some((c) => c.name === '主卧')).toBe(true)
+    expect(result.model.root.levels[0]!.rooms.some((c) => c.name === '主卧')).toBe(true)
+  })
+
+  it('三室一厅一厨：模型回复尾部多打闭合符也能解析（用户反馈"JSON 无法解析"）', async () => {
+    // 复现用户报错形态：完整 ops 后多一个 `}`——repair 括号栈空栈 pop 拒绝修复，
+    // 靠 tryParseModelJson 的尾部修剪兜底（坑 42 系列扩充）
+    respondWith(validOpsJson() + '}')
+    const result = await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: '三室一厅一厨，一个公共卫生间',
+    })
+    expect(result.model.root.name).toBe('示例房')
+    expect(result.model.root.levels[0]!.rooms.some((c) => c.name === '走廊')).toBe(true)
+  })
+
+  it('三室一厅一厨：错配闭合符（少 ] 多 }）也能解析（坑 94 复现用户反馈）', async () => {
+    // 用户 debug 日志真实形态：合法结尾 `...}}]}]}}]}` 被模型写成 `...}}]}]}}}`（少 ] 多 }），
+    // repairTruncatedJson 遇错配返回 null、尾部修剪无合法前缀——靠宽松修复跳过错配并补全
+    const valid = validOpsJson()
+    const anomalous = valid.slice(0, -2) + '}'
+    respondWith(anomalous)
+    const result = await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: '三室一厅一厨，一个公共卫生间',
+    })
+    expect(result.model.root.name).toBe('示例房')
+    expect(result.model.root.levels[0]!.rooms.some((c) => c.name === '走廊')).toBe(true)
+  })
+
+  it('双编码 + 截断（外层引号缺失 + 内层转义）也能解析', async () => {
+    // 模型输出 "{\"version\":3,...（外层字符串的收尾引号被截断）→ unwrapJsonString 解不了，
+    // 靠容错链的「还原双编码 + 补全闭合」兜底
+    const wrapped = JSON.stringify(validOpsJson())
+    respondWith(wrapped.slice(0, -1))
+    const result = await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: '设计一个带走廊的两居室',
+    })
+    expect(result.model.root.name).toBe('示例房')
+    expect(result.model.root.levels[0]!.rooms.some((c) => c.name === '主卧')).toBe(true)
+  })
+
+  it('尾部带截断残留（正常 JSON + 垃圾字符）也能解析', async () => {
+    respondWith(validOpsJson() + 'xyz')
+    const result = await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: '设计一个带走廊的两居室',
+    })
+    expect(result.model.root.name).toBe('示例房')
   })
 
   it('输出既非 ops 也非 v2/v3 时抛出 invalid-schema 错误', async () => {

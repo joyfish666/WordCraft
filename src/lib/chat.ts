@@ -68,7 +68,7 @@ export function buildSystemPrompt(): string {
  * 任一边共线（|线差| ≤ 0.4，同 ADJACENCY_GAP）且区间重叠即相邻，方位 = 邻居相对本房间的方向。
  */
 export function buildSceneSummary(scene: SceneModel): string {
-  const rooms = scene.root.levels[0].rooms
+  const rooms = scene.root.levels[0]!.rooms
   const adjacency = topLevelAdjacency(rooms)
   const lines: string[] = ['当前房屋状态（id: 名称 长×宽×高，米；房间行括号内为邻接房间-方位）：']
   const visit = (room: SceneModel['root']['levels'][0]['rooms'][number], depth: number): void => {
@@ -103,8 +103,8 @@ function topLevelAdjacency(rooms: SceneModel['root']['levels'][0]['rooms']): Map
     const fp = r.footprint
     const out: Edge[] = []
     for (let i = 0; i < fp.length; i++) {
-      const p = fp[i]
-      const q = fp[(i + 1) % fp.length]
+      const p = fp[i]!
+      const q = fp[(i + 1) % fp.length]!
       if (Math.abs(p.z - q.z) < 1e-6) {
         out.push({ axis: 'x', line: p.z, a: Math.min(p.x, q.x), b: Math.max(p.x, q.x) })
       } else {
@@ -124,8 +124,8 @@ function topLevelAdjacency(rooms: SceneModel['root']['levels'][0]['rooms']): Map
   }
   for (let i = 0; i < rooms.length; i++) {
     for (let j = i + 1; j < rooms.length; j++) {
-      const A = rooms[i]
-      const B = rooms[j]
+      const A = rooms[i]!
+      const B = rooms[j]!
       const shared = edgeMap
         .get(A.id)!
         .find((e1) =>
@@ -245,7 +245,7 @@ export function repairTruncatedJson(text: string): string | null {
   // 截断点恰在分隔符后时（如 "...a", 或 "...a" ,），末尾逗号会阻塞补全，先剔除尾部空白与逗号
   let end = text.length
   while (end > 0) {
-    const ch = text[end - 1]
+    const ch = text[end - 1]!
     if (ch !== ',' && !/\s/.test(ch)) break
     end--
   }
@@ -256,6 +256,129 @@ export function repairTruncatedJson(text: string): string | null {
     .reverse()
     .join('')
   return text + closers
+}
+
+/**
+ * 还原被模型转义的 JSON（`\"` → `"`、`\\` → `\`）。只在常规解析失败后调用：
+ * 合法 JSON 内部的 `\"` 是字符串内容，盲解会破坏它——调用方必须「先解析、失败才还原」。
+ */
+function unescapeDoubleEncodedJson(text: string): string | null {
+  if (!text.includes('\\"')) return null
+  return text
+    .replace(/\\\\"/g, '\\"') // 先合并 \\"（内层本来就含 \ + "）
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\')
+}
+
+/**
+ * 宽松括号修复（坑 94，2026-08-13）：`repairTruncatedJson` 只认"缺闭合符"，遇到
+ * 错配闭合符（模型把 `]` 写成 `}` / 收尾多打 `}`）直接返回 null。本函数字符串感知扫描，
+ * **跳过错配/多余的闭合符**，结尾再按括号栈补全缺失闭合符——容忍"少 `]` 多 `}`"等
+ * 模型常见收尾错误。只作为解析失败后的容错尝试：结果必须能通过 JSON.parse 才算数
+ * （修复后可能得到语义截断的结果——比报错强，执行器逐条容错会兜底）。
+ */
+export function repairLenientJson(text: string): string | null {
+  const stack: Array<'{' | '['> = []
+  let out = ''
+  let inString = false
+  let escaped = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!
+    if (inString) {
+      out += ch
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') {
+      inString = true
+      out += ch
+      continue
+    }
+    if (ch === '{' || ch === '[') {
+      stack.push(ch)
+      out += ch
+      continue
+    }
+    if (ch === '}' || ch === ']') {
+      const expected = ch === '}' ? '{' : '['
+      if (stack.length === 0 || stack[stack.length - 1] !== expected) continue // 错配/多余闭合符：跳过
+      stack.pop()
+      out += ch
+      continue
+    }
+    out += ch
+  }
+  if (inString) return null // 字符串未闭合：无法安全修复（与 repairTruncatedJson 一致）
+  // 尾部空白与逗号：直接补全闭合符会被末尾逗号阻塞解析
+  let end = out.length
+  while (end > 0) {
+    const ch = out[end - 1]!
+    if (ch !== ',' && !/\s/.test(ch)) break
+    end--
+  }
+  out = out.slice(0, end)
+  if (stack.length === 0) return out // 结构已闭合（多余闭合符已被跳过）
+  // 按反序补全缺失闭合符
+  const closers = stack
+    .map((c) => (c === '{' ? '}' : ']'))
+    .reverse()
+    .join('')
+  return out + closers
+}
+
+/**
+ * 模型回复 JSON 解析容错链（坑 42 系列，2026-08-13 扩充）：
+ * 依次尝试 ①原样 → ②截断补全（repairTruncatedJson）→ ③宽松括号修复（repairLenientJson，
+ * 错配/多余闭合符）→ ④还原双编码 → ⑤双编码+截断补全/宽松修复 → ⑥尾部垃圾修剪。
+ * 返回解析结果与命中的恢复路径（供调试日志；全部失败返回 null）。
+ */
+export function tryParseModelJson(json: string): { value: unknown; recovery: string } | null {
+  const tryParse = (text: string): unknown | undefined => {
+    try {
+      return JSON.parse(text)
+    } catch {
+      return undefined
+    }
+  }
+  const direct = tryParse(json)
+  if (direct !== undefined) return { value: direct, recovery: 'raw' }
+
+  const repaired = repairTruncatedJson(json)
+  if (repaired !== null) {
+    const value = tryParse(repaired)
+    if (value !== undefined) return { value, recovery: 'repair' }
+  }
+
+  const lenient = repairLenientJson(json)
+  if (lenient !== null) {
+    const value = tryParse(lenient)
+    if (value !== undefined) return { value, recovery: 'lenient' }
+  }
+
+  const unescaped = unescapeDoubleEncodedJson(json)
+  if (unescaped !== null) {
+    const value = tryParse(unescaped)
+    if (value !== undefined) return { value, recovery: 'unescape' }
+    const repaired2 = repairTruncatedJson(unescaped)
+    if (repaired2 !== null) {
+      const value2 = tryParse(repaired2)
+      if (value2 !== undefined) return { value: value2, recovery: 'unescape-repair' }
+    }
+    const lenient2 = repairLenientJson(unescaped)
+    if (lenient2 !== null) {
+      const value2 = tryParse(lenient2)
+      if (value2 !== undefined) return { value: value2, recovery: 'unescape-lenient' }
+    }
+  }
+
+  // 尾部垃圾：模型偶发多打闭合符（如 }]}} 后多余的 }）或截断残留，从后往前取最长可解析前缀
+  for (let i = json.length - 1; i > 0; i--) {
+    const value = tryParse(json.slice(0, i))
+    if (value !== undefined) return { value, recovery: 'trim' }
+  }
+  return null
 }
 
 export interface GenerateResult {
@@ -326,22 +449,25 @@ export async function generateModelFromChat(options: GenerateOptions): Promise<G
     throw new ChatGenerationError(t('error.noJson'), 'no-json')
   }
 
-  let raw: unknown
-  try {
-    raw = JSON.parse(json)
-  } catch {
-    // 截断容错：模型流式回复偶发被截断（网络中断/输出长度上限），按未闭合括号补全后再解析
-    const repaired = repairTruncatedJson(json)
-    if (repaired === null) {
-      throw new ChatGenerationError(t('error.invalidJson'), 'invalid-schema')
-    }
-    logDebug('模型回复 JSON 被截断，已自动补全闭合括号', repaired, 'warn')
-    try {
-      raw = JSON.parse(repaired)
-    } catch {
-      throw new ChatGenerationError(t('error.invalidJson'), 'invalid-schema')
-    }
+  // 容错链解析：原样 → 截断补全 → 宽松括号修复 → 双编码还原 → 尾部垃圾修剪（tryParseModelJson）
+  const parsed = tryParseModelJson(json)
+  if (parsed === null) {
+    throw new ChatGenerationError(t('error.invalidJson'), 'invalid-schema')
   }
+  if (parsed.recovery === 'repair') {
+    logDebug('模型回复 JSON 被截断，已自动补全闭合括号', parsed.value, 'warn')
+  } else if (parsed.recovery === 'lenient' || parsed.recovery === 'unescape-lenient') {
+    logDebug('模型回复 JSON 含错配/多余闭合符，已宽松修复', parsed.value, 'warn')
+  } else if (parsed.recovery === 'unescape' || parsed.recovery === 'unescape-repair') {
+    logDebug('模型回复 JSON 被转义，已还原双编码', parsed.value, 'warn')
+  } else if (parsed.recovery === 'trim') {
+    logDebug(
+      '模型回复 JSON 尾部含多余内容（多余闭合符/截断残留），已修剪解析',
+      parsed.value,
+      'warn',
+    )
+  }
+  const raw = parsed.value
 
   // 原始回复本身就是纯净 JSON 时，解析结果与之相同——跳过重复的大段 JSON，避免日志翻倍
   if (json.trim() !== content.trim()) {

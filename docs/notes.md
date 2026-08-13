@@ -243,7 +243,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 ### 3.19 审查批次后续（2026-08-13 晚，坑 80-84 + 工程化，批 A/B/C）
 
-> 承接 3.16/3.17 的全面审查结论，本次修复"性能热路径 + 契约漂移"两个主题；D 批（modelTree 泛型化消 cast、组件拆分、死代码清理、HashRouter）留待后续。
+> 承接 3.16/3.17 的全面审查结论，本次修复"性能热路径 + 契约漂移"两个主题；D 批（modelTree 泛型化消 cast、组件拆分、死代码清理、HashRouter）留待后续（HashRouter 已由 404.html 深链接回退方案替代，见坑 89）。
 
 80. **拖拽预览每帧写 localStorage（坑 75 的姊妹问题）**（审查发现，2026-08-13）：坑 75 修掉了脏检查的每帧 `JSON.stringify`，但 **zustand persist 每次 `setState` 后同步 JSON.stringify 全场景写 localStorage**——`previewSelected`/`previewFootprint` 拖拽每帧产生新场景引用，100KB+ 场景 × 60fps 同步序列化 + `setItem`。修复（`useModelStore`）：persist 配置改走自定义存储层 `previewAwareStorage`（`storage: createJSONStorage(() => previewAwareStorage)`，`getStorage` 已弃用），模块级 `persistEnabled` 开关在预览 set 期间跳过写入、提交恢复；配套测试断言「预览后 storage 保持提交时场景、commitDrag 恢复持久化」。⚠️ **不要用「partialize 返回 undefined」实现**——zustand v4 对 undefined 仍会写 `{"state":...}`（把已持久化场景清成空壳）；预览态是瞬态，中途刷新丢失可接受。
 81. **对话消息持久化整场景快照（5MB 配额风险）**（审查发现，2026-08-13）：`useChatStore` 的 messages 内嵌完整 `SceneModel`（多轮 = 每轮一份），`partialize: { messages }` 每次 addMessage 全量重序列化，多轮后逼近 localStorage 5MB 配额。修复：partialize 剥离 `model` 字段（`model` 仅供会话内「撤销生成」——`generationStack` 已覆盖，刷新后由场景摘要 + 编辑日志替代）；persist 升 **v3**，migrate 把 v2 存档消息中的 `model` 一并剥离。**约定：持久化体积上限思维——凡是"每轮/每次操作一份全量数据"的字段，先问是否必须落盘。**
@@ -267,6 +267,27 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
    ① **墙转角**：踢脚线/勒脚沿墙线通铺，其**端盖与墙盒端盖同平面**（同法向 + 共面 + 重叠）——每处墙转角三面（墙端盖/踢脚线端盖/勒脚端盖）互掐。修法（ModelNodeView）：踢脚线/勒脚长度两端各内收 2mm（`END_CLEAR`），端盖平面离开墙端平面（2mm 端缝即标准伸缩缝观感）；
    ② **家具部件同高顶面/端盖**（furniturePresets）：沙发**扶手顶面 = 座面顶面**（两侧交接带互掐）+ 扶手/靠背/底座**三底面同落地板** + 靠背端盖 = 底座端盖 + 扶手前脸 = 靠背前脸 + 扶手外端面 = 靠背端盖；灶台**控制条顶面 = 柜体顶面**、**前脸 = 柜体前脸**（正面双条互掐）；浴缸**内胆顶面 = 缸沿**；书架**背板通铺整宽**（端盖 = 侧板端盖、顶/底面 = 侧板顶/底面、背面 = 侧板背面——朝向旋转后 3 处共面）；梳妆镜**底面 = 桌面底面、背面 = 桌面后缘、小桌面时满宽端盖 = 桌面端盖**；床头板/水箱/龙头/电视屏**底面 = 主件底面**。修法：逐一分配错位（顶面低 2cm~5mm、端盖内收 3cm~1cm、底面抬 3~6mm 且相邻底面递增错开、背板/镜面宽度收缝），并**顺带修复灶台炉头整体埋在台面里不可见**（旧 burnerY 在台面内部——topTh 3~5cm 厚、炉头 2cm 高永远被埋；改为底面嵌入 1mm、顶面高出 1.9cm）；
    ③ **回归防线**：`furniturePresets.test.ts` 新增**共面审计**（全种类 × 全档尺寸 × 四朝向，61 用例）——枚举所有 box 部件的 6 个面，断言任意两部件的面不存在「同法向 + 同一平面（1e-7）+ 面内区间重叠（1e-6）」组合；后续改任何部件几何必须过此审计（圆柱跳过）。**教训：改"贴面"几何要自查的不只是底面/侧面，还有端盖与顶面**；坑 6/77 的认知补全为「同法向 + 共面 + 重叠」三要素全查（法向反向不互掐、平面错开 ≥0.5mm 不互掐）。
+
+### 3.22 部署/UX/类型安全批次（2026-08-13，坑 89-92）
+
+> 承接 3.19 批 C 的 D 批遗留项与代码审查建议：深链接 404（HashRouter 替代方案）、原生对话框替换、持久化写入防护、`noUncheckedIndexedAccess`。
+
+89. **GitHub Pages 深链接刷新 404（部署缺陷，2026-08-13）**：`BrowserRouter` + Pages 静态托管没有 SPA 回退——用户直接访问/刷新 `/WordCraft/settings` 返回 404 白屏。采用 **404.html 回退方案**（非 HashRouter，URL 保持 `pathname` 形式）：`public/404.html` 把原始路径编码进查询串重定向到首页（`/WordCraft/?/settings`，`pathSegmentsToKeep=1` 保留仓库名前缀），`index.html` 内联脚本检测 `?/` 前缀后 `history.replaceState` 还原路径给应用路由。⚠️ 两条约定：① 改 `vite.config.ts` 的 `base` 或仓库名时，`pathSegmentsToKeep` 需同步（段数 = 仓库名前缀段数）；② 页面内跳转不受影响（History API），只有"整页刷新/直接输入 URL"走 404.html。
+90. **原生 `window.confirm`/`window.alert` 全部替换为应用内对话框（UX/a11y，2026-08-13）**：新增 `components/ui/ConfirmDialog.tsx`（`ConfirmProvider`，挂 `main.tsx` 的 ErrorBoundary 内）+ `components/ui/useConfirm.ts`（hook，独立文件避免 fast-refresh lint 告警）。`useConfirm().confirm()` 返回 `Promise<boolean>`（确定/取消/遮罩/Escape 关闭），`alertMessage()` 为单「好」按钮提示；沿用通用 `Dialog`（焦点陷阱/焦点归还/Escape），`danger` 选项主按钮变红。替换 10 处调用：HomePage 未保存守卫（`confirmDiscardUnsaved` 改 async）+ 打开失败/截图失败提示、useGeneration 生成冲突确认（坑 70 的确认环节保留）、项目库删除、分享历史删除、平面图拆/合失败提示。**测试同步**：原 `vi.spyOn(window, 'confirm')` 断言全部改为「点击对话框按钮」，组件测试需包裹 `<ConfirmProvider>`（渲染 HomePage/ShareDialog/ProjectLibraryDialog 的三处测试已加）。
+91. **localStorage 写入失败无防护（配额/隐私模式，2026-08-13）**：zustand persist 每次 `setState` 同步写 localStorage，5MB 配额满/隐私模式禁用时 `setItem` 抛错会中断当前编辑。新增 `lib/safeStorage.ts`（`safeLocalStorage: StateStorage`，读写删全 try/catch，写失败一次性 console.warn），五个 store（settings/chat/model/project/share）persist 全部改走它；`useModelStore` 的 `previewAwareStorage` 内部复用（坑 80 的预览抑制开关不变）。
+92. **tsconfig 开启 `noUncheckedIndexedAccess`（类型安全，2026-08-13）**：数组/字符串索引访问变为 `T | undefined`，383 处编译错误全部收敛——源码按语义处理：多边形循环索引（`fp[i]` 等，for 边界保证存在）与 `levels[0]`（v3 schema 保证至少一层）加 `!`，`Dialog` 焦点陷阱首尾元素、`past[last]` 等已有长度守卫处加 `!`；测试文件断言处加 `!`（断言失败即用例红）。**约定：新写索引访问先问"边界是否保证存在"——保证则 `!`，不保证则写守卫**；`levels[0]` 后续若支持多层需改为显式守卫。
+
+### 3.23 生成解析容错链扩充（2026-08-13，坑 93：三室一厅一厨报"JSON 无法解析"）
+
+> 用户反馈：示例一「三室一厅一厨」首次生成报「模型返回的 JSON 无法解析，请重试」。debug 日志显示回复完整（6 房间 corridor macro），但末尾闭合符形态可疑——模型**在完整 JSON 之后多打了一个右括号**（`...}]}}` 之后多余的 `}`）。
+
+93. **`repairTruncatedJson` 只覆盖"截断缺闭合符"，多余闭合符/尾部残留/转义截断全部拒绝修复**（用户反馈，2026-08-13）：坑 42 的修复假定截断形态是"末尾缺几个闭合符"（括号栈非空、字符串已闭合才补全）。真实模型输出还有三种形态：①**多余闭合符**（模型收尾多打 `}`，括号栈空栈 pop → repair 返回 null）；②**尾部残留**（截断后紧跟垃圾字符）；③**双编码 + 截断**（外层引号缺失，`unwrapJsonString` 的 `endsWith('"')` 检查失败，`{...}` 切片仍带 `\"` 转义，parse 与 repair 双双失败）。三种形态全部落到「模型返回的 JSON 无法解析」。修复（chat.ts）：新增 **`tryParseModelJson(json)` 解析容错链**——依次尝试 ①原样 → ②`repairTruncatedJson` 补全 → ③还原双编码（`unescapeDoubleEncodedJson`：`\\"`→`\"`→`"`，只在常规解析失败后调用，正常 JSON 内的 `\"` 是合法字符串内容不能盲解）→ ④还原+补全 → ⑤**尾部修剪**（从后往前取最长可解析前缀，兜底多余闭合符/截断残留）；每级命中记不同 debug 日志（补全/还原/修剪）。`generateModelFromChat` 的解析块改走容错链。回归测试 10 例（单元：raw/repair/unescape/unescape-repair/trim/畸形 null；集成：多打 `}`、双编码截断、尾部垃圾，复现用户场景）。**约定：改生成解析时保持「先解析、失败才还原/修剪」的顺序——合法 JSON 里的 `\"` 不能碰**；字符串中间截断（`{"a":"b`）仍无法安全恢复（坑 42 保守决策保留），属已知边界。
+
+### 3.24 宽松括号修复（2026-08-13，坑 94：坑 93 修后仍报"JSON 无法解析"）
+
+> 坑 93 的容错链上线后，用户重试「三室一厅一厨」仍报错。新 debug 日志尾部为 `...}}]}]}}}`——合法结尾 `...}}]}]}}]}` 被模型写成「**少一个 `]`、多一个 `}`**」（错配闭合符）。
+
+94. **模型收尾"错配闭合符"（`]` 写成 `}` / 多打 `}`）逃过全部既有容错**（用户反馈，2026-08-13）：`repairTruncatedJson` 遇错配闭合符（栈顶 `[` 却收到 `}`）返回 null；`tryParseModelJson` 的尾部修剪只找"合法前缀"，而错配发生在结构内部、`[`(ops 数组) 一直未闭合——不存在任何合法前缀。三路全灭 → 报错。修复（chat.ts）：新增 **`repairLenientJson`（宽松括号修复）**——字符串感知扫描，**跳过错配/多余的闭合符**（栈空或与栈顶不匹配的 `}`/`]` 直接丢弃），结尾再按括号栈补全缺失闭合符（含尾部逗号/空白剔除）；结果仍须通过 `JSON.parse` 才算数（修复后可能是语义截断的 JSON——比报错强，执行器逐条容错兜底）。接入容错链第 ③ 步（原样 → 截断补全 → **宽松修复** → 双编码还原 → 双编码+修复 → 尾部修剪），命中记「模型回复 JSON 含错配/多余闭合符，已宽松修复」。回归测试 7 例（单元：错配修复/多余闭合跳过/缺闭合补全/字符串未闭合拒绝/字符串内括号；链：错配形态 recovery=lenient；集成：`valid.slice(0,-2)+'}'` 复现用户日志形态成功生成）。
 
 ## 6. 快速文件地图
 
@@ -328,3 +349,8 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | 全屋唯一卫生间公共语义（坑 86）【2026-08-13 用户反馈】 | `lib/roomGeometry.ts`（`computeWallPlan` 的 `bathroomDoorTargets` 预扫描：顶层卫生间计数 + 走廊 > 开放空间 > 邻居 id 最小） |
 | 家具常配套件补全（坑 87）【2026-08-13 用户反馈】 | `lib/furnitureCompleteness.ts`（`completeRoomFurniture`/`hasExcludedCompleteness`，新模块）+ `furniturePlacement.ts`（visitRoom 接入）+ `chat.ts` 提示词第 6 条（自动补齐说明 + description 排除通道） |
 | 渲染共面 z-fighting 审计（坑 88）【2026-08-13 用户反馈】 | `ModelNodeView.tsx`（踢脚线/勒脚端盖内收 `END_CLEAR` 2mm，墙转角不再互掐）+ `lib/furniturePresets.ts`（沙发扶手/靠背/灶台控制条与炉头/浴缸内胆/书架背板/梳妆镜/床头板/水箱/龙头/电视屏逐对错位）+ `furniturePresets.test.ts` 共面审计 61 用例 |
+| 深链接 404 回退（坑 89）【2026-08-13】 | `public/404.html`（路径编码进查询串重定向到首页）+ `index.html` 内联脚本（`?/` 前缀 → `history.replaceState` 还原路径）；改 `vite.config.ts` 的 `base`/仓库名时同步 `pathSegmentsToKeep` |
+| 应用内确认/提示对话框（坑 90）【2026-08-13】 | `components/ui/ConfirmDialog.tsx`（`ConfirmProvider`，挂 `main.tsx`）+ `components/ui/useConfirm.ts`（`useConfirm()`：`confirm`/`alertMessage`，独立文件避 fast-refresh 告警）+ `styles/dialog.css`（`.dialog__message`）；替换 HomePage/useGeneration/ProjectLibraryDialog/ShareDialog/PlanEditLayer 共 10 处 `window.confirm/alert` |
+| localStorage 写入防护（坑 91）【2026-08-13】 | `lib/safeStorage.ts`（`safeLocalStorage: StateStorage`，读写删 try/catch + 一次性 warn）【新增】；五个 store persist 全部改走它（settings/chat/model/project/share），`previewAwareStorage` 复用 |
+| `noUncheckedIndexedAccess` 开启（坑 92）【2026-08-13】 | `tsconfig.json`（`noUncheckedIndexedAccess: true`）；源码/测试共 383 处索引访问收敛（循环边界内与长度守卫处加 `!`，schema 保证的 `levels[0]` 加 `!`） |
+| 生成解析容错链（坑 93/94）【2026-08-13】 | `lib/chat.ts`（`tryParseModelJson` 容错链：原样 → 截断补全 → `repairLenientJson` 宽松括号修复（错配/多余闭合符跳过，坑 94）→ 还原双编码 → 尾部修剪；`unescapeDoubleEncodedJson` 只在解析失败后调用）+ `chat.test.ts` 17 例回归 |

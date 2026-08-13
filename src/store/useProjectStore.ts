@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import { safeLocalStorage } from '../lib/safeStorage'
 import type { SceneModel } from '../types/model'
 
 interface ProjectState {
@@ -48,6 +49,7 @@ export const useProjectStore = create<ProjectState>()(
     }),
     {
       name: 'wordcraft.project',
+      storage: createJSONStorage(() => safeLocalStorage),
       partialize: (s) => ({ currentId: s.currentId, currentName: s.currentName }),
     },
   ),

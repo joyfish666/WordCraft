@@ -5,6 +5,7 @@ import { useT } from '../../i18n'
 import { useShareStore } from '../../store/useShareStore'
 import type { SceneModel } from '../../types/model'
 import { Button } from './Button'
+import { useConfirm } from './useConfirm'
 import { Dialog } from './Dialog'
 
 export interface ShareDialogProps {
@@ -33,6 +34,7 @@ function formatTime(ts: number): string {
  */
 export function ShareDialog({ open, onClose, code, screenshot, onRestore }: ShareDialogProps) {
   const t = useT()
+  const { confirm } = useConfirm()
   const records = useShareStore((s) => s.records)
   const removeRecord = useShareStore((s) => s.removeRecord)
 
@@ -146,7 +148,14 @@ export function ShareDialog({ open, onClose, code, screenshot, onRestore }: Shar
                     title={t('share.delete')}
                     aria-label={t('share.delete')}
                     onClick={() => {
-                      if (window.confirm(t('share.deleteConfirm'))) removeRecord(r.id)
+                      void (async () => {
+                        const ok = await confirm({
+                          title: t('share.deleteTitle'),
+                          message: t('share.deleteConfirm'),
+                          danger: true,
+                        })
+                        if (ok) removeRecord(r.id)
+                      })()
                     }}
                   >
                     ×
