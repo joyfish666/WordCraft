@@ -542,8 +542,8 @@ describe('墙段坐标与渲染映射（坑 37/坑 41 回归）', () => {
           // 段必须落在边的覆盖范围（足迹边界）内，不允许漂移出房间
           const coverFrom = e.axis === 'x' ? b.minX : b.minZ
           const coverTo = e.axis === 'x' ? b.maxX : b.maxZ
-      expect(world.from).toBeGreaterThanOrEqual(coverFrom - 1e-6)
-      expect(world.to).toBeLessThanOrEqual(coverTo + 1e-6)
+          expect(world.from).toBeGreaterThanOrEqual(coverFrom - 1e-6)
+          expect(world.to).toBeLessThanOrEqual(coverTo + 1e-6)
         }
       }
     }

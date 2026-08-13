@@ -55,11 +55,7 @@ export function GizmoControls({ planMode = false }: GizmoControlsProps) {
     if (!g || !selected) return
     const isMesh = isFurnitureLike(selected)
     const pos = nodePosition(selected)
-    g.position.set(
-      -pos.x,
-      pos.y + (isMesh ? FLOOR_THICKNESS : 0),
-      pos.z,
-    )
+    g.position.set(-pos.x, pos.y + (isMesh ? FLOOR_THICKNESS : 0), pos.z)
     g.scale.set(1, 1, 1)
   }, [selectedId, gizmoMode, selected])
 

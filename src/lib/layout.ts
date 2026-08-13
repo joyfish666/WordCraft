@@ -1,5 +1,11 @@
 import { logDebug } from './debugLog'
-import { footprintBounds, footprintCenter, levelHeight, rectFootprint, translateFootprint } from './footprint'
+import {
+  footprintBounds,
+  footprintCenter,
+  levelHeight,
+  rectFootprint,
+  translateFootprint,
+} from './footprint'
 import { applyFurnitureConventions, doorZoneRect } from './furniturePlacement'
 import { normalizeContainment } from './modelTree'
 import { WALL_THICKNESS, computeDoorZones, isCorridorName } from './roomGeometry'

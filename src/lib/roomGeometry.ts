@@ -363,9 +363,7 @@ export function computeWallPlan(
     } else {
       const corridor = nbs.filter((x) => isCorridorName(x.name))
       targets =
-        corridor.length > 0
-          ? corridor
-          : [...nbs].sort((a, b) => (a.id < b.id ? -1 : 1)).slice(0, 1)
+        corridor.length > 0 ? corridor : [...nbs].sort((a, b) => (a.id < b.id ? -1 : 1)).slice(0, 1)
     }
     bathroomDoorTargets.set(R.id, new Set(targets.map((t) => t.id)))
   }
@@ -505,7 +503,8 @@ function addEntranceDoor(
   let target: RoomNode | undefined
   if (entranceRoomId) {
     // id 优先，未命中回退名称（LLM 常用房间名引用，executor.findRoom 同款）
-    target = rooms.find((r) => r.id === entranceRoomId) ?? rooms.find((r) => r.name === entranceRoomId)
+    target =
+      rooms.find((r) => r.id === entranceRoomId) ?? rooms.find((r) => r.name === entranceRoomId)
   }
   if (!target) {
     const lines = rooms.map(lineOf).filter((l): l is number => l !== null)

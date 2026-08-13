@@ -59,29 +59,28 @@ export function CornerCompassSensor({
 }
 
 /** 右上角罗盘玫瑰（DOM 覆盖层）：四个标签初始居中，由传感器每帧定位到对应方位 */
-export const CornerCompassRose = forwardRef<HTMLDivElement, object>(function CornerCompassRose(
-  _props,
-  ref,
-) {
-  const t = useT()
-  return (
-    <div className="corner-compass" ref={ref} aria-hidden="true">
-      <span className="corner-compass__label corner-compass__label--n" data-dir="n">
-        {t('compass.north')}
-      </span>
-      <span className="corner-compass__label corner-compass__label--e" data-dir="e">
-        {t('compass.east')}
-      </span>
-      <span className="corner-compass__label corner-compass__label--s" data-dir="s">
-        {t('compass.south')}
-      </span>
-      <span className="corner-compass__label corner-compass__label--w" data-dir="w">
-        {t('compass.west')}
-      </span>
-      <span className="corner-compass__cross" />
-    </div>
-  )
-})
+export const CornerCompassRose = forwardRef<HTMLDivElement, object>(
+  function CornerCompassRose(_props, ref) {
+    const t = useT()
+    return (
+      <div className="corner-compass" ref={ref} aria-hidden="true">
+        <span className="corner-compass__label corner-compass__label--n" data-dir="n">
+          {t('compass.north')}
+        </span>
+        <span className="corner-compass__label corner-compass__label--e" data-dir="e">
+          {t('compass.east')}
+        </span>
+        <span className="corner-compass__label corner-compass__label--s" data-dir="s">
+          {t('compass.south')}
+        </span>
+        <span className="corner-compass__label corner-compass__label--w" data-dir="w">
+          {t('compass.west')}
+        </span>
+        <span className="corner-compass__cross" />
+      </div>
+    )
+  },
+)
 
 /**
  * 世界锚定罗盘：N/E/S/W 标签钉在整屋包围盒外沿的四个世界方位（东=世界 +x、北=世界 +z）。

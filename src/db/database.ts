@@ -34,7 +34,9 @@ export async function getProject(id: number): Promise<ProjectRecord | undefined>
 }
 
 /** 新建项目，返回自增 id */
-export async function saveProject(input: Omit<ProjectRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<number> {
+export async function saveProject(
+  input: Omit<ProjectRecord, 'id' | 'createdAt' | 'updatedAt'>,
+): Promise<number> {
   const now = Date.now()
   return db.projects.add({ ...input, createdAt: now, updatedAt: now })
 }

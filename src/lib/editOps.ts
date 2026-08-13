@@ -17,10 +17,7 @@ import type { Dimensions, Position, RoomNode, SceneModel } from '../types/model'
 
 const EPS = 1e-6
 
-function sameFootprint(
-  a: { x: number; z: number }[],
-  b: { x: number; z: number }[],
-): boolean {
+function sameFootprint(a: { x: number; z: number }[], b: { x: number; z: number }[]): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) {
     if (Math.abs(a[i].x - b[i].x) > EPS || Math.abs(a[i].z - b[i].z) > EPS) return false
@@ -62,7 +59,11 @@ export function editDiffToOps(before: SceneModel, after: SceneModel, id: string)
   }
 
   if (beforeNode.type === 'room' && afterNode.type === 'room') {
-    const patch: { name?: string; dimensions?: Partial<Dimensions>; footprint?: typeof afterNode.footprint } = {}
+    const patch: {
+      name?: string
+      dimensions?: Partial<Dimensions>
+      footprint?: typeof afterNode.footprint
+    } = {}
     if (beforeNode.name !== afterNode.name) patch.name = afterNode.name
     if (!sameFootprint(beforeNode.footprint, afterNode.footprint)) {
       patch.footprint = afterNode.footprint
@@ -70,7 +71,11 @@ export function editDiffToOps(before: SceneModel, after: SceneModel, id: string)
     if (beforeNode.height !== afterNode.height) {
       patch.dimensions = { ...patch.dimensions, height: afterNode.height }
     }
-    if (patch.name === undefined && patch.dimensions === undefined && patch.footprint === undefined) {
+    if (
+      patch.name === undefined &&
+      patch.dimensions === undefined &&
+      patch.footprint === undefined
+    ) {
       return []
     }
     return [{ op: 'updateRoom', id, patch }]
@@ -97,7 +102,11 @@ export function editDiffToOps(before: SceneModel, after: SceneModel, id: string)
         z: afterNode.position.z - c.z,
       }
     }
-    if (patch.name === undefined && patch.dimensions === undefined && patch.position === undefined) {
+    if (
+      patch.name === undefined &&
+      patch.dimensions === undefined &&
+      patch.position === undefined
+    ) {
       return []
     }
     return [{ op: 'updateFurniture', roomId: room.id, id, patch }]

@@ -52,8 +52,20 @@ describe('compression（口令压缩）', () => {
             dimensions: { length: 3, width: 3, height: 2.8 },
             position: { x: -1.5, y: 1.4, z: 0.5 },
             children: [
-              { id: 'bed', type: 'furniture', name: '双人床', dimensions: { length: 2, width: 1.5, height: 0.5 }, position: { x: -1.5, y: 0.25, z: 0.5 } },
-              { id: 'wardrobe', type: 'furniture', name: '衣柜', dimensions: { length: 1.2, width: 0.6, height: 2.4 }, position: { x: 0, y: 1.2, z: -0.6 } },
+              {
+                id: 'bed',
+                type: 'furniture',
+                name: '双人床',
+                dimensions: { length: 2, width: 1.5, height: 0.5 },
+                position: { x: -1.5, y: 0.25, z: 0.5 },
+              },
+              {
+                id: 'wardrobe',
+                type: 'furniture',
+                name: '衣柜',
+                dimensions: { length: 1.2, width: 0.6, height: 2.4 },
+                position: { x: 0, y: 1.2, z: -0.6 },
+              },
             ],
           },
           {
@@ -63,7 +75,13 @@ describe('compression（口令压缩）', () => {
             dimensions: { length: 3, width: 3, height: 2.8 },
             position: { x: 1.5, y: 1.4, z: 0.5 },
             children: [
-              { id: 'sofa', type: 'furniture', name: '沙发', dimensions: { length: 2, width: 0.9, height: 0.8 }, position: { x: 1.5, y: 0.4, z: 0.5 } },
+              {
+                id: 'sofa',
+                type: 'furniture',
+                name: '沙发',
+                dimensions: { length: 2, width: 0.9, height: 0.8 },
+                position: { x: 1.5, y: 0.4, z: 0.5 },
+              },
             ],
           },
         ],

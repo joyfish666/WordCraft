@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { footprintBounds, footprintCenter, houseLevelsBounds, roomCenter, roomDims } from './footprint'
+import {
+  footprintBounds,
+  footprintCenter,
+  houseLevelsBounds,
+  roomCenter,
+  roomDims,
+} from './footprint'
 import { doorZoneRect } from './furniturePlacement'
 import { diffSceneV2, emptyScene, executeOps, findRoom } from './executor'
 import { findNodeById } from './modelTree'
-import { DOOR_WIDTH, edgeOf, computeWallPlan, computeAllWallPlans, computeDoorZones } from './roomGeometry'
+import {
+  DOOR_WIDTH,
+  edgeOf,
+  computeWallPlan,
+  computeAllWallPlans,
+  computeDoorZones,
+} from './roomGeometry'
 import type { FurnitureNode, RoomNode, SceneModel, SceneModelV2 } from '../types/model'
 import type { Op } from '../types/ops'
 
@@ -123,7 +135,10 @@ describe('executeOps - macro 整体布局', () => {
         const ab = footprintBounds(a.footprint)
         const bb = footprintBounds(b.footprint)
         const overlap =
-          ab.minX < bb.maxX - 1e-6 && ab.maxX > bb.minX + 1e-6 && ab.minZ < bb.maxZ - 1e-6 && ab.maxZ > bb.minZ + 1e-6
+          ab.minX < bb.maxX - 1e-6 &&
+          ab.maxX > bb.minX + 1e-6 &&
+          ab.minZ < bb.maxZ - 1e-6 &&
+          ab.maxZ > bb.minZ + 1e-6
         expect(overlap).toBe(false)
       }
     }
@@ -136,12 +151,17 @@ describe('executeOps - macro 整体布局', () => {
         name: 'custom',
         params: {
           name: '书房工作室',
-          rooms: [
-            { name: '书房工作室', dimensions: { length: 5, width: 4, height: 2.8 } },
-          ],
+          rooms: [{ name: '书房工作室', dimensions: { length: 5, width: 4, height: 2.8 } }],
         },
       },
-      { op: 'setOpenings', roomId: '书房工作室', side: 'south', kind: 'window', from: 0.5, to: 4.5 },
+      {
+        op: 'setOpenings',
+        roomId: '书房工作室',
+        side: 'south',
+        kind: 'window',
+        from: 0.5,
+        to: 4.5,
+      },
       { op: 'setHouse', entranceRoomId: '书房工作室', entranceDir: 'south' },
     ])
     // setOpenings 按名称命中：南墙出现窗段
@@ -449,9 +469,24 @@ describe('executeOps - 房间增删改', () => {
           name: '示例房',
           corridor: { width: 1.2, entranceRoomId: 'living' },
           rooms: [
-            { id: 'living', name: '客厅', side: 'left', dimensions: { length: 5, width: 4, height: 2.8 } },
-            { id: 'master', name: '主卧', side: 'right', dimensions: { length: 4, width: 3.5, height: 2.8 } },
-            { id: 'bed2', name: '次卧', side: 'right', dimensions: { length: 3.5, width: 3, height: 2.8 } },
+            {
+              id: 'living',
+              name: '客厅',
+              side: 'left',
+              dimensions: { length: 5, width: 4, height: 2.8 },
+            },
+            {
+              id: 'master',
+              name: '主卧',
+              side: 'right',
+              dimensions: { length: 4, width: 3.5, height: 2.8 },
+            },
+            {
+              id: 'bed2',
+              name: '次卧',
+              side: 'right',
+              dimensions: { length: 3.5, width: 3, height: 2.8 },
+            },
           ],
         },
       },
@@ -480,8 +515,18 @@ describe('executeOps - 房间增删改', () => {
           name: '示例房',
           corridor: { width: 1.2, entranceRoomId: 'living' },
           rooms: [
-            { id: 'living', name: '客厅', side: 'left', dimensions: { length: 5, width: 4, height: 2.8 } },
-            { id: 'master', name: '主卧', side: 'right', dimensions: { length: 4, width: 3.5, height: 2.8 } },
+            {
+              id: 'living',
+              name: '客厅',
+              side: 'left',
+              dimensions: { length: 5, width: 4, height: 2.8 },
+            },
+            {
+              id: 'master',
+              name: '主卧',
+              side: 'right',
+              dimensions: { length: 4, width: 3.5, height: 2.8 },
+            },
           ],
         },
       },
@@ -544,7 +589,9 @@ describe('executeOps - 房间增删改', () => {
               name: '主卧',
               dimensions: { length: 4, width: 3.5, height: 2.8 },
               position: { x: 0, y: 1.4, z: 0 },
-              furniture: [{ id: 'bed', name: '双人床', dimensions: { length: 2, width: 1.5, height: 0.5 } }],
+              furniture: [
+                { id: 'bed', name: '双人床', dimensions: { length: 2, width: 1.5, height: 0.5 } },
+              ],
             },
             {
               id: 'bath',
@@ -552,7 +599,12 @@ describe('executeOps - 房间增删改', () => {
               dimensions: { length: 2, width: 1.8, height: 2.8 },
               position: { x: 5, y: 1.4, z: 0 },
               furniture: [
-                { id: 'toilet', name: '马桶', dimensions: { length: 0.6, width: 0.4, height: 0.7 }, position: { x: 0.55, y: 0.35, z: 0.5 } },
+                {
+                  id: 'toilet',
+                  name: '马桶',
+                  dimensions: { length: 0.6, width: 0.4, height: 0.7 },
+                  position: { x: 0.55, y: 0.35, z: 0.5 },
+                },
               ],
             },
           ],
@@ -620,7 +672,10 @@ describe('executeOps - 房间增删改', () => {
     }).get('master')!
     for (const z of zones.map((zone) => doorZoneRect(master, zone))) {
       const overlapsZone =
-        bb.minX < z.maxX - 1e-6 && bb.maxX > z.minX + 1e-6 && bb.minZ < z.maxZ - 1e-6 && bb.maxZ > z.minZ + 1e-6
+        bb.minX < z.maxX - 1e-6 &&
+        bb.maxX > z.minX + 1e-6 &&
+        bb.minZ < z.maxZ - 1e-6 &&
+        bb.maxZ > z.minZ + 1e-6
       expect(overlapsZone).toBe(false)
     }
   })
@@ -632,8 +687,18 @@ describe('executeOps - 房间增删改', () => {
         name: 'custom',
         params: {
           rooms: [
-            { id: 'a', name: '房A', dimensions: { length: 4, width: 3, height: 2.8 }, position: { x: 0, y: 1.4, z: 0 } },
-            { id: 'b', name: '房B', dimensions: { length: 2, width: 2, height: 2.8 }, position: { x: 6, y: 1.4, z: 0 } },
+            {
+              id: 'a',
+              name: '房A',
+              dimensions: { length: 4, width: 3, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+            },
+            {
+              id: 'b',
+              name: '房B',
+              dimensions: { length: 2, width: 2, height: 2.8 },
+              position: { x: 6, y: 1.4, z: 0 },
+            },
           ],
         },
       },
@@ -664,7 +729,12 @@ describe('executeOps - 房间增删改', () => {
               dimensions: { length: 4, width: 3, height: 2.8 },
               position: { x: 0, y: 1.4, z: 0 },
               nestedRooms: [
-                { id: 'bath', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 }, side: 'north' },
+                {
+                  id: 'bath',
+                  name: '主卧卫生间',
+                  dimensions: { length: 2, width: 1.8, height: 2.8 },
+                  side: 'north',
+                },
               ],
             },
           ],
@@ -696,14 +766,24 @@ describe('executeOps - 房间增删改', () => {
           name: '示例房',
           corridor: { width: 1.2, entranceRoomId: 'living' },
           rooms: [
-            { id: 'living', name: '客厅', side: 'left', dimensions: { length: 5, width: 4, height: 2.8 } },
+            {
+              id: 'living',
+              name: '客厅',
+              side: 'left',
+              dimensions: { length: 5, width: 4, height: 2.8 },
+            },
             {
               id: 'master',
               name: '主卧',
               side: 'right',
               dimensions: { length: 4, width: 3.5, height: 2.8 },
               nestedRooms: [
-                { id: 'bath', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 }, side: 'north' },
+                {
+                  id: 'bath',
+                  name: '主卧卫生间',
+                  dimensions: { length: 2, width: 1.8, height: 2.8 },
+                  side: 'north',
+                },
               ],
             },
           ],
@@ -722,7 +802,11 @@ describe('executeOps - 房间增删改', () => {
     for (const r of topRooms(scene)) {
       if (r.id === 'bath') continue
       const rb = footprintBounds(r.footprint)
-      const o = bb.minX < rb.maxX - 1e-6 && bb.maxX > rb.minX + 1e-6 && bb.minZ < rb.maxZ - 1e-6 && bb.maxZ > rb.minZ + 1e-6
+      const o =
+        bb.minX < rb.maxX - 1e-6 &&
+        bb.maxX > rb.minX + 1e-6 &&
+        bb.minZ < rb.maxZ - 1e-6 &&
+        bb.maxZ > rb.minZ + 1e-6
       expect(o).toBe(false)
     }
   })
@@ -736,8 +820,18 @@ describe('executeOps - 房间增删改', () => {
           name: '示例房',
           corridor: { width: 1.2, entranceRoomId: 'living' },
           rooms: [
-            { id: 'living', name: '客厅', side: 'left', dimensions: { length: 5, width: 4, height: 2.8 } },
-            { id: 'master', name: '主卧', side: 'right', dimensions: { length: 4, width: 3.5, height: 2.8 } },
+            {
+              id: 'living',
+              name: '客厅',
+              side: 'left',
+              dimensions: { length: 5, width: 4, height: 2.8 },
+            },
+            {
+              id: 'master',
+              name: '主卧',
+              side: 'right',
+              dimensions: { length: 4, width: 3.5, height: 2.8 },
+            },
           ],
         },
       },
@@ -764,7 +858,11 @@ describe('executeOps - 房间增删改', () => {
     for (const r of topRooms(scene)) {
       if (r.id === 'new') continue
       const rb = footprintBounds(r.footprint)
-      const o = nb.minX < rb.maxX - 1e-6 && nb.maxX > rb.minX + 1e-6 && nb.minZ < rb.maxZ - 1e-6 && nb.maxZ > rb.minZ + 1e-6
+      const o =
+        nb.minX < rb.maxX - 1e-6 &&
+        nb.maxX > rb.minX + 1e-6 &&
+        nb.minZ < rb.maxZ - 1e-6 &&
+        nb.maxZ > rb.minZ + 1e-6
       expect(o).toBe(false)
     }
   })
@@ -781,7 +879,13 @@ describe('executeOps - 房间增删改', () => {
               name: '主卧',
               dimensions: { length: 4, width: 3.5, height: 2.8 },
               position: { x: 0, y: 1.4, z: 0 },
-              nestedRooms: [{ id: 'bath', name: '主卧卫生间', dimensions: { length: 2, width: 1.8, height: 2.8 } }],
+              nestedRooms: [
+                {
+                  id: 'bath',
+                  name: '主卧卫生间',
+                  dimensions: { length: 2, width: 1.8, height: 2.8 },
+                },
+              ],
             },
             {
               id: 'bed2',
@@ -809,19 +913,44 @@ describe('executeOps - 房间增删改', () => {
           name: '三室一厅两卫一厨',
           corridor: { width: 1.2, entranceRoomId: '客厅' },
           rooms: [
-            { id: '客厅', name: '客厅', side: 'left', dimensions: { length: 5, width: 4, height: 2.8 } },
+            {
+              id: '客厅',
+              name: '客厅',
+              side: 'left',
+              dimensions: { length: 5, width: 4, height: 2.8 },
+            },
             {
               id: '主卧',
               name: '主卧',
               side: 'left',
               dimensions: { length: 4, width: 3.5, height: 2.8 },
               furniture: [
-                { id: 'bed', name: '双人床', dimensions: { length: 2, width: 1.5, height: 0.5 }, position: { x: 0, y: 0.25, z: -0.8 } },
-                { id: 'stand', name: '床头柜', dimensions: { length: 0.5, width: 0.4, height: 0.5 }, position: { x: 1.2, y: 0.25, z: -0.8 } },
+                {
+                  id: 'bed',
+                  name: '双人床',
+                  dimensions: { length: 2, width: 1.5, height: 0.5 },
+                  position: { x: 0, y: 0.25, z: -0.8 },
+                },
+                {
+                  id: 'stand',
+                  name: '床头柜',
+                  dimensions: { length: 0.5, width: 0.4, height: 0.5 },
+                  position: { x: 1.2, y: 0.25, z: -0.8 },
+                },
               ],
             },
-            { id: '主卧卫生间', name: '主卧卫生间', side: 'left', dimensions: { length: 2, width: 1.8, height: 2.8 } },
-            { id: '次卧', name: '次卧', side: 'right', dimensions: { length: 3.5, width: 3, height: 2.8 } },
+            {
+              id: '主卧卫生间',
+              name: '主卧卫生间',
+              side: 'left',
+              dimensions: { length: 2, width: 1.8, height: 2.8 },
+            },
+            {
+              id: '次卧',
+              name: '次卧',
+              side: 'right',
+              dimensions: { length: 3.5, width: 3, height: 2.8 },
+            },
           ],
         },
       },
@@ -843,7 +972,10 @@ describe('executeOps - 房间增删改', () => {
     }).get('主卧')!
     for (const z of zones.map((zone) => doorZoneRect(master, zone))) {
       const overlapsZone =
-        bb.minX < z.maxX - 1e-6 && bb.maxX > z.minX + 1e-6 && bb.minZ < z.maxZ - 1e-6 && bb.maxZ > z.minZ + 1e-6
+        bb.minX < z.maxX - 1e-6 &&
+        bb.maxX > z.minX + 1e-6 &&
+        bb.minZ < z.maxZ - 1e-6 &&
+        bb.maxZ > z.minZ + 1e-6
       expect(overlapsZone).toBe(false)
     }
     // 家具与卫生间占地互不重叠
@@ -854,7 +986,11 @@ describe('executeOps - 房间增删改', () => {
         minZ: f.position.z - f.dimensions.width / 2,
         maxZ: f.position.z + f.dimensions.width / 2,
       }
-      const o = fb.minX < bb.maxX - 1e-6 && fb.maxX > bb.minX + 1e-6 && fb.minZ < bb.maxZ - 1e-6 && fb.maxZ > bb.minZ + 1e-6
+      const o =
+        fb.minX < bb.maxX - 1e-6 &&
+        fb.maxX > bb.minX + 1e-6 &&
+        fb.minZ < bb.maxZ - 1e-6 &&
+        fb.maxZ > bb.minZ + 1e-6
       expect(o).toBe(false)
     }
   })
@@ -1107,12 +1243,28 @@ describe('executeOps - 开洞（setOpenings）', () => {
     ])
     // 区间不重叠 → 不动
     const s0 = executeOps(base, [
-      { op: 'setOpenings', roomId: 'r', side: 'south', kind: 'window', from: 0.0, to: 0.5, remove: true },
+      {
+        op: 'setOpenings',
+        roomId: 'r',
+        side: 'south',
+        kind: 'window',
+        from: 0.0,
+        to: 0.5,
+        remove: true,
+      },
     ]).scene
     expect((findNodeById(s0.root, 'r') as RoomNode).windows).toHaveLength(1)
     // 区间重叠 → 只删命中者
     const s1 = executeOps(base, [
-      { op: 'setOpenings', roomId: 'r', side: 'south', kind: 'window', from: 3.0, to: 4.5, remove: true },
+      {
+        op: 'setOpenings',
+        roomId: 'r',
+        side: 'south',
+        kind: 'window',
+        from: 3.0,
+        to: 4.5,
+        remove: true,
+      },
     ]).scene
     const r1 = findNodeById(s1.root, 'r') as RoomNode
     expect(r1.windows).toHaveLength(0)
@@ -1142,7 +1294,12 @@ describe('executeOps - 拆房/合并（P4 splitRoom / mergeRoom）', () => {
               dimensions: { length: 4, width: 3, height: 2.8 },
               position: { x: 0, y: 1.4, z: 0 },
               furniture: [
-                { id: 'sofa', name: '沙发', dimensions: { length: 2, width: 0.9, height: 0.9 }, position: { x: -1, y: 0.45, z: 0 } },
+                {
+                  id: 'sofa',
+                  name: '沙发',
+                  dimensions: { length: 2, width: 0.9, height: 0.9 },
+                  position: { x: -1, y: 0.45, z: 0 },
+                },
               ],
               nestedRooms: [
                 {
@@ -1196,9 +1353,7 @@ describe('executeOps - 拆房/合并（P4 splitRoom / mergeRoom）', () => {
     // 原东墙门保留在 b（东墙 x=2 归 b）
     expect(b.doors.some((d) => d.edgeIndex === 1)).toBe(true)
     // 共墙自动开一扇门（渲染侧：客厅 id 'r' vs 客厅2 → 按 id 最小者渲染，门开在 a 的东墙或 b 的西墙）
-    const sharedDoor = [...a.doors, ...b.doors].find(
-      (d) => d.edgeIndex === 1 || d.edgeIndex === 3,
-    )!
+    const sharedDoor = [...a.doors, ...b.doors].find((d) => d.edgeIndex === 1 || d.edgeIndex === 3)!
     expect(sharedDoor.width).toBeCloseTo(0.9, 5)
     // 渲染覆盖层生效：共墙上有门段
     const plan = computeAllWallPlans(topRooms(scene), { entrance: 'south' })
@@ -1218,11 +1373,19 @@ describe('executeOps - 拆房/合并（P4 splitRoom / mergeRoom）', () => {
     const b = rooms.find((x) => x.id !== 'r')!
     expect(b.name).toBe('南厅')
     // a = 南半 3×1.5，b = 北半 3×1.5
-    expect(footprintBounds(a.footprint).maxZ - footprintBounds(a.footprint).minZ).toBeCloseTo(1.5, 5)
-    expect(footprintBounds(b.footprint).maxZ - footprintBounds(b.footprint).minZ).toBeCloseTo(1.5, 5)
+    expect(footprintBounds(a.footprint).maxZ - footprintBounds(a.footprint).minZ).toBeCloseTo(
+      1.5,
+      5,
+    )
+    expect(footprintBounds(b.footprint).maxZ - footprintBounds(b.footprint).minZ).toBeCloseTo(
+      1.5,
+      5,
+    )
     expect(footprintBounds(a.footprint).maxZ).toBeCloseTo(footprintBounds(b.footprint).minZ, 5)
     // 切线太靠边（距西墙 0.1 < 1m）→ 跳过
-    const bad = executeOps(baseRoomScene(), [{ op: 'splitRoom', id: 'r', axis: 'x', position: -1.9 }])
+    const bad = executeOps(baseRoomScene(), [
+      { op: 'splitRoom', id: 'r', axis: 'x', position: -1.9 },
+    ])
     expect(bad.skipped.length).toBe(1)
     expect(topRooms(bad.scene)).toHaveLength(1)
     // 非矩形房间 → 跳过
@@ -1265,7 +1428,12 @@ describe('executeOps - 拆房/合并（P4 splitRoom / mergeRoom）', () => {
               dimensions: { length: 3, width: 3, height: 2.8 },
               position: { x: -1.5, y: 1.4, z: 0 },
               furniture: [
-                { id: 'sofa', name: '沙发', dimensions: { length: 2, width: 0.9, height: 0.9 }, position: { x: -0.5, y: 0.45, z: 0 } },
+                {
+                  id: 'sofa',
+                  name: '沙发',
+                  dimensions: { length: 2, width: 0.9, height: 0.9 },
+                  position: { x: -0.5, y: 0.45, z: 0 },
+                },
               ],
             },
             {
@@ -1274,7 +1442,12 @@ describe('executeOps - 拆房/合并（P4 splitRoom / mergeRoom）', () => {
               dimensions: { length: 3, width: 3, height: 2.8 },
               position: { x: 1.5, y: 1.4, z: 0 },
               furniture: [
-                { id: 'table', name: '餐桌', dimensions: { length: 1.2, width: 0.8, height: 0.75 }, position: { x: 0.5, y: 0.375, z: 0 } },
+                {
+                  id: 'table',
+                  name: '餐桌',
+                  dimensions: { length: 1.2, width: 0.8, height: 0.75 },
+                  position: { x: 0.5, y: 0.375, z: 0 },
+                },
               ],
             },
           ],
@@ -1401,7 +1574,9 @@ describe('executeOps - 拆房/合并（P4 splitRoom / mergeRoom）', () => {
     // 拆分嵌套房间：卫生间竖切（其中心 x≈1.45）
     const bath = findNodeById(scene.root, 'bath') as RoomNode
     const bc = footprintCenter(bath.footprint)
-    const split = executeOps(scene, [{ op: 'splitRoom', id: 'bath', axis: 'x', position: bc.x }]).scene
+    const split = executeOps(scene, [
+      { op: 'splitRoom', id: 'bath', axis: 'x', position: bc.x },
+    ]).scene
     const bedroom = findNodeById(split.root, 'bedroom') as RoomNode
     expect(bedroom.nestedRooms).toHaveLength(2)
     expect(bedroom.nestedRooms.some((n) => n.id === 'bath')).toBe(true)
@@ -1425,8 +1600,18 @@ describe('executeOps - setHouse / 约束兜底 / 楼层高度', () => {
           name: '入口房',
           corridor: { width: 1.2, entranceRoomId: 'living' },
           rooms: [
-            { id: 'living', name: '客厅', side: 'left', dimensions: { length: 4, width: 3, height: 2.8 } },
-            { id: 'kitchen', name: '厨房', side: 'left', dimensions: { length: 4, width: 3, height: 2.8 } },
+            {
+              id: 'living',
+              name: '客厅',
+              side: 'left',
+              dimensions: { length: 4, width: 3, height: 2.8 },
+            },
+            {
+              id: 'kitchen',
+              name: '厨房',
+              side: 'left',
+              dimensions: { length: 4, width: 3, height: 2.8 },
+            },
           ],
         },
       },
@@ -1434,8 +1619,13 @@ describe('executeOps - setHouse / 约束兜底 / 楼层高度', () => {
     ])
     expect(scene.root.entranceRoomId).toBe('kitchen')
     // 入户门渲染在厨房南外墙
-    const plan = computeWallPlan(topRooms(scene), { entrance: 'south', entranceRoomId: scene.root.entranceRoomId })
-    expect(edgeOf(plan.get('kitchen')!, 'south')!.segments.some((s) => s.kind === 'door' && s.entrance)).toBe(true)
+    const plan = computeWallPlan(topRooms(scene), {
+      entrance: 'south',
+      entranceRoomId: scene.root.entranceRoomId,
+    })
+    expect(
+      edgeOf(plan.get('kitchen')!, 'south')!.segments.some((s) => s.kind === 'door' && s.entrance),
+    ).toBe(true)
     expect(edgeOf(plan.get('living')!, 'south')!.segments.some((s) => s.entrance)).toBe(false)
   })
 
@@ -1457,8 +1647,18 @@ describe('executeOps - setHouse / 约束兜底 / 楼层高度', () => {
           name: '入口房',
           corridor: { width: 1.2, entranceRoomId: 'living' },
           rooms: [
-            { id: 'living', name: '客厅', side: 'left', dimensions: { length: 4, width: 3, height: 2.8 } },
-            { id: 'kitchen', name: '厨房', side: 'left', dimensions: { length: 4, width: 3, height: 2.8 } },
+            {
+              id: 'living',
+              name: '客厅',
+              side: 'left',
+              dimensions: { length: 4, width: 3, height: 2.8 },
+            },
+            {
+              id: 'kitchen',
+              name: '厨房',
+              side: 'left',
+              dimensions: { length: 4, width: 3, height: 2.8 },
+            },
           ],
         },
       },
@@ -1487,7 +1687,12 @@ describe('executeOps - setHouse / 约束兜底 / 楼层高度', () => {
           name: '入口房',
           corridor: { width: 1.2, entranceRoomId: 'living' },
           rooms: [
-            { id: 'living', name: '客厅', side: 'left', dimensions: { length: 4, width: 3, height: 2.8 } },
+            {
+              id: 'living',
+              name: '客厅',
+              side: 'left',
+              dimensions: { length: 4, width: 3, height: 2.8 },
+            },
           ],
         },
       },
@@ -1505,7 +1710,14 @@ describe('executeOps - setHouse / 约束兜底 / 楼层高度', () => {
         params: {
           name: '入口房',
           corridor: { width: 1.2, entranceRoomId: 'living' },
-          rooms: [{ id: 'living', name: '客厅', side: 'left', dimensions: { length: 4, width: 3, height: 2.8 } }],
+          rooms: [
+            {
+              id: 'living',
+              name: '客厅',
+              side: 'left',
+              dimensions: { length: 4, width: 3, height: 2.8 },
+            },
+          ],
         },
       },
       { op: 'setHouse', entranceDir: 'west' },
@@ -1515,7 +1727,14 @@ describe('executeOps - setHouse / 约束兜底 / 楼层高度', () => {
         params: {
           name: '入口房2',
           corridor: { width: 1.2, entranceRoomId: 'living' },
-          rooms: [{ id: 'living', name: '客厅', side: 'left', dimensions: { length: 4, width: 3, height: 2.8 } }],
+          rooms: [
+            {
+              id: 'living',
+              name: '客厅',
+              side: 'left',
+              dimensions: { length: 4, width: 3, height: 2.8 },
+            },
+          ],
         },
       },
     ])
@@ -1857,18 +2076,14 @@ describe('executeOps - 按名称引用（坑 71：findRoom 名称回退与 id-on
   })
 
   it('moveRoom 名称引用指向自身时失败跳过（相对引用与 id 引用等价）', () => {
-    const result = executeOps(
-      baseScene(),
-      [{ op: 'moveRoom', id: '房A', relativeTo: { roomId: '房A', dir: 'north' } }],
-    )
+    const result = executeOps(baseScene(), [
+      { op: 'moveRoom', id: '房A', relativeTo: { roomId: '房A', dir: 'north' } },
+    ])
     expect(result.skipped.length).toBe(1)
   })
 
   it('splitRoom 按名称引用：拆分真正生效（新房间名 = 原名2）', () => {
-    const scene = run(
-      [{ op: 'splitRoom', id: '房A', axis: 'x', position: 0 }],
-      baseScene(),
-    )
+    const scene = run([{ op: 'splitRoom', id: '房A', axis: 'x', position: 0 }], baseScene())
     const a = findNodeById(scene.root, 'a') as RoomNode
     expect(a).not.toBeNull()
     const newRoom = topRooms(scene).find((r) => r.name === '房A2') as RoomNode
@@ -1901,10 +2116,7 @@ describe('executeOps - 按名称引用（坑 71：findRoom 名称回退与 id-on
         },
       },
     ])
-    const scene = run(
-      [{ op: 'mergeRoom', keep: '房A', remove: '房B' }],
-      adjacent,
-    )
+    const scene = run([{ op: 'mergeRoom', keep: '房A', remove: '房B' }], adjacent)
     const a = findNodeById(scene.root, 'a') as RoomNode
     expect(a).not.toBeNull()
     expect(a.name).toBe('房A')

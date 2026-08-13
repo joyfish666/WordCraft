@@ -279,10 +279,7 @@ export const MIN_DIM_SIDE = 2
  * 向内偏移 offset（应大于墙厚），端部刻度与文案由渲染层绘制。
  * 尺寸过小的边（< MIN_DIM_SIDE）跳过。
  */
-export function roomDimLines(
-  room: RoomNode,
-  opts: { y: number; offset?: number },
-): DimLine[] {
+export function roomDimLines(room: RoomNode, opts: { y: number; offset?: number }): DimLine[] {
   const { y, offset = 0.4 } = opts
   const b = footprintBounds(room.footprint)
   const len = b.maxX - b.minX

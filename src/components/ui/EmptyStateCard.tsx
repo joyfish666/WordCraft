@@ -30,7 +30,12 @@ export function EmptyStateCard({ hasApiKey, onExample, onLoadSample }: EmptyStat
       <p className="empty-card__desc">{t('home.emptyDesc')}</p>
       <div className="empty-card__chips">
         {EXAMPLES.map((ex) => (
-          <button key={ex.prompt} type="button" className="chip" onClick={() => onExample(t(ex.prompt))}>
+          <button
+            key={ex.prompt}
+            type="button"
+            className="chip"
+            onClick={() => onExample(t(ex.prompt))}
+          >
             {t(ex.label)}
           </button>
         ))}

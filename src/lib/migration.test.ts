@@ -21,8 +21,20 @@ function v1Model(): unknown {
           dimensions: { length: 6, width: 4.5, height: 2.8 },
           position: { x: -2.25, y: 1.4, z: -2.35 },
           children: [
-            { id: 'sofa', type: 'furniture', name: '沙发', dimensions: { length: 2.2, width: 0.9, height: 0.8 }, position: { x: -2, y: 0.4, z: -1.5 } },
-            { id: 'wall1', type: 'wall', name: '隔断', dimensions: { length: 1, width: 0.2, height: 2.8 }, position: { x: 0, y: 1.4, z: 0 } },
+            {
+              id: 'sofa',
+              type: 'furniture',
+              name: '沙发',
+              dimensions: { length: 2.2, width: 0.9, height: 0.8 },
+              position: { x: -2, y: 0.4, z: -1.5 },
+            },
+            {
+              id: 'wall1',
+              type: 'wall',
+              name: '隔断',
+              dimensions: { length: 1, width: 0.2, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+            },
           ],
         },
         {
@@ -32,14 +44,28 @@ function v1Model(): unknown {
           dimensions: { length: 4, width: 3.5, height: 2.8 },
           position: { x: 3.5, y: 1.4, z: 2.35 },
           children: [
-            { id: 'bed', type: 'furniture', name: '双人床', dimensions: { length: 2, width: 1.5, height: 0.5 }, position: { x: 0, y: 0.25, z: 0 } },
+            {
+              id: 'bed',
+              type: 'furniture',
+              name: '双人床',
+              dimensions: { length: 2, width: 1.5, height: 0.5 },
+              position: { x: 0, y: 0.25, z: 0 },
+            },
             {
               id: 'bath',
               type: 'room',
               name: '主卧卫生间',
               dimensions: { length: 2, width: 1.8, height: 2.8 },
               position: { x: 4.5, y: 1.4, z: 3.2 },
-              children: [{ id: 'toilet', type: 'furniture', name: '马桶', dimensions: { length: 0.6, width: 0.4, height: 0.7 }, position: { x: 0, y: 0.35, z: 0 } }],
+              children: [
+                {
+                  id: 'toilet',
+                  type: 'furniture',
+                  name: '马桶',
+                  dimensions: { length: 0.6, width: 0.4, height: 0.7 },
+                  position: { x: 0, y: 0.35, z: 0 },
+                },
+              ],
             },
           ],
         },
@@ -93,7 +119,10 @@ describe('migrateModel（v1 → v3）', () => {
   })
 
   it('v3 输入原样返回（引用不变）', () => {
-    const v3: SceneModel = { version: 3, root: { id: 'h', type: 'house', name: '屋', levels: [{ id: 'l1', height: 2.8, rooms: [] }] } }
+    const v3: SceneModel = {
+      version: 3,
+      root: { id: 'h', type: 'house', name: '屋', levels: [{ id: 'l1', height: 2.8, rooms: [] }] },
+    }
     expect(migrateModel(v3)).toBe(v3)
   })
 

@@ -172,21 +172,32 @@ describe('包围盒约束（四朝向）', () => {
     ['大微波炉', 'microwave', 0.65, 0.32, 0.4],
   ]
 
-  it.each(SIZES)('%s：四朝向部件水平均在足迹内、底面贴地、顶部允许向上悬挑', (_label, kind, L, H, W) => {
-    const facings = ['north', 'south', 'east', 'west'] as const
-    for (const facing of facings) {
-      for (const p of buildFurnitureParts(kind, L, H, W, facing)) {
-        // 水平（x/z）必须钳制在 L×W 足迹内（墙碰撞/Gizmo 按足迹算）
-        expect(p.center[0] - p.size[0] / 2, `facing=${facing}`).toBeGreaterThanOrEqual(-L / 2 - 1e-6)
-        expect(p.center[0] + p.size[0] / 2, `facing=${facing}`).toBeLessThanOrEqual(L / 2 + 1e-6)
-        expect(p.center[2] - p.size[2] / 2, `facing=${facing}`).toBeGreaterThanOrEqual(-W / 2 - 1e-6)
-        expect(p.center[2] + p.size[2] / 2, `facing=${facing}`).toBeLessThanOrEqual(W / 2 + 1e-6)
-        // 竖直：底面必须贴地；顶部允许向上悬挑（电视屏等，上方无墙不影响碰撞）
-        expect(p.center[1] - p.size[1] / 2, `facing=${facing}`).toBeGreaterThanOrEqual(-H / 2 - 1e-6)
-        expect(p.center[1] + p.size[1] / 2, `facing=${facing}`).toBeLessThanOrEqual(H / 2 + 2 * H + 1e-6)
+  it.each(SIZES)(
+    '%s：四朝向部件水平均在足迹内、底面贴地、顶部允许向上悬挑',
+    (_label, kind, L, H, W) => {
+      const facings = ['north', 'south', 'east', 'west'] as const
+      for (const facing of facings) {
+        for (const p of buildFurnitureParts(kind, L, H, W, facing)) {
+          // 水平（x/z）必须钳制在 L×W 足迹内（墙碰撞/Gizmo 按足迹算）
+          expect(p.center[0] - p.size[0] / 2, `facing=${facing}`).toBeGreaterThanOrEqual(
+            -L / 2 - 1e-6,
+          )
+          expect(p.center[0] + p.size[0] / 2, `facing=${facing}`).toBeLessThanOrEqual(L / 2 + 1e-6)
+          expect(p.center[2] - p.size[2] / 2, `facing=${facing}`).toBeGreaterThanOrEqual(
+            -W / 2 - 1e-6,
+          )
+          expect(p.center[2] + p.size[2] / 2, `facing=${facing}`).toBeLessThanOrEqual(W / 2 + 1e-6)
+          // 竖直：底面必须贴地；顶部允许向上悬挑（电视屏等，上方无墙不影响碰撞）
+          expect(p.center[1] - p.size[1] / 2, `facing=${facing}`).toBeGreaterThanOrEqual(
+            -H / 2 - 1e-6,
+          )
+          expect(p.center[1] + p.size[1] / 2, `facing=${facing}`).toBeLessThanOrEqual(
+            H / 2 + 2 * H + 1e-6,
+          )
+        }
       }
-    }
-  })
+    },
+  )
 })
 
 describe('朝向', () => {
@@ -212,7 +223,10 @@ describe('朝向', () => {
 })
 
 describe('facingFromRoom', () => {
-  const room = { position: { x: 0, y: 1.4, z: 0 }, dimensions: { length: 4, width: 4, height: 2.8 } }
+  const room = {
+    position: { x: 0, y: 1.4, z: 0 },
+    dimensions: { length: 4, width: 4, height: 2.8 },
+  }
   // 长边沿 x（L=2 > W=0.9）：短轴 z，由南北墙距离决定
   const longX = (x: number, z: number) => ({
     position: { x, y: 0.4, z },
@@ -242,7 +256,9 @@ describe('facingFromRoom', () => {
     }
     expect(facingFromRoom(corner, room)).toBe('east')
     // 门应跨长轴 z（大面）、朝西（房间内），且门宽覆盖大面大部分
-    const doors = buildFurnitureParts('wardrobe', 0.9, 2.4, 2, 'east').filter((p) => p.shade === 'dark')
+    const doors = buildFurnitureParts('wardrobe', 0.9, 2.4, 2, 'east').filter(
+      (p) => p.shade === 'dark',
+    )
     expect(doors).toHaveLength(2)
     expect(doors.every((d) => d.center[0] < 0)).toBe(true) // 西侧
     expect(doors[0].size[2]).toBeGreaterThan(0.8) // 沿 z 跨度 ≈ 大面宽的一半

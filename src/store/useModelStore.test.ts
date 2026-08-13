@@ -67,13 +67,9 @@ describe('useModelStore', () => {
     const original = furnitureById('bed-master').position
     useModelStore.getState().selectNode('bed-master')
     useModelStore.getState().translateSelected(2, 1, 0)
-    expect(furnitureById('bed-master').position.x).not.toBe(
-      original.x,
-    )
+    expect(furnitureById('bed-master').position.x).not.toBe(original.x)
     useModelStore.getState().resetSelectedPosition()
-    expect(furnitureById('bed-master').position).toEqual(
-      original,
-    )
+    expect(furnitureById('bed-master').position).toEqual(original)
   })
 
   it('setFocus / setStepSize 状态可独立设置', () => {
@@ -363,7 +359,15 @@ describe('useModelStore 平面图编辑（P4）', () => {
     useModelStore.getState().setScene(createSampleModel())
     const before = useModelStore.getState().scene!
     useModelStore.getState().applyPlanOps([
-      { op: 'setOpenings', roomId: 'room-master', side: 'north', kind: 'window', edgeIndex: 2, from: 1, to: 2.5 },
+      {
+        op: 'setOpenings',
+        roomId: 'room-master',
+        side: 'north',
+        kind: 'window',
+        edgeIndex: 2,
+        from: 1,
+        to: 2.5,
+      },
     ])
     const room = findNodeById(useModelStore.getState().scene!.root, 'room-master') as RoomNode
     expect(room.windows).toHaveLength(1)
@@ -371,7 +375,10 @@ describe('useModelStore 平面图编辑（P4）', () => {
     expect(useModelStore.getState().past).toHaveLength(1)
     expect(useModelStore.getState().past[0]).toBe(before)
     expect(useChatStore.getState().editOps).toHaveLength(1)
-    expect(useChatStore.getState().editOps[0]).toMatchObject({ op: 'setOpenings', roomId: 'room-master' })
+    expect(useChatStore.getState().editOps[0]).toMatchObject({
+      op: 'setOpenings',
+      roomId: 'room-master',
+    })
   })
 
   it('applyPlanOps 空列表 / 全部失败 / 无实际变化时不记历史', () => {
@@ -379,16 +386,34 @@ describe('useModelStore 平面图编辑（P4）', () => {
     useModelStore.getState().applyPlanOps([])
     expect(useModelStore.getState().past).toHaveLength(0)
     // 房间不存在 → 单条跳过（applied 0）不记历史
-    useModelStore.getState().applyPlanOps([{ op: 'setOpenings', roomId: 'ghost', side: 'north', kind: 'door' }])
+    useModelStore
+      .getState()
+      .applyPlanOps([{ op: 'setOpenings', roomId: 'ghost', side: 'north', kind: 'door' }])
     expect(useModelStore.getState().past).toHaveLength(0)
     expect(useChatStore.getState().editOps).toHaveLength(0)
     // 同边同区间开洞重复 → 执行后 JSON 相同，不记历史
     useModelStore.getState().applyPlanOps([
-      { op: 'setOpenings', roomId: 'room-master', side: 'north', kind: 'window', edgeIndex: 2, from: 1, to: 2.5 },
+      {
+        op: 'setOpenings',
+        roomId: 'room-master',
+        side: 'north',
+        kind: 'window',
+        edgeIndex: 2,
+        from: 1,
+        to: 2.5,
+      },
     ])
     const pastLen = useModelStore.getState().past.length
     useModelStore.getState().applyPlanOps([
-      { op: 'setOpenings', roomId: 'room-master', side: 'north', kind: 'window', edgeIndex: 2, from: 1, to: 2.5 },
+      {
+        op: 'setOpenings',
+        roomId: 'room-master',
+        side: 'north',
+        kind: 'window',
+        edgeIndex: 2,
+        from: 1,
+        to: 2.5,
+      },
     ])
     expect(useModelStore.getState().past.length).toBe(pastLen)
     expect(useChatStore.getState().editOps).toHaveLength(1)
@@ -398,7 +423,9 @@ describe('useModelStore 平面图编辑（P4）', () => {
     useModelStore.getState().setScene(createSampleModel())
     const before = useModelStore.getState().scene!
     const beforeCount = before.root.levels[0].rooms.length
-    useModelStore.getState().applyPlanOps([{ op: 'splitRoom', id: 'room-master', axis: 'x', position: 0 }])
+    useModelStore
+      .getState()
+      .applyPlanOps([{ op: 'splitRoom', id: 'room-master', axis: 'x', position: 0 }])
     const rooms = useModelStore.getState().scene!.root.levels[0].rooms
     expect(rooms).toHaveLength(beforeCount + 1)
     expect(rooms.some((r) => r.id === 'room-master')).toBe(true)

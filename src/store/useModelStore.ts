@@ -126,13 +126,29 @@ export const useModelStore = create<ModelState>()(
           initialPositions[n.id] = nodePosition(n)
         })
         // 新模型取代旧场景：清空编辑历史，避免撤销回到被替换的旧模型
-        set({ scene: normalized, selectedId: null, focusId: null, initialPositions, past: [], future: [], planTool: 'select' })
+        set({
+          scene: normalized,
+          selectedId: null,
+          focusId: null,
+          initialPositions,
+          past: [],
+          future: [],
+          planTool: 'select',
+        })
         // 场景被整体替换（生成/打开项目/加载示例/口令还原）：旧的编辑日志描述的是已不存在的前一场景
         useChatStore.getState().clearEditOps()
       },
 
       resetScene: () => {
-        set({ scene: null, selectedId: null, focusId: null, initialPositions: {}, past: [], future: [], planTool: 'select' })
+        set({
+          scene: null,
+          selectedId: null,
+          focusId: null,
+          initialPositions: {},
+          past: [],
+          future: [],
+          planTool: 'select',
+        })
         useChatStore.getState().clearEditOps()
       },
       selectNode: (id) => set({ selectedId: id }),
@@ -173,7 +189,11 @@ export const useModelStore = create<ModelState>()(
       updateSelected: (patch) =>
         set((state) => {
           if (!state.scene || !state.selectedId) return state
-          const nextRoot = updateNodeFields(state.scene.root, state.selectedId, patch) as SceneModel['root']
+          const nextRoot = updateNodeFields(
+            state.scene.root,
+            state.selectedId,
+            patch,
+          ) as SceneModel['root']
           if (nextRoot === state.scene.root) return state // 无实际变化（空补丁/未命中），不记历史
           // 提交后重新约束进墙内，并把变化后的场景作为新状态
           const scene = normalizeContainment({ ...state.scene, root: nextRoot })
@@ -184,7 +204,11 @@ export const useModelStore = create<ModelState>()(
       previewSelected: (patch) =>
         set((state) => {
           if (!state.scene || !state.selectedId) return state
-          const nextRoot = updateNodeFields(state.scene.root, state.selectedId, patch) as SceneModel['root']
+          const nextRoot = updateNodeFields(
+            state.scene.root,
+            state.selectedId,
+            patch,
+          ) as SceneModel['root']
           if (nextRoot === state.scene.root) return state // 无实际变化，不产生新引用
           // 拖拽中不约束、不记历史（结束时由 commitDrag 统一约束 + 记一次历史）
           return { scene: { ...state.scene, root: nextRoot } }
@@ -193,7 +217,11 @@ export const useModelStore = create<ModelState>()(
       previewFootprint: (id, footprint) =>
         set((state) => {
           if (!state.scene) return state
-          const nextRoot = updateNodeFootprint(state.scene.root, id, footprint) as SceneModel['root']
+          const nextRoot = updateNodeFootprint(
+            state.scene.root,
+            id,
+            footprint,
+          ) as SceneModel['root']
           if (nextRoot === state.scene.root) return state
           // 顶点拖拽中不约束、不记历史（结束时由 commitPlanEdit 统一处理）
           return { scene: { ...state.scene, root: nextRoot } }
@@ -233,7 +261,9 @@ export const useModelStore = create<ModelState>()(
         set((state) => {
           if (state.past.length === 0) return state
           const previous = state.past[state.past.length - 1]
-          const future = state.scene ? [...state.future, state.scene].slice(-HISTORY_LIMIT) : state.future
+          const future = state.scene
+            ? [...state.future, state.scene].slice(-HISTORY_LIMIT)
+            : state.future
           return { scene: previous, past: state.past.slice(0, -1), future }
         }),
 

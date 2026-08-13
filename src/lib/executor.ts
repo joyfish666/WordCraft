@@ -317,7 +317,10 @@ function applyUpdateRoom(scene: SceneModel, op: Extract<Op, { op: 'updateRoom' }
     }
   }
   if (footprint) {
-    next = { ...next, root: updateNodeFootprint(next.root, roomId, footprint) as SceneModel['root'] }
+    next = {
+      ...next,
+      root: updateNodeFootprint(next.root, roomId, footprint) as SceneModel['root'],
+    }
   }
   if (next === scene) throw new Error('补丁为空（无 name/dimensions/footprint）')
   return next
@@ -380,10 +383,12 @@ function applyNestRoom(scene: SceneModel, op: Extract<Op, { op: 'nestRoom' }>): 
   const halfX = Math.max(0, (pb.maxX - pb.minX - (rb.maxX - rb.minX)) / 2 - WALL_THICKNESS)
   const halfZ = Math.max(0, (pb.maxZ - pb.minZ - (rb.maxZ - rb.minZ)) / 2 - WALL_THICKNESS)
   // 父房间门口禁区（与渲染同源）：嵌套落点不得压住门
-  const doorZoneRects = (computeDoorZones(removed.root.levels[0].rooms, {
-    entrance: removed.root.entranceDir ?? 'south',
-    entranceRoomId: removed.root.entranceRoomId,
-  }).get(parent.id) ?? []).map((z) => doorZoneRect(parent, z))
+  const doorZoneRects = (
+    computeDoorZones(removed.root.levels[0].rooms, {
+      entrance: removed.root.entranceDir ?? 'south',
+      entranceRoomId: removed.root.entranceRoomId,
+    }).get(parent.id) ?? []
+  ).map((z) => doorZoneRect(parent, z))
   const pc = footprintCenter(parent.footprint)
   const c = footprintCenter(room.footprint)
   // 候选角顺序：请求的 side 优先，其余 东北/西北/东南/西南 确定性尝试
@@ -405,7 +410,11 @@ function applyNestRoom(scene: SceneModel, op: Extract<Op, { op: 'nestRoom' }>): 
       maxZ: pc.z + cand.z * halfZ + (rb.maxZ - rb.minZ) / 2,
     }
     const conflicts = doorZoneRects.some(
-      (z) => bb.minX < z.maxX - 1e-6 && bb.maxX > z.minX + 1e-6 && bb.minZ < z.maxZ - 1e-6 && bb.maxZ > z.minZ + 1e-6,
+      (z) =>
+        bb.minX < z.maxX - 1e-6 &&
+        bb.maxX > z.minX + 1e-6 &&
+        bb.minZ < z.maxZ - 1e-6 &&
+        bb.maxZ > z.minZ + 1e-6,
     )
     if (!conflicts) {
       corner = cand
@@ -443,7 +452,10 @@ function replaceRoom(scene: SceneModel, id: string, rooms: RoomNode[]): SceneMod
     return out
   }
   const level = scene.root.levels[0]
-  return { ...scene, root: { ...scene.root, levels: [{ ...level, rooms: replaceList(level.rooms) }] } }
+  return {
+    ...scene,
+    root: { ...scene.root, levels: [{ ...level, rooms: replaceList(level.rooms) }] },
+  }
 }
 
 /**
@@ -741,7 +753,8 @@ function applySetOpenings(scene: SceneModel, op: Extract<Op, { op: 'setOpenings'
   const room = findRoom(scene, op.roomId)
   if (!room) throw new Error(`房间「${op.roomId}」不存在`)
   // P4：UI 提供精确边下标（edgeIndex）；LLM 沿用 side（取该方向最长边，确定性）
-  const edge = op.edgeIndex !== undefined ? edgeByIndex(room, op.edgeIndex) : findEdgeBySide(room, op.side)
+  const edge =
+    op.edgeIndex !== undefined ? edgeByIndex(room, op.edgeIndex) : findEdgeBySide(room, op.side)
   if (!edge) throw new Error(`房间「${op.roomId}」没有 ${op.side} 向边`)
 
   if (op.remove) {

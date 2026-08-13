@@ -34,7 +34,11 @@ export function createSampleModel(): SceneModel {
       name: '示例小屋',
       dimensions: { length: 14, width: 10, height: 2.8 },
       position: { x: 0, y: 0, z: 0 },
-      layout: { mode: 'auto', template: 'corridor', corridor: { width: 1.2, entranceRoomId: 'room-living' } },
+      layout: {
+        mode: 'auto',
+        template: 'corridor',
+        corridor: { width: 1.2, entranceRoomId: 'room-living' },
+      },
       children: [
         {
           id: 'room-living',

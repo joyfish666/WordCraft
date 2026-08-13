@@ -439,8 +439,18 @@ describe('generateModelFromChat', () => {
               name: '三室一厅一厨',
               corridor: { width: 1.2, entranceRoomId: '客厅' },
               rooms: [
-                { id: '客厅', name: '客厅', dimensions: { length: 5, width: 4, height: 2.8 }, side: 'left' },
-                { id: '次卧', name: '次卧', dimensions: { length: 3.5, width: 3, height: 2.8 }, side: 'right' },
+                {
+                  id: '客厅',
+                  name: '客厅',
+                  dimensions: { length: 5, width: 4, height: 2.8 },
+                  side: 'left',
+                },
+                {
+                  id: '次卧',
+                  name: '次卧',
+                  dimensions: { length: 3.5, width: 3, height: 2.8 },
+                  side: 'right',
+                },
               ],
             },
           },
@@ -467,8 +477,18 @@ describe('generateModelFromChat', () => {
             params: {
               corridor: { width: 1.2 },
               rooms: [
-                { id: 'a', name: '房A', dimensions: { length: 4, width: 3, height: 2.8 }, side: 'left' },
-                { id: 'b', name: '房B', dimensions: { length: 4, width: 3, height: 2.8 }, side: 'right' },
+                {
+                  id: 'a',
+                  name: '房A',
+                  dimensions: { length: 4, width: 3, height: 2.8 },
+                  side: 'left',
+                },
+                {
+                  id: 'b',
+                  name: '房B',
+                  dimensions: { length: 4, width: 3, height: 2.8 },
+                  side: 'right',
+                },
               ],
             },
           },

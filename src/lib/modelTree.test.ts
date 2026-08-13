@@ -35,7 +35,11 @@ describe('modelTree', () => {
     // 原树不受影响
     expect((findNodeById(scene.root, 'bed-master') as FurnitureNode).position.x).not.toBe(9)
     // 新树已更新，且其他节点位置不变
-    expect((findNodeById(next, 'bed-master') as FurnitureNode).position).toEqual({ x: 9, y: 0.5, z: 9 })
+    expect((findNodeById(next, 'bed-master') as FurnitureNode).position).toEqual({
+      x: 9,
+      y: 0.5,
+      z: 9,
+    })
     expect((findNodeById(next, 'sofa-living') as FurnitureNode).position).toEqual(
       (findNodeById(scene.root, 'sofa-living') as FurnitureNode).position,
     )
@@ -44,7 +48,11 @@ describe('modelTree', () => {
   it('updateNodePosition 平移房间足迹（中心对齐新位置）', () => {
     const master = findNodeById(scene.root, 'room-master') as RoomNode
     const oldCenter = roomCenterOf(master)
-    const next = updateNodePosition(scene.root, 'room-master', { x: oldCenter.x + 1, y: 1.4, z: oldCenter.z })
+    const next = updateNodePosition(scene.root, 'room-master', {
+      x: oldCenter.x + 1,
+      y: 1.4,
+      z: oldCenter.z,
+    })
     const moved = findNodeById(next, 'room-master') as RoomNode
     expect(roomCenterOf(moved).x).toBeCloseTo(oldCenter.x + 1)
     expect(roomCenterOf(moved).z).toBeCloseTo(oldCenter.z)
@@ -54,7 +62,9 @@ describe('modelTree', () => {
 
   it('updateNodePosition 移动房间带动家具与嵌套房间（整体平移，相对关系不变）', () => {
     const bedBefore = (findNodeById(scene.root, 'bed-master') as FurnitureNode).position
-    const bathBefore = footprintCenter((findNodeById(scene.root, 'bath-master') as RoomNode).footprint)
+    const bathBefore = footprintCenter(
+      (findNodeById(scene.root, 'bath-master') as RoomNode).footprint,
+    )
     const toiletBefore = (findNodeById(scene.root, 'toilet-master') as FurnitureNode).position
     const master = findNodeById(scene.root, 'room-master') as RoomNode
     const c = roomCenterOf(master)

@@ -191,6 +191,18 @@ README 路线图「移动端基础适配」以**横屏限定**方式落地（验
 
 ---
 
+### 工程化与代码结构整理（2026-08-13，P0+P1 代码审查建议批次）
+
+全面审视后的工程化整理（验收：430 用例全绿，新增组件测试 12 + api 测试重写；全仓格式一次收敛）：
+
+- **移除 axios 统一 fetch**：流式主路径本就是 fetch，axios 仅剩 `testConnection` 一处——双 HTTP 栈浪费 bundle 约 13KB gzip。`createApiClient`/`describeAxiosError` 删除，统一 `fetch` + `describeHttpError`；**`testConnection` 遇 `max_tokens` 被拒（HTTP 400，如 o1 系列）自动降级 `max_completion_tokens` 重试一次**；`SettingsPage.runTest` 补 aliveRef 卸载守卫（坑 33 同款）。
+- **版本号单一来源**：状态栏硬编码 `v1.5.0` 改为 vite `define: { __APP_VERSION__ }`（从 package.json 注入），发布不再漏改。
+- **HomePage 瘦身（788 → ~490 行）**：平面图工具栏（移动/桌面两套重复 JSX + 双份工具清单）收拢为 `components/ui/PlanToolbar.tsx`；调试面板（含复制/下载重复逻辑）拆为 `components/ui/DebugPanel.tsx` + `debugLog.formatDebugText`；键盘快捷键拆为 `hooks/useKeyboardShortcuts.ts`；移动端紧凑判定提为 `lib/viewport.ts`（`isCompactViewport`/`isPortraitBlocked`）+ `hooks/useMobileCompact.ts`，与 `OrientationGuard` 共享阈值（坑 61 判定逻辑单一来源）。
+- **样式按域拆分**：`global.css` 2017 行单文件拆为 15 个分区文件（variables/base/home/toolbar/chat/property/compass/debug/dialog/settings/project/share/plan/mobile/error-boundary），`global.css` 仅保留 @import 链——**@import 顺序 = 原层叠顺序，零规则改动**（行区间脚本切分，逐行校验）。
+- **组件测试补齐**：`PropertyPanel`（尺寸 Enter 提交/非法回显/微调步长/复位/关闭）、`ChatDrawer`（发送/Enter 与 Shift+Enter/禁用态/生成摘要/API 提示条/折叠）、`HomeToolbar`（回调/禁用态/API 徽章/语言切换）共 12 用例；`api.test.ts` 随 fetch 统一重写（含降级重试断言）。
+- **CI 补 format:check 门**：此前 54 个文件存在格式漂移导致该门被注释（注释与文档声称的「CI lint/format/typecheck/test」不一致）——全仓 `npm run format` 一次收敛后正式入 CI。
+- **顺手清理**：tsconfig 移除无使用的 `allowImportingTsExtensions`（新增 `resolveJsonModule` 供 vite.config 读 package.json）；`chat.generatedModel` 文案更新（方向键视角 → 平面图自由编辑）。
+
 ## 给后来者的三条主线经验
 
 1. **不要回到"LLM 直接给绝对坐标"**：几何确定性是一切（撤销/测试/分享/多轮）的基石；

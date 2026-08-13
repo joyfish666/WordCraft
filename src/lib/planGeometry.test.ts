@@ -146,7 +146,7 @@ describe('门窗符号（doorLeafLine / doorArcPoints / windowHatchLines）', ()
     expect(pts[10][2]).toBeCloseTo(-1.5, 5)
     // 半径恒 = 门洞宽
     for (const p of pts) {
-      expect(Math.hypot(p[0] - (-1), p[2] - (-1.5))).toBeCloseTo(0.9, 5)
+      expect(Math.hypot(p[0] - -1, p[2] - -1.5)).toBeCloseTo(0.9, 5)
     }
     // 全程在房间内（z ≥ 墙线）且沿墙方向不越出洞口（x ∈ [-1, -0.1]）
     for (const p of pts) {
@@ -178,7 +178,9 @@ describe('门窗符号（doorLeafLine / doorArcPoints / windowHatchLines）', ()
       furniture: [],
       nestedRooms: [],
     }
-    const plan = computeWallPlan([room], { entrance: 'south', entranceRoomId: 'r' }).get('r') as WallPlan
+    const plan = computeWallPlan([room], { entrance: 'south', entranceRoomId: 'r' }).get(
+      'r',
+    ) as WallPlan
     const south = edgeOf(plan, 'south')!
     const door = south.segments.find((s) => s.kind === 'door' && s.entrance)!
     const [, e] = doorLeafLine(south, door, 0.2)

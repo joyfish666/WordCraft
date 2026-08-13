@@ -17,7 +17,14 @@ import {
 } from './footprint'
 import type { FurnitureNode, LevelNode, RoomNode } from '../types/model'
 
-function room(id: string, cx: number, cz: number, len: number, wid: number, height = 2.8): RoomNode {
+function room(
+  id: string,
+  cx: number,
+  cz: number,
+  len: number,
+  wid: number,
+  height = 2.8,
+): RoomNode {
   return {
     id,
     type: 'room',
@@ -75,7 +82,13 @@ describe('房间/整屋访问器', () => {
   })
 
   it('nodePosition / nodeDims 覆盖 房间/家具/整屋', () => {
-    const f: FurnitureNode = { id: 'f', type: 'furniture', name: '床', dimensions: { length: 2, width: 1.5, height: 0.5 }, position: { x: 1, y: 0.25, z: 2 } }
+    const f: FurnitureNode = {
+      id: 'f',
+      type: 'furniture',
+      name: '床',
+      dimensions: { length: 2, width: 1.5, height: 0.5 },
+      position: { x: 1, y: 0.25, z: 2 },
+    }
     expect(nodePosition(f)).toEqual({ x: 1, y: 0.25, z: 2 })
     expect(nodeDims(f)).toEqual({ length: 2, width: 1.5, height: 0.5 })
     const r = room('r', 0, 0, 4, 3)

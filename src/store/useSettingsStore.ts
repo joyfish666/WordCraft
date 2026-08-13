@@ -1,13 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { createId } from '../lib/id'
-import type {
-  ApiKeyEntry,
-  AppSettings,
-  ColorMode,
-  Language,
-  ThinkingMode,
-} from '../types/settings'
+import type { ApiKeyEntry, AppSettings, ColorMode, Language, ThinkingMode } from '../types/settings'
 
 interface SettingsState extends AppSettings {
   /** 新增 API Key，返回新 Key 的 id */
@@ -54,7 +48,8 @@ export const useSettingsStore = create<SettingsState>()(
       removeApiKey: (id) =>
         set((state) => {
           const apiKeys = state.apiKeys.filter((k) => k.id !== id)
-          const activeKeyId = state.activeKeyId === id ? (apiKeys[0]?.id ?? null) : state.activeKeyId
+          const activeKeyId =
+            state.activeKeyId === id ? (apiKeys[0]?.id ?? null) : state.activeKeyId
           return { apiKeys, activeKeyId }
         }),
 

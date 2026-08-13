@@ -37,7 +37,10 @@ export const useShareStore = create<ShareState>()(
 
       addRecord: (rec) =>
         set((s) => ({
-          records: [{ id: genId(), ...rec, createdAt: Date.now() }, ...s.records].slice(0, SHARE_LIMIT),
+          records: [{ id: genId(), ...rec, createdAt: Date.now() }, ...s.records].slice(
+            0,
+            SHARE_LIMIT,
+          ),
         })),
       removeRecord: (id) => set((s) => ({ records: s.records.filter((r) => r.id !== id) })),
       clearRecords: () => set({ records: [] }),

@@ -75,19 +75,39 @@ export function doorZoneRect(room: RoomNode, zone: DoorZoneInfo): InnerBounds {
   switch (zone.dir) {
     case 'north': {
       const line = b.maxZ - WALL_THICKNESS
-      return { minX: zone.along - halfW, maxX: zone.along + halfW, minZ: line - DOOR_CLEARANCE, maxZ: line }
+      return {
+        minX: zone.along - halfW,
+        maxX: zone.along + halfW,
+        minZ: line - DOOR_CLEARANCE,
+        maxZ: line,
+      }
     }
     case 'south': {
       const line = b.minZ + WALL_THICKNESS
-      return { minX: zone.along - halfW, maxX: zone.along + halfW, minZ: line, maxZ: line + DOOR_CLEARANCE }
+      return {
+        minX: zone.along - halfW,
+        maxX: zone.along + halfW,
+        minZ: line,
+        maxZ: line + DOOR_CLEARANCE,
+      }
     }
     case 'east': {
       const line = b.maxX - WALL_THICKNESS
-      return { minX: line - DOOR_CLEARANCE, maxX: line, minZ: zone.along - halfW, maxZ: zone.along + halfW }
+      return {
+        minX: line - DOOR_CLEARANCE,
+        maxX: line,
+        minZ: zone.along - halfW,
+        maxZ: zone.along + halfW,
+      }
     }
     case 'west': {
       const line = b.minX + WALL_THICKNESS
-      return { minX: line, maxX: line + DOOR_CLEARANCE, minZ: zone.along - halfW, maxZ: zone.along + halfW }
+      return {
+        minX: line,
+        maxX: line + DOOR_CLEARANCE,
+        minZ: zone.along - halfW,
+        maxZ: zone.along + halfW,
+      }
     }
   }
 }
@@ -138,10 +158,7 @@ function slideAlongWall(
     const perp = alongAxis === 'x' ? fz : fx
     const hp = alongAxis === 'x' ? hz : hx
     return (
-      a + ha > kMin + EPS &&
-      a - ha < kMax - EPS &&
-      perp + hp > kO + EPS &&
-      perp - hp < kP - EPS
+      a + ha > kMin + EPS && a - ha < kMax - EPS && perp + hp > kO + EPS && perp - hp < kP - EPS
     )
   }
   const overlapsAt = (a: number): boolean => keepOuts.some((k) => overlapsK(a, k))
@@ -263,10 +280,7 @@ function placeWallAnchored(
 }
 
 /** 递归处理一个房间：先处理嵌套房间，再约束本房间内的家具（按顺序逐个放置并互相避让） */
-function visitRoom(
-  node: RoomNode,
-  doorZones: Map<string, DoorZoneInfo[]>,
-): RoomNode {
+function visitRoom(node: RoomNode, doorZones: Map<string, DoorZoneInfo[]>): RoomNode {
   const keepOuts: InnerBounds[] = []
   const nestedRooms = node.nestedRooms.map((child) => {
     keepOuts.push(keepOutRect(child))
@@ -295,7 +309,12 @@ function visitRoom(
     // 记录放置后的占地（旋转后按有效尺寸），供后续家具避让
     const el = swapDims ? f.dimensions.width : f.dimensions.length
     const ew = swapDims ? f.dimensions.length : f.dimensions.width
-    placedBoxes.push({ minX: pos.x - el / 2, maxX: pos.x + el / 2, minZ: pos.z - ew / 2, maxZ: pos.z + ew / 2 })
+    placedBoxes.push({
+      minX: pos.x - el / 2,
+      maxX: pos.x + el / 2,
+      minZ: pos.z - ew / 2,
+      maxZ: pos.z + ew / 2,
+    })
     if (swapDims) {
       return {
         ...f,

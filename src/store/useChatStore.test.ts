@@ -93,8 +93,7 @@ describe('useChatStore 编辑操作日志（P3 双向同步）', () => {
 })
 
 describe('toChatHistory（P3 上下文精简：整段 ops JSON 不再回传）', () => {
-  const opsReply =
-    '{"version":3,"ops":[{"op":"macro","name":"corridor","params":{"rooms":[]}}]}'
+  const opsReply = '{"version":3,"ops":[{"op":"macro","name":"corridor","params":{"rooms":[]}}]}'
 
   it('保留用户消息；助手纯 JSON 消息被剔除', () => {
     useChatStore.getState().addMessage({ role: 'user', content: '设计一个房子' })
@@ -117,6 +116,8 @@ describe('toChatHistory（P3 上下文精简：整段 ops JSON 不再回传）',
     useChatStore.getState().addMessage({ role: 'error', content: '请求失败' })
     useChatStore.getState().addMessage({ role: 'user', content: '  ' })
     useChatStore.getState().addMessage({ role: 'user', content: 'hi' })
-    expect(toChatHistory(useChatStore.getState().messages)).toEqual([{ role: 'user', content: 'hi' }])
+    expect(toChatHistory(useChatStore.getState().messages)).toEqual([
+      { role: 'user', content: 'hi' },
+    ])
   })
 })

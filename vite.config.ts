@@ -1,8 +1,13 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import pkg from './package.json'
 
 export default defineConfig({
+  // 版本号单一来源：package.json（编译期注入 __APP_VERSION__，供 UI 状态栏等展示）
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [react()],
   // GitHub Pages 项目站点路径（仓库名 WordCraft）；本地 dev 不受影响
   base: '/WordCraft/',

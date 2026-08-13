@@ -5,7 +5,14 @@ import type { ColorMode } from '../types/settings'
 export const ROOM_COLORS = ['#4f7cff', '#34c98f', '#ff9f43', '#ff6b81', '#a55eea', '#ffd93d']
 
 /** 色盲模式下高对比度色板 */
-export const COLORBLIND_ROOM_COLORS = ['#1a1a2e', '#16213e', '#0f3460', '#533483', '#e94560', '#f5f5dc']
+export const COLORBLIND_ROOM_COLORS = [
+  '#1a1a2e',
+  '#16213e',
+  '#0f3460',
+  '#533483',
+  '#e94560',
+  '#f5f5dc',
+]
 
 /** 家具 / 墙体默认色（浅色主题下取中深灰绿，保证在米色底上可辨） */
 export const FURNITURE_COLOR = '#838a7c'

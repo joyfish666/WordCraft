@@ -1,74 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChatDrawer, type ChatDrawerHandle } from '../components/ui/ChatDrawer'
+import { DebugPanel } from '../components/ui/DebugPanel'
 import { EmptyStateCard } from '../components/ui/EmptyStateCard'
 import { HelpDialog } from '../components/ui/HelpDialog'
-import { Button } from '../components/ui/Button'
 import { HomeToolbar } from '../components/ui/HomeToolbar'
+import { PlanToolbar } from '../components/ui/PlanToolbar'
 import { ProjectLibraryDialog } from '../components/ui/ProjectLibraryDialog'
 import { ShareDialog } from '../components/ui/ShareDialog'
 import { PropertyPanel } from '../components/viewport/PropertyPanel'
 import { SceneViewer, type SceneViewerHandle } from '../components/viewport/SceneViewer'
+import { useMobileCompact } from '../hooks/useMobileCompact'
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { getProject, updateProject } from '../db/database'
 import { useT } from '../i18n'
 import { ChatGenerationError, generateModelFromChat } from '../lib/chat'
 import { encodeShareCode } from '../lib/compression'
-import { clearDebug, useDebugEntries, type DebugEntry } from '../lib/debugLog'
+import { useDebugEntries } from '../lib/debugLog'
 import { nodeDims, nodePosition } from '../lib/footprint'
 import { migrateModel } from '../lib/migration'
 import { getPathToNode, isContainer } from '../lib/modelTree'
 import { createSampleModel } from '../lib/sampleModel'
 import { withWatermark } from '../lib/watermark'
 import { toChatHistory, useChatStore } from '../store/useChatStore'
-import { useModelStore, type PlanTool } from '../store/useModelStore'
+import { useModelStore } from '../store/useModelStore'
 import { useProjectStore } from '../store/useProjectStore'
 import { useShareStore } from '../store/useShareStore'
 import { getActiveApiConfig, useSettingsStore } from '../store/useSettingsStore'
 import type { HouseNode, ModelNode, RoomNode, SceneModel } from '../types/model'
 
-/** 方向键平移视角的位移量（屏幕像素等效） */
-const PAN_STEP = 15
-
 /** 容器子节点数（房间 = 家具 + 嵌套房间；整屋 = 顶层房间数） */
 function childCount(node: HouseNode | RoomNode): number {
   if (node.type === 'house') return node.levels[0]?.rooms.length ?? 0
   return node.furniture.length + node.nestedRooms.length
-}
-
-/** 移动端紧凑布局判定（与 OrientationGuard 的 wc-compact 同条件，供工具栏渲染分支使用） */
-function useMobileCompact(): boolean {
-  const [compact, setCompact] = useState(
-    () => window.innerWidth <= 760 || window.innerHeight <= 480,
-  )
-  useEffect(() => {
-    const apply = () => setCompact(window.innerWidth <= 760 || window.innerHeight <= 480)
-    window.addEventListener('resize', apply)
-    return () => window.removeEventListener('resize', apply)
-  }, [])
-  return compact
-}
-
-/** 将调试日志导出为可复制的纯文本 */
-function copyDebug(entries: DebugEntry[]): void {
-  const text = entries
-    .map((e) => `[${e.time}] [${e.level}] ${e.message}${e.detail ? `\n${e.detail}` : ''}`)
-    .join('\n')
-  if (navigator.clipboard?.writeText) {
-    void navigator.clipboard.writeText(text).catch(() => {})
-  }
-}
-
-/** 下载调试日志为 .log 文件（保存到浏览器下载目录，便于直接读取排查） */
-function downloadDebug(entries: DebugEntry[]): void {
-  const text = entries
-    .map((e) => `[${e.time}] [${e.level}] ${e.message}${e.detail ? `\n${e.detail}` : ''}`)
-    .join('\n')
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `wordcraft-debug-${new Date().toISOString().replace(/[:.]/g, '-')}.log`
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 /** 助手消息的展示文本：携带模型时显示摘要，否则显示回复（跳过纯 JSON） */
@@ -98,7 +61,6 @@ export function HomePage() {
   const [draft, setDraft] = useState('')
   const [elapsed, setElapsed] = useState(0)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [debugOpen, setDebugOpen] = useState(true)
   const [projectDialogOpen, setProjectDialogOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [shareCode, setShareCode] = useState<string | null>(null)
@@ -106,7 +68,6 @@ export function HomePage() {
   const [viewMode, setViewMode] = useState<'3d' | 'plan'>('3d')
   const planMode = viewMode === 'plan'
   const mobileCompact = useMobileCompact()
-  const [planToolsOpen, setPlanToolsOpen] = useState(false)
   const [chatCollapsed, setChatCollapsed] = useState(true)
   const planTool = useModelStore((s) => s.planTool)
   const openingKind = useModelStore((s) => s.openingKind)
@@ -114,7 +75,6 @@ export function HomePage() {
   const setPlanTool = useModelStore((s) => s.setPlanTool)
   const setOpeningKind = useModelStore((s) => s.setOpeningKind)
   const setShowPlanDims = useModelStore((s) => s.setShowPlanDims)
-  const debugRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<SceneViewerHandle>(null)
   const chatRef = useRef<ChatDrawerHandle>(null)
   // 生成基线场景引用：发送时快照，返回时若 scene 已变（生成期间手动编辑/打开项目/加载示例）
@@ -163,72 +123,8 @@ export function HomePage() {
     return () => window.clearInterval(timer)
   }, [isGenerating])
 
-  // 调试日志自动滚动到底部
-  useEffect(() => {
-    const el = debugRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [debugEntries])
-
-  // 键盘：方向键/WASD 平移视角；R 复位视角；Ctrl+Z 撤销、Ctrl+Shift+Z / Ctrl+Y 重做。
-  // 输入框/文本框聚焦时不拦截，让位给原生文本编辑（含原生撤销）
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const active = document.activeElement
-      if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return
-
-      const mod = e.ctrlKey || e.metaKey
-      if (mod && !e.altKey) {
-        const key = e.key.toLowerCase()
-        if (key === 'z' && !e.shiftKey) {
-          e.preventDefault()
-          useModelStore.getState().undo()
-          return
-        }
-        if ((key === 'z' && e.shiftKey) || key === 'y') {
-          e.preventDefault()
-          useModelStore.getState().redo()
-          return
-        }
-      }
-
-      // 不带修饰键的 R 才复位视角；Ctrl/Cmd+R 留给浏览器刷新（P0-5）
-      if (!mod && e.key.toLowerCase() === 'r') {
-        e.preventDefault()
-        viewportRef.current?.resetView()
-        return
-      }
-
-      const controls = viewportRef.current
-      if (!controls) return
-      let dx = 0
-      let dy = 0
-      // 方向与自然观感一致（W/↑=看向北/前，A/←=看向西/左）；属性面板微调按钮不受影响
-      switch (e.key.toLowerCase()) {
-        case 'arrowleft':
-        case 'a':
-          dx = PAN_STEP
-          break
-        case 'arrowright':
-        case 'd':
-          dx = -PAN_STEP
-          break
-        case 'arrowup':
-        case 'w':
-          dy = -PAN_STEP
-          break
-        case 'arrowdown':
-        case 's':
-          dy = PAN_STEP
-          break
-        default:
-          return
-      }
-      e.preventDefault()
-      controls.pan(dx, dy)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  // 调试日志自动滚动到底部（由 DebugPanel 内部处理）
+  useKeyboardShortcuts(viewportRef)
 
   const send = async () => {
     const input = draft.trim()
@@ -447,20 +343,14 @@ export function HomePage() {
             <button
               type="button"
               className={`view-toggle__btn ${!planMode ? 'view-toggle__btn--active' : ''}`}
-              onClick={() => {
-                setPlanToolsOpen(false)
-                setViewMode('3d')
-              }}
+              onClick={() => setViewMode('3d')}
             >
               3D
             </button>
             <button
               type="button"
               className={`view-toggle__btn ${planMode ? 'view-toggle__btn--active' : ''}`}
-              onClick={() => {
-                setPlanToolsOpen(false)
-                setViewMode('plan')
-              }}
+              onClick={() => setViewMode('plan')}
               title={t('home.viewPlanTitle')}
             >
               {t('home.viewPlan')}
@@ -469,228 +359,31 @@ export function HomePage() {
 
           {planMode && (
             <div className="plan-toolbar">
-              {mobileCompact ? (
-                /* 移动端：「工具」+「尺寸」两个独立常驻按钮（尺寸不进面板，避免点不到），
-                   工具按钮呼出弹出面板（选择即关闭），不再常驻遮挡平面图 */
-                <>
-                  <button
-                    type="button"
-                    className={`plan-toolbar__menu-btn ${planToolsOpen ? 'plan-toolbar__menu-btn--active' : ''}`}
-                    onClick={() => setPlanToolsOpen((o) => !o)}
-                    title={t('plan.toolsTitle')}
-                  >
-                    {t('plan.tools')} {planToolsOpen ? '▴' : '▾'}
-                  </button>
-                  <button
-                    type="button"
-                    className={`plan-toolbar__dims segmented__btn ${showPlanDims ? 'segmented__btn--active' : ''}`}
-                    onClick={() => setShowPlanDims(!showPlanDims)}
-                    title={t('plan.toggleDimsTitle')}
-                  >
-                    {t('plan.toggleDims')}
-                  </button>
-                  {planToolsOpen && (
-                    <>
-                      <div className="plan-toolbar__backdrop" onClick={() => setPlanToolsOpen(false)} />
-                      <div className="plan-toolbar__sheet">
-                        <div className="plan-toolbar__sheet-tools" role="toolbar" aria-label={t('plan.toolAria')}>
-                          {(
-                            [
-                              ['select', t('plan.toolSelect'), t('plan.toolSelectTitle')],
-                              ['move', t('plan.toolMove'), t('plan.toolMoveTitle')],
-                              ['vertex', t('plan.toolVertex'), t('plan.toolVertexTitle')],
-                              ['opening', t('plan.toolOpening'), t('plan.toolOpeningTitle')],
-                              ['split', t('plan.toolSplit'), t('plan.toolSplitTitle')],
-                              ['merge', t('plan.toolMerge'), t('plan.toolMergeTitle')],
-                            ] as Array<[PlanTool, string, string]>
-                          ).map(([tool, label, title]) => (
-                            <button
-                              key={tool}
-                              type="button"
-                              className={`plan-toolbar__sheet-btn ${planTool === tool ? 'plan-toolbar__sheet-btn--active' : ''}`}
-                              onClick={() => {
-                                setPlanTool(tool)
-                                setPlanToolsOpen(false)
-                              }}
-                              title={title}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                        {planTool === 'opening' && (
-                          <div className="plan-toolbar__kind segmented" role="group" aria-label={t('plan.toolOpening')}>
-                            {(
-                              [
-                                ['door', t('plan.kindDoor')],
-                                ['window', t('plan.kindWindow')],
-                              ] as Array<['door' | 'window', string]>
-                            ).map(([kind, label]) => (
-                              <button
-                                key={kind}
-                                type="button"
-                                className={`segmented__btn ${openingKind === kind ? 'segmented__btn--active' : ''}`}
-                                onClick={() => setOpeningKind(kind)}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {planTool !== 'select' && (
-                          <div className="plan-toolbar__hint">
-                            {planTool === 'move'
-                              ? t('plan.hintMove')
-                              : planTool === 'vertex'
-                                ? t('plan.hintVertex')
-                                : planTool === 'opening'
-                                  ? t('plan.hintOpening', {
-                                      kind: openingKind === 'door' ? t('plan.kindDoor') : t('plan.kindWindow'),
-                                    })
-                                  : planTool === 'split'
-                                    ? t('plan.hintSplit')
-                                    : planTool === 'merge'
-                                      ? t('plan.hintMerge')
-                                      : ''}
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </>
-              ) : (
-                /* 桌面端：常驻工具行（保持原样） */
-                <>
-                  <div className="plan-toolbar__row">
-                    <div className="plan-toolbar__tools segmented" role="toolbar" aria-label={t('plan.toolAria')}>
-                      {(
-                        [
-                          ['select', t('plan.toolSelect'), t('plan.toolSelectTitle')],
-                          ['move', t('plan.toolMove'), t('plan.toolMoveTitle')],
-                          ['vertex', t('plan.toolVertex'), t('plan.toolVertexTitle')],
-                          ['opening', t('plan.toolOpening'), t('plan.toolOpeningTitle')],
-                          ['split', t('plan.toolSplit'), t('plan.toolSplitTitle')],
-                          ['merge', t('plan.toolMerge'), t('plan.toolMergeTitle')],
-                        ] as Array<[PlanTool, string, string]>
-                      ).map(([tool, label, title]) => (
-                        <button
-                          key={tool}
-                          type="button"
-                          className={`segmented__btn ${planTool === tool ? 'segmented__btn--active' : ''}`}
-                          onClick={() => setPlanTool(tool)}
-                          title={title}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    {planTool === 'opening' && (
-                      <div className="plan-toolbar__kind segmented" role="group" aria-label={t('plan.toolOpening')}>
-                        {(
-                          [
-                            ['door', t('plan.kindDoor')],
-                            ['window', t('plan.kindWindow')],
-                          ] as Array<['door' | 'window', string]>
-                        ).map(([kind, label]) => (
-                          <button
-                            key={kind}
-                            type="button"
-                            className={`segmented__btn ${openingKind === kind ? 'segmented__btn--active' : ''}`}
-                            onClick={() => setOpeningKind(kind)}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {/* 视图选项行：尺寸标注开关（不挤占工具行；房间内部尺寸线会覆盖在房间上，可关闭让平面图更清爽） */}
-                  <div className="plan-toolbar__row">
-                    <button
-                      type="button"
-                      className={`plan-toolbar__dims segmented__btn ${showPlanDims ? 'segmented__btn--active' : ''}`}
-                      onClick={() => setShowPlanDims(!showPlanDims)}
-                      title={t('plan.toggleDimsTitle')}
-                    >
-                      {t('plan.toggleDims')}
-                    </button>
-                  </div>
-                  {/* 操作提示条：仅当前工具存在提示时渲染（空文案渲染会露出黑底空胶囊） */}
-                  {planTool !== 'select' && (
-                    <div className="plan-toolbar__hint">
-                      {planTool === 'move'
-                        ? t('plan.hintMove')
-                        : planTool === 'vertex'
-                          ? t('plan.hintVertex')
-                          : planTool === 'opening'
-                            ? t('plan.hintOpening', {
-                                kind: openingKind === 'door' ? t('plan.kindDoor') : t('plan.kindWindow'),
-                              })
-                            : planTool === 'split'
-                              ? t('plan.hintSplit')
-                              : planTool === 'merge'
-                                ? t('plan.hintMerge')
-                                : ''}
-                    </div>
-                  )}
-                </>
-              )}
+              <PlanToolbar
+                planTool={planTool}
+                openingKind={openingKind}
+                showPlanDims={showPlanDims}
+                mobileCompact={mobileCompact}
+                onSetPlanTool={setPlanTool}
+                onSetOpeningKind={setOpeningKind}
+                onToggleDims={() => setShowPlanDims(!showPlanDims)}
+              />
             </div>
           )}
 
           <SceneViewer ref={viewportRef} planMode={planMode} />
-          {!scene && <EmptyStateCard hasApiKey={hasApiKey} onExample={applyExample} onLoadSample={loadSample} />}
+          {!scene && (
+            <EmptyStateCard
+              hasApiKey={hasApiKey}
+              onExample={applyExample}
+              onLoadSample={loadSample}
+            />
+          )}
           {selected && <PropertyPanel node={selected} />}
         </section>
       </div>
 
-      {debugMode && (
-        <section className="debug-panel">
-          <div className="debug-panel__header">
-            <button className="debug-panel__toggle" onClick={() => setDebugOpen((o) => !o)}>
-              {debugOpen ? '▾' : '▸'} {t('home.debugLog')}
-            </button>
-            <span className="debug-panel__count">
-              {t('home.debugCount', { count: debugEntries.length })}
-            </span>
-            <div className="debug-panel__actions">
-              <Button
-                variant="ghost"
-                onClick={() => copyDebug(debugEntries)}
-                disabled={debugEntries.length === 0}
-              >
-                {t('home.copy')}
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => downloadDebug(debugEntries)}
-                disabled={debugEntries.length === 0}
-                title={t('home.downloadTitle')}
-              >
-                {t('home.download')}
-              </Button>
-              <Button variant="ghost" onClick={clearDebug} disabled={debugEntries.length === 0}>
-                {t('home.clear')}
-              </Button>
-            </div>
-          </div>
-          {debugOpen && (
-            <div className="debug-panel__body" ref={debugRef}>
-              {debugEntries.length === 0 ? (
-                <p className="debug-panel__empty">{t('home.debugEmpty')}</p>
-              ) : (
-                debugEntries.map((e) => (
-                  <div key={e.id} className={`debug-entry debug-entry--${e.level}`}>
-                    <span className="debug-entry__time">{e.time}</span>
-                    <span className="debug-entry__msg">{e.message}</span>
-                    {e.detail && <pre className="debug-entry__detail">{e.detail}</pre>}
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </section>
-      )}
+      {debugMode && <DebugPanel entries={debugEntries} />}
 
       <ChatDrawer
         ref={chatRef}
@@ -765,7 +458,7 @@ export function HomePage() {
         </span>
 
         <div className="statusbar__right">
-          <span>v1.5.0</span>
+          <span>v{__APP_VERSION__}</span>
         </div>
       </footer>
 

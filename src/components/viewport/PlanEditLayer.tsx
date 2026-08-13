@@ -145,7 +145,12 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
     if (drag.kind === 'move') {
       if (!drag.footprint || !drag.startCenter) return
       const raw = { dx: p.x - drag.startLocal.x, dz: p.z - drag.startLocal.z }
-      const snapped = snapRoomTranslation(drag.footprint, otherFootprints(drag.roomId), raw.dx, raw.dz)
+      const snapped = snapRoomTranslation(
+        drag.footprint,
+        otherFootprints(drag.roomId),
+        raw.dx,
+        raw.dz,
+      )
       store.previewSelected({
         position: {
           x: drag.startCenter.x + snapped.dx,
@@ -188,7 +193,9 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
         break
       }
       case 'vertex': {
-        const selected = selectedId ? (findNodeById(sceneNow.root, selectedId) as RoomNode | null) : null
+        const selected = selectedId
+          ? (findNodeById(sceneNow.root, selectedId) as RoomNode | null)
+          : null
         if (selected && selected.type === 'room') {
           const idx = nearestFootprintVertex(selected.footprint, p.x, p.z)
           if (idx !== null) {
@@ -264,8 +271,7 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
             store.applyPlanOps([{ op: 'mergeRoom', keep, remove } as Op])
             return true
           }
-          const ok =
-            tryMerge(mergeKeepId, hit.node.id) || tryMerge(hit.node.id, mergeKeepId)
+          const ok = tryMerge(mergeKeepId, hit.node.id) || tryMerge(hit.node.id, mergeKeepId)
           if (!ok) window.alert(t('plan.mergeFail'))
           setMergeKeepId(null)
         }
@@ -300,7 +306,10 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
       if (before) {
         const result = executeOps(before, [{ op: 'splitRoom', id: roomId, axis, position } as Op])
         if (result.applied === 0) window.alert(t('plan.splitFail'))
-        else useModelStore.getState().applyPlanOps([{ op: 'splitRoom', id: roomId, axis, position } as Op])
+        else
+          useModelStore
+            .getState()
+            .applyPlanOps([{ op: 'splitRoom', id: roomId, axis, position } as Op])
       }
       setSplit(null)
       setSplitCur(null)
@@ -323,7 +332,13 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
     const sceneNow = store.scene
     if (!sceneNow) return
     store.selectNode(roomId)
-    setDrag({ kind: 'vertex', roomId, vertexIndex: index, baseScene: sceneNow, startLocal: { x: 0, z: 0 } })
+    setDrag({
+      kind: 'vertex',
+      roomId,
+      vertexIndex: index,
+      baseScene: sceneNow,
+      startLocal: { x: 0, z: 0 },
+    })
   }
 
   /** 手柄拖拽的移动/结束：指针悬停手柄时事件路由到手柄对象（R3F 捕获语义） */
@@ -347,7 +362,14 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
   return (
     <>
       {/* 交互底板：透明大平面，承载所有工具的指针事件（在镜像 group 内） */}
-      <mesh position={[0, 0.5, 0]} rotation={[-Math.PI / 2, 0, 0]} onPointerDown={onPlaneDown} onPointerMove={onPlaneMove} onPointerUp={onPlaneUp} onPointerLeave={onPlaneLeave}>
+      <mesh
+        position={[0, 0.5, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        onPointerDown={onPlaneDown}
+        onPointerMove={onPlaneMove}
+        onPointerUp={onPlaneUp}
+        onPointerLeave={onPlaneLeave}
+      >
         <planeGeometry args={[400, 400]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
@@ -363,7 +385,11 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
               const pos: [number, number, number] =
                 edge.axis === 'x' ? [along, 0.6, edge.line] : [edge.line, 0.6, along]
               return (
-                <mesh key={`${edge.roomId}-${edge.ringIndex}-${seg.from}`} position={pos} raycast={() => null}>
+                <mesh
+                  key={`${edge.roomId}-${edge.ringIndex}-${seg.from}`}
+                  position={pos}
+                  raycast={() => null}
+                >
                   <boxGeometry args={edge.axis === 'x' ? [len, 0.12, 0.3] : [0.3, 0.12, len]} />
                   <meshBasicMaterial
                     color={seg.kind === 'door' ? '#b57918' : '#5bc0de'}
@@ -412,7 +438,10 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
           const pts = keep.node.footprint
           return (
             <Line
-              points={[...pts.map((p) => [p.x, 0.9, p.z] as [number, number, number]), [pts[0].x, 0.9, pts[0].z]]}
+              points={[
+                ...pts.map((p) => [p.x, 0.9, p.z] as [number, number, number]),
+                [pts[0].x, 0.9, pts[0].z],
+              ]}
               color="#2f8f5b"
               lineWidth={3}
               raycast={() => null}

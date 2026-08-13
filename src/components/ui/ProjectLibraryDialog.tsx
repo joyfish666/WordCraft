@@ -138,7 +138,10 @@ export function ProjectLibraryDialog({
                 roomCount = 0
               }
               return (
-                <div key={rec.id} className={`project-row ${isCurrent ? 'project-row--current' : ''}`}>
+                <div
+                  key={rec.id}
+                  className={`project-row ${isCurrent ? 'project-row--current' : ''}`}
+                >
                   {isRenaming ? (
                     <input
                       className="input project-row__rename"
@@ -155,7 +158,9 @@ export function ProjectLibraryDialog({
                     <div className="project-row__info">
                       <span className="project-row__name">
                         {rec.name}
-                        {isCurrent && <span className="project-row__tag">{t('project.currentTag')}</span>}
+                        {isCurrent && (
+                          <span className="project-row__tag">{t('project.currentTag')}</span>
+                        )}
                       </span>
                       <span className="project-row__meta">
                         {formatTime(rec.updatedAt)} · {t('project.roomCount', { count: roomCount })}
