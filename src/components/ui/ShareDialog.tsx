@@ -5,6 +5,7 @@ import { useT } from '../../i18n'
 import { useShareStore } from '../../store/useShareStore'
 import type { SceneModel } from '../../types/model'
 import { Button } from './Button'
+import { Dialog } from './Dialog'
 
 export interface ShareDialogProps {
   open: boolean
@@ -81,90 +82,87 @@ export function ShareDialog({ open, onClose, code, screenshot, onRestore }: Shar
   }
 
   return (
-    <div className="dialog-overlay" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="dialog dialog--share" onClick={(e) => e.stopPropagation()}>
-        <h3 className="dialog__title">{t('share.title')}</h3>
+    <Dialog open={open} onClose={onClose} title={t('share.title')} className="dialog--share">
+      {screenshot ? (
+        <img className="share-shot" src={screenshot} alt={t('share.screenshotAlt')} />
+      ) : code ? (
+        <p className="share-shot__fallback">{t('share.captureFailed')}</p>
+      ) : (
+        <p className="share-shot__fallback">{t('share.noModel')}</p>
+      )}
 
-        {screenshot ? (
-          <img className="share-shot" src={screenshot} alt={t('share.screenshotAlt')} />
-        ) : code ? (
-          <p className="share-shot__fallback">{t('share.captureFailed')}</p>
-        ) : (
-          <p className="share-shot__fallback">{t('share.noModel')}</p>
-        )}
-
-        {code && (
-          <div className="share-code">
-            <span className="dialog__section-title">{t('share.codeLabel')}</span>
-            <div className="share-code__row">
-              <input
-                className="input"
-                readOnly
-                value={code}
-                onFocus={(e) => e.currentTarget.select()}
-              />
-              <Button variant="ghost" onClick={() => void copyCode()}>
-                {copied ? t('share.copied') : t('share.copy')}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        <div className="share-restore">
-          <span className="dialog__section-title">{t('share.restoreTitle')}</span>
+      {code && (
+        <div className="share-code">
+          <span className="dialog__section-title">{t('share.codeLabel')}</span>
           <div className="share-code__row">
             <input
               className="input"
-              value={paste}
-              placeholder={t('share.placeholder')}
-              onChange={(e) => setPaste(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && paste.trim()) tryRestore(paste)
-              }}
+              readOnly
+              value={code}
+              onFocus={(e) => e.currentTarget.select()}
             />
-            <Button onClick={() => tryRestore(paste)} disabled={!paste.trim()}>
-              {t('share.restore')}
+            <Button variant="ghost" onClick={() => void copyCode()}>
+              {copied ? t('share.copied') : t('share.copy')}
             </Button>
           </div>
-          {msg && <p className={`share-msg share-msg--${msg.kind}`}>{msg.text}</p>}
         </div>
+      )}
 
-        <div className="share-history">
-          <span className="dialog__section-title">{t('share.historyTitle')}</span>
-          {records.length === 0 ? (
-            <p className="share-history__empty">{t('share.empty')}</p>
-          ) : (
-            <ul className="share-history__list">
-              {records.map((r) => (
-                <li key={r.id} className="share-history__row">
-                  <span className="share-history__name">{r.name ?? t('share.unnamed')}</span>
-                  <span className="share-history__meta">{formatTime(r.createdAt)}</span>
-                  <div className="share-history__actions">
-                    <Button variant="ghost" onClick={() => tryRestore(r.code)}>
-                      {t('share.restore')}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      title={t('share.delete')}
-                      onClick={() => {
-                        if (window.confirm(t('share.deleteConfirm'))) removeRecord(r.id)
-                      }}
-                    >
-                      ×
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="dialog__actions">
-          <Button variant="ghost" onClick={onClose}>
-            {t('share.close')}
+      <div className="share-restore">
+        <span className="dialog__section-title">{t('share.restoreTitle')}</span>
+        <div className="share-code__row">
+          <input
+            className="input"
+            value={paste}
+            placeholder={t('share.placeholder')}
+            onChange={(e) => setPaste(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && paste.trim()) tryRestore(paste)
+            }}
+          />
+          <Button onClick={() => tryRestore(paste)} disabled={!paste.trim()}>
+            {t('share.restore')}
           </Button>
         </div>
+        {msg && <p className={`share-msg share-msg--${msg.kind}`}>{msg.text}</p>}
       </div>
-    </div>
+
+      <div className="share-history">
+        <span className="dialog__section-title">{t('share.historyTitle')}</span>
+        {records.length === 0 ? (
+          <p className="share-history__empty">{t('share.empty')}</p>
+        ) : (
+          <ul className="share-history__list">
+            {records.map((r) => (
+              <li key={r.id} className="share-history__row">
+                <span className="share-history__name">{r.name ?? t('share.unnamed')}</span>
+                <span className="share-history__meta">{formatTime(r.createdAt)}</span>
+                <div className="share-history__actions">
+                  <Button variant="ghost" onClick={() => tryRestore(r.code)}>
+                    {t('share.restore')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    title={t('share.delete')}
+                    aria-label={t('share.delete')}
+                    onClick={() => {
+                      if (window.confirm(t('share.deleteConfirm'))) removeRecord(r.id)
+                    }}
+                  >
+                    ×
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="dialog__actions">
+        <Button variant="ghost" onClick={onClose}>
+          {t('share.close')}
+        </Button>
+      </div>
+    </Dialog>
   )
 }

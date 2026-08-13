@@ -176,6 +176,7 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
           variant="ghost"
           className="prop-panel__close"
           title={t('property.closeTitle')}
+          aria-label={t('property.closeTitle')}
           onClick={() => selectNode(null)}
         >
           ×

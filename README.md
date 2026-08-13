@@ -41,9 +41,9 @@
 | Validation | **Zod** | JSON Schema for LLM output, keeps data correct |
 | Storage | **IndexedDB (Dexie.js)** | Large model data and user config |
 | Code compression | **lz-string** | Efficient JSON compression |
-| HTTP | **Axios** | API requests with interceptors and error handling |
+| HTTP | **fetch (streaming SSE)** | OpenAI-compatible chat completions, unified fetch stack |
 | Build | **Vite** | Fast dev/build tooling |
-| Testing | **Vitest + Testing Library** | Unit and component tests (430 cases, run in CI) |
+| Testing | **Vitest + Testing Library** | Unit and component tests (468 cases, run in CI) |
 
 ## Project Docs
 
@@ -70,6 +70,17 @@ npm run build    # type check + build
 - [x] **Mobile base adaptation** (landscape-only; portrait screens are prompted to rotate, ✅ done)
 - [x] **2D plan enhancements** (furniture footprints / door symbols / dimension labels, ✅ done)
 - [x] **Brand-new UI redesign** (warm light theme / no sidebar / bottom chat drawer / empty-state guide / draggable property panel / screenshot button, ✅ done)
+
+## FAQ
+
+**Q: Where do I get an API Key?**
+A: The app is pure front-end; you configure an OpenAI-compatible API Key yourself on the Settings page (DeepSeek by default). Keys stay in browser local storage (IndexedDB/localStorage) and are never sent anywhere but the provider.
+
+**Q: Room classification (corridor/bathroom) doesn't work in English UI?**
+A: Room-name matching is based on Chinese word lists (e.g. 走廊, 卫生间); English room names may miss corridor detection and private-room door rules. This is a known limitation; multilingual word lists are planned.
+
+**Q: Can I save and share the generated model?**
+A: Yes. "Save" stores into the local project library (IndexedDB); "Share" generates a compressed code + watermarked screenshot — pasting the code restores the model (old versions auto-migrate).
 
 ## Contributing
 

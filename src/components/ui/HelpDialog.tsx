@@ -1,4 +1,5 @@
 import { useT, type TKey } from '../../i18n'
+import { Dialog } from './Dialog'
 
 interface HelpDialogProps {
   open: boolean
@@ -29,22 +30,19 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
   ]
 
   return (
-    <div className="dialog-overlay" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <h3 className="dialog__title">{t('help.title')}</h3>
-        <ul className="dialog__list">
-          {rows.map(([termKey, descKey]) => (
-            <li key={termKey}>
-              <strong>{t(termKey)}</strong> — <span>{t(descKey)}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="dialog__actions">
-          <button className="btn btn--primary" onClick={onClose}>
-            {t('help.close')}
-          </button>
-        </div>
+    <Dialog open={open} onClose={onClose} title={t('help.title')}>
+      <ul className="dialog__list">
+        {rows.map(([termKey, descKey]) => (
+          <li key={termKey}>
+            <strong>{t(termKey)}</strong> — <span>{t(descKey)}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="dialog__actions">
+        <button className="btn btn--primary" onClick={onClose}>
+          {t('help.close')}
+        </button>
       </div>
-    </div>
+    </Dialog>
   )
 }

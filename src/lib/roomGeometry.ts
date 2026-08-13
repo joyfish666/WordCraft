@@ -1,14 +1,18 @@
 import type { RoomNode, SceneModel } from '../types/model'
+import { ADJACENCY_GAP, DOOR_CLEARANCE, DOOR_WIDTH, EPSILON, WALL_THICKNESS } from './constants'
+import { findRoomInList } from './geometry'
 import { footprintCenter } from './footprint'
 
 export type DoorDirection = 'north' | 'south' | 'east' | 'west'
 
-/** 墙体厚度（米） */
-export const WALL_THICKNESS = 0.15
-/** 门洞宽度（米） */
-export const DOOR_WIDTH = 0.9
-/** 相邻房间判定：两面墙之间的最大间隙（米） */
-export const ADJACENCY_GAP = 0.4
+/** 墙体厚度（米）：单一来源见 constants.ts */
+export { WALL_THICKNESS }
+/** 门洞宽度（米）：单一来源见 constants.ts */
+export { DOOR_WIDTH }
+/** 相邻房间判定：两面墙之间的最大间隙（米）：单一来源见 constants.ts */
+export { ADJACENCY_GAP }
+/** 门口留空净宽（米）：单一来源见 constants.ts */
+export { DOOR_CLEARANCE }
 
 export const WALL_DIRECTIONS: DoorDirection[] = ['north', 'south', 'east', 'west']
 
@@ -139,28 +143,27 @@ export function footprintEdges(room: RoomNode): WallEdge[] {
   for (let i = 0; i < n; i++) {
     const a = fp[i]
     const b = fp[(i + 1) % n]
-    const EPS = 1e-6
     let axis: 'x' | 'z'
     let line: number
     let start: number
     let length: number
     let dir: DoorDirection
-    if (Math.abs(a.z - b.z) < EPS) {
+    if (Math.abs(a.z - b.z) < EPSILON) {
       // 水平边（沿 x）
       axis = 'x'
       line = a.z
       start = Math.min(a.x, b.x)
       length = Math.abs(b.x - a.x)
-      dir = line > center.z + EPS ? 'north' : 'south'
+      dir = line > center.z + EPSILON ? 'north' : 'south'
     } else {
       // 垂直边（沿 z）
       axis = 'z'
       line = a.x
       start = Math.min(a.z, b.z)
       length = Math.abs(b.z - a.z)
-      dir = line > center.x + EPS ? 'east' : 'west'
+      dir = line > center.x + EPSILON ? 'east' : 'west'
     }
-    if (length < EPS) continue
+    if (length < EPSILON) continue
     edges.push({
       axis,
       line,
@@ -502,9 +505,8 @@ function addEntranceDoor(
 
   let target: RoomNode | undefined
   if (entranceRoomId) {
-    // id 优先，未命中回退名称（LLM 常用房间名引用，executor.findRoom 同款）
-    target =
-      rooms.find((r) => r.id === entranceRoomId) ?? rooms.find((r) => r.name === entranceRoomId)
+    // id 优先，未命中回退名称（LLM 常用房间名引用，与 geometry.findRoomInList 同源）
+    target = findRoomInList(rooms, entranceRoomId) ?? undefined
   }
   if (!target) {
     const lines = rooms.map(lineOf).filter((l): l is number => l !== null)
@@ -547,12 +549,11 @@ function addEntranceDoor(
  */
 /** 清理墙段：去除长度 < EPS 的浮点噪声段，并合并相邻同类型段 */
 function cleanSegments(segs: WallSegment[]): WallSegment[] {
-  const EPS = 1e-6
   const out: WallSegment[] = []
   for (const s of segs) {
-    if (s.to - s.from < EPS) continue
+    if (s.to - s.from < EPSILON) continue
     const last = out[out.length - 1]
-    if (last && last.kind === s.kind && Math.abs(last.to - s.from) < EPS) {
+    if (last && last.kind === s.kind && Math.abs(last.to - s.from) < EPSILON) {
       last.to = Math.max(last.to, s.to)
       last.entrance = last.entrance || s.entrance
       continue
@@ -679,8 +680,7 @@ export function computeAllWallPlansCached(
   return plan
 }
 
-/** 门口禁入区深度（米）：从墙内壁向室内，家具不得占据门口通道 */
-export const DOOR_CLEARANCE = 1.0
+/** 门口禁入区深度（米）：从墙内壁向室内，家具不得占据门口通道。单一来源见 constants.ts */
 
 /** 一个房间的门口位置（世界坐标，沿墙方向） */
 export interface DoorZoneInfo {

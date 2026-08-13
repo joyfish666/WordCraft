@@ -1,12 +1,8 @@
 import { logDebug } from './debugLog'
-import {
-  footprintBounds,
-  footprintCenter,
-  levelHeight,
-  rectFootprint,
-  translateFootprint,
-} from './footprint'
+import { footprintBounds, footprintCenter, levelHeight, rectFootprint } from './footprint'
 import { applyFurnitureConventions, doorZoneRect } from './furniturePlacement'
+import { DEFAULT_CORRIDOR_WIDTH } from './constants'
+import { findRoomInList, halfRectOverlaps, NEST_CORNER_ORDER, translateRoom } from './geometry'
 import { normalizeContainment } from './modelTree'
 import { WALL_THICKNESS, computeDoorZones, isCorridorName } from './roomGeometry'
 import type {
@@ -21,8 +17,6 @@ import type {
   SceneModel,
   SceneModelV2,
 } from '../types/model'
-
-const DEFAULT_CORRIDOR_WIDTH = 1.2
 const DEFAULT_ROOM_HEIGHT = 2.8
 
 const SIDES = ['north', 'south', 'east', 'west'] as const
@@ -59,13 +53,7 @@ export function resolveLayout(scene: SceneModelV2): SceneModel {
   return withLayoutLog(normalizeContainment(model))
 }
 
-/** 嵌套房间落点候选符号（与 executor.nestRoom 的坑 47 避让顺序一致：东北/西北/东南/西南） */
-const NEST_CORNER_ORDER: Array<{ x: number; z: number }> = [
-  { x: 1, z: 1 },
-  { x: -1, z: 1 },
-  { x: 1, z: -1 },
-  { x: -1, z: -1 },
-]
+/** 嵌套房间落点候选符号（与 executor.nestRoom 的坑 47 避让顺序一致：东北/西北/东南/西南，同源见 geometry） */
 
 /**
  * 嵌套房间避开父房间门口禁区（坑 47 的布局引擎版本）：
@@ -95,13 +83,7 @@ function avoidNestedDoorZones(model: SceneModel): SceneModel {
       const hw = (nb.maxX - nb.minX) / 2
       const hd = (nb.maxZ - nb.minZ) / 2
       const overlap = (cx: number, cz: number): boolean =>
-        rects.some(
-          (r) =>
-            cx - hw < r.maxX - 1e-6 &&
-            cx + hw > r.minX + 1e-6 &&
-            cz - hd < r.maxZ - 1e-6 &&
-            cz + hd > r.minZ + 1e-6,
-        )
+        rects.some((r) => halfRectOverlaps(cx, cz, hw, hd, r))
       const cur = footprintCenter(n.footprint)
       if (!overlap(cur.x, cur.z)) return n
       for (const corner of NEST_CORNER_ORDER) {
@@ -307,18 +289,7 @@ function finalizeHouse(house: HouseNodeV2, rooms: RoomNode[]): HouseNode {
   }
 }
 
-/** 平移一个房间（含其家具与嵌套房间足迹），保持相对关系 */
-function translateRoom(node: RoomNode, dx: number, dz: number): RoomNode {
-  return {
-    ...node,
-    footprint: translateFootprint(node.footprint, dx, dz),
-    furniture: node.furniture.map((f) => ({
-      ...f,
-      position: { ...f.position, x: f.position.x + dx, z: f.position.z + dz },
-    })),
-    nestedRooms: node.nestedRooms.map((n) => translateRoom(n, dx, dz)),
-  }
-}
+/** 平移房间（足迹 + 家具 + 嵌套房间，保持相对关系）同源实现见 geometry.translateRoom */
 
 // ---------------------------------------------------------------------------
 // 走廊型
@@ -486,9 +457,7 @@ function resolveCustom(house: HouseNodeV2): HouseNode {
       cx = (b.minX + b.maxX) / 2
       cz = (b.minZ + b.maxZ) / 2
     } else if (r.relativeTo) {
-      const target = built.find(
-        (b) => b.id === r.relativeTo!.roomId || b.name === r.relativeTo!.roomId,
-      )
+      const target = findRoomInList(built, r.relativeTo!.roomId)
       if (target) {
         const tb = footprintBounds(target.footprint)
         const c = footprintCenter(target.footprint)

@@ -1,6 +1,7 @@
 import { t } from '../i18n'
 import { sceneModelV2Schema } from '../schemas/model.schema'
 import { opSchema } from '../schemas/ops.schema'
+import { ADJACENCY_GAP } from './constants'
 import { logDebug } from './debugLog'
 import { diffSceneV2, emptyScene, executeOps } from './executor'
 import { footprintCenter, roomDims } from './footprint'
@@ -115,7 +116,6 @@ function topLevelAdjacency(rooms: SceneModel['root']['levels'][0]['rooms']): Map
   const edgeMap = new Map(rooms.map((r) => [r.id, edgesOf(r)]))
   const center = new Map(rooms.map((r) => [r.id, footprintCenter(r.footprint)]))
   const list = new Map<string, string[]>()
-  const GAP = 0.4
   const dirOf = (axis: 'x' | 'z', from: string, to: string): string => {
     const cFrom = center.get(from)!
     const cTo = center.get(to)!
@@ -134,7 +134,7 @@ function topLevelAdjacency(rooms: SceneModel['root']['levels'][0]['rooms']): Map
             .some(
               (e2) =>
                 e1.axis === e2.axis &&
-                Math.abs(e1.line - e2.line) <= GAP &&
+                Math.abs(e1.line - e2.line) <= ADJACENCY_GAP &&
                 e1.a < e2.b - 1e-6 &&
                 e1.b > e2.a + 1e-6,
             ),
@@ -173,7 +173,8 @@ export function extractModelJson(text: string): string | null {
   if (!text) return null
   const trimmed = text.trim()
   if (!trimmed) return null
-  if (trimmed.startsWith('{')) return trimmed
+  // 纯净 JSON：对象或 ops 数组直出
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return trimmed
   const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (fence?.[1]) {
     const extracted = fence[1].trim()
@@ -183,9 +184,13 @@ export function extractModelJson(text: string): string | null {
   // 双编码容错：整段文本本身是一个包裹着 JSON 的字符串字面量
   const unwrapped = unwrapJsonString(trimmed)
   if (unwrapped !== null) return unwrapped
-  const first = trimmed.indexOf('{')
-  const last = trimmed.lastIndexOf('}')
-  if (first !== -1 && last > first) return trimmed.slice(first, last + 1)
+  const firstObj = trimmed.indexOf('{')
+  const lastObj = trimmed.lastIndexOf('}')
+  if (firstObj !== -1 && lastObj > firstObj) return trimmed.slice(firstObj, lastObj + 1)
+  // 纯 ops 数组输出（提示词允许直接输出数组）：散落文案中提取数组
+  const firstArr = trimmed.indexOf('[')
+  const lastArr = trimmed.lastIndexOf(']')
+  if (firstArr !== -1 && lastArr > firstArr) return trimmed.slice(firstArr, lastArr + 1)
   return null
 }
 
@@ -466,7 +471,7 @@ function describeSchemaIssues(raw: unknown): string {
   const hasOps =
     (typeof raw === 'object' && raw !== null && Array.isArray((raw as { ops?: unknown }).ops)) ||
     Array.isArray(raw)
-  if (hasOps) return 'ops 为空或全部无效'
+  if (hasOps) return t('error.noOps')
   const v2 = sceneModelV2Schema.safeParse(raw)
   if (!v2.success) {
     const issues = v2.error.issues
@@ -475,5 +480,5 @@ function describeSchemaIssues(raw: unknown): string {
       .join('；')
     return issues
   }
-  return '未知格式'
+  return t('error.unknownFormat')
 }

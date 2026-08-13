@@ -1,5 +1,7 @@
 import { footprintBounds } from './footprint'
 import { furnitureKind } from './furniturePresets'
+import { EPSILON } from './constants'
+import { halfRectOverlaps } from './geometry'
 import {
   DOOR_CLEARANCE,
   DOOR_WIDTH,
@@ -26,9 +28,6 @@ import type { FurnitureNode, RoomNode, SceneModel } from '../types/model'
 
 /** 平面坐标（y 保持不变，家具只调整 x/z） */
 type XZ = { x: number; z: number }
-
-/** 重叠判定容差（米）：贴边/共墙视为不重叠，仅处理真实穿透 */
-const EPS = 1e-6
 
 /** 独立放置（不贴墙）的家具：名字含这些词时保持中心/原位，仅约束进墙内 */
 const FREE_STANDING_RE = /茶几|餐桌|饭桌|圆桌|咖啡桌|地毯|椅子|凳子|吧台|岛台/
@@ -116,14 +115,9 @@ function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
 }
 
-/** 家具（半宽 hx/hz）是否与禁止进入区重叠（容差 EPS：贴边不算重叠） */
+/** 家具（半宽 hx/hz）是否与禁止进入区重叠（容差 EPS：贴边不算重叠，同源见 geometry.halfRectOverlaps） */
 function overlaps(fx: number, fz: number, hx: number, hz: number, k: InnerBounds): boolean {
-  return (
-    fx + hx > k.minX + EPS &&
-    fx - hx < k.maxX - EPS &&
-    fz + hz > k.minZ + EPS &&
-    fz - hz < k.maxZ - EPS
-  )
+  return halfRectOverlaps(fx, fz, hx, hz, k)
 }
 
 /**
@@ -161,6 +155,8 @@ function slideAlongWall(
       a + ha > kMin + EPS && a - ha < kMax - EPS && perp + hp > kO + EPS && perp - hp < kP - EPS
     )
   }
+  /** 滑动的迭代容差（米） */
+  const EPS = EPSILON
   const overlapsAt = (a: number): boolean => keepOuts.some((k) => overlapsK(a, k))
 
   let a = a0
@@ -182,8 +178,8 @@ function slideAlongWall(
     }
     const candNeg = clampA(a - needNeg)
     const candPos = clampA(a + needPos)
-    const okNeg = a - needNeg >= minA - EPS
-    const okPos = a + needPos <= maxA - EPS
+    const okNeg = a - needNeg >= minA - EPSILON
+    const okPos = a + needPos <= maxA - EPSILON
     let next: number | null = null
     if (okNeg && okPos) next = needNeg <= needPos ? candNeg : candPos
     else if (okNeg) next = candNeg

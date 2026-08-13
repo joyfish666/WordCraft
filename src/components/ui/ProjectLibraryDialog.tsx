@@ -10,6 +10,7 @@ import { useT } from '../../i18n'
 import { useModelStore } from '../../store/useModelStore'
 import { useProjectStore } from '../../store/useProjectStore'
 import { Button } from './Button'
+import { Dialog } from './Dialog'
 
 export interface ProjectLibraryDialogProps {
   open: boolean
@@ -100,102 +101,102 @@ export function ProjectLibraryDialog({
   }
 
   return (
-    <div className="dialog-overlay" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="dialog dialog--project" onClick={(e) => e.stopPropagation()}>
-        <h3 className="dialog__title">{t('project.title')}</h3>
-
-        <div className="project-create">
-          <input
-            className="input"
-            autoFocus
-            placeholder={t('project.namePlaceholder')}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void handleCreate()
-            }}
-          />
-          <Button onClick={() => void handleCreate()} disabled={!name.trim() || !scene}>
-            {t('project.saveCurrent')}
-          </Button>
-        </div>
-
-        <div className="project-list">
-          {projects.length === 0 ? (
-            <p className="project-list__empty">{t('project.empty')}</p>
-          ) : (
-            projects.map((rec) => {
-              const isCurrent = rec.id === currentId
-              const isRenaming = rec.id === renamingId
-              let roomCount = 0
-              try {
-                // v3 模型：房间在 root.levels[0].rooms（旧 v1/v2 盒子模型走相同入口，migrate 后同样成立）
-                const parsed = JSON.parse(rec.data) as {
-                  root?: { levels?: { rooms?: unknown[] }[] }
-                }
-                roomCount = parsed?.root?.levels?.[0]?.rooms?.length ?? 0
-              } catch {
-                roomCount = 0
-              }
-              return (
-                <div
-                  key={rec.id}
-                  className={`project-row ${isCurrent ? 'project-row--current' : ''}`}
-                >
-                  {isRenaming ? (
-                    <input
-                      className="input project-row__rename"
-                      value={renameDraft}
-                      autoFocus
-                      onChange={(e) => setRenameDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void commitRename(rec)
-                        if (e.key === 'Escape') setRenamingId(null)
-                      }}
-                      onBlur={() => void commitRename(rec)}
-                    />
-                  ) : (
-                    <div className="project-row__info">
-                      <span className="project-row__name">
-                        {rec.name}
-                        {isCurrent && (
-                          <span className="project-row__tag">{t('project.currentTag')}</span>
-                        )}
-                      </span>
-                      <span className="project-row__meta">
-                        {formatTime(rec.updatedAt)} · {t('project.roomCount', { count: roomCount })}
-                      </span>
-                    </div>
-                  )}
-                  <div className="project-row__actions">
-                    <Button variant="ghost" onClick={() => onOpenProject(rec.id!, rec.name)}>
-                      {t('project.open')}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => {
-                        setRenamingId(rec.id!)
-                        setRenameDraft(rec.name)
-                      }}
-                    >
-                      {t('project.rename')}
-                    </Button>
-                    <Button variant="danger" onClick={() => void handleDelete(rec)}>
-                      {t('project.delete')}
-                    </Button>
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
-
-        <div className="dialog__actions">
-          <Button variant="ghost" onClick={onClose}>
-            {t('project.close')}
-          </Button>
-        </div>
+    <Dialog open={open} onClose={onClose} title={t('project.title')} className="dialog--project">
+      <div className="project-create">
+        <input
+          className="input"
+          autoFocus
+          placeholder={t('project.namePlaceholder')}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void handleCreate()
+          }}
+        />
+        <Button onClick={() => void handleCreate()} disabled={!name.trim() || !scene}>
+          {t('project.saveCurrent')}
+        </Button>
       </div>
-    </div>
+
+      <div className="project-list">
+        {projects.length === 0 ? (
+          <p className="project-list__empty">{t('project.empty')}</p>
+        ) : (
+          projects.map((rec) => {
+            const isCurrent = rec.id === currentId
+            const isRenaming = rec.id === renamingId
+            let roomCount = 0
+            try {
+              // v3 模型：房间在 root.levels[0].rooms（旧 v1/v2 盒子模型走相同入口，migrate 后同样成立）
+              const parsed = JSON.parse(rec.data) as {
+                root?: { levels?: { rooms?: unknown[] }[] }
+              }
+              roomCount = parsed?.root?.levels?.[0]?.rooms?.length ?? 0
+            } catch {
+              roomCount = 0
+            }
+            return (
+              <div
+                key={rec.id}
+                className={`project-row ${isCurrent ? 'project-row--current' : ''}`}
+              >
+                {isRenaming ? (
+                  <input
+                    className="input project-row__rename"
+                    value={renameDraft}
+                    autoFocus
+                    onChange={(e) => setRenameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void commitRename(rec)
+                      // 重命名态的 Escape 只取消重命名，不冒泡关闭对话框
+                      if (e.key === 'Escape') {
+                        e.stopPropagation()
+                        setRenamingId(null)
+                      }
+                    }}
+                    onBlur={() => void commitRename(rec)}
+                  />
+                ) : (
+                  <div className="project-row__info">
+                    <span className="project-row__name">
+                      {rec.name}
+                      {isCurrent && (
+                        <span className="project-row__tag">{t('project.currentTag')}</span>
+                      )}
+                    </span>
+                    <span className="project-row__meta">
+                      {formatTime(rec.updatedAt)} · {t('project.roomCount', { count: roomCount })}
+                    </span>
+                  </div>
+                )}
+                <div className="project-row__actions">
+                  <Button variant="ghost" onClick={() => onOpenProject(rec.id!, rec.name)}>
+                    {t('project.open')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setRenamingId(rec.id!)
+                      setRenameDraft(rec.name)
+                    }}
+                  >
+                    {t('project.rename')}
+                  </Button>
+                  <Button variant="danger" onClick={() => void handleDelete(rec)}>
+                    {t('project.delete')}
+                  </Button>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      <div className="dialog__actions">
+        <Button variant="ghost" onClick={onClose}>
+          {t('project.close')}
+        </Button>
+      </div>
+    </Dialog>
   )
 }

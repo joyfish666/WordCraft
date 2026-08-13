@@ -1,5 +1,12 @@
 import { z } from 'zod'
-import type { ModelNodeV2, RoomNodeV2 } from '../types/model'
+import type {
+  FurnitureNode,
+  HouseNode,
+  ModelNodeV2,
+  RoomNode,
+  RoomNodeV2,
+  SceneModel,
+} from '../types/model'
 
 /**
  * 大模型输出的 v2 语义模型 JSON Schema。
@@ -83,3 +90,63 @@ export const sceneModelV2Schema = z.object({
 })
 
 export type ParsedSceneModelV2 = z.infer<typeof sceneModelV2Schema>
+
+// ---------------------------------------------------------------------------
+// v3 足迹模型（本地持久化 / 分享口令的数据入口校验，migration 与导入路径使用）
+// ---------------------------------------------------------------------------
+
+export const point2DSchema = z.object({ x: z.number(), z: z.number() })
+
+/** 显式开洞（门/窗）：edgeIndex 为 footprint 边下标，from/to 为沿边局部区间 */
+export const openingSchema = z.object({
+  edgeIndex: z.number(),
+  from: z.number(),
+  to: z.number(),
+  width: z.number(),
+})
+
+export const furnitureNodeV3Schema: z.ZodType<FurnitureNode> = z.object({
+  id: z.string().min(1),
+  type: z.literal('furniture'),
+  name: z.string().min(1),
+  dimensions: dimensionsSchema,
+  position: positionSchema,
+  rotationY: z.number().optional(),
+  description: z.string().optional(),
+})
+
+export const roomNodeV3Schema: z.ZodType<RoomNode> = z.lazy(() =>
+  z.object({
+    id: z.string().min(1),
+    type: z.literal('room'),
+    name: z.string().min(1),
+    footprint: z.array(point2DSchema).min(4),
+    height: z.number(),
+    doors: z.array(openingSchema),
+    windows: z.array(openingSchema),
+    furniture: z.array(furnitureNodeV3Schema),
+    nestedRooms: z.array(roomNodeV3Schema),
+  }),
+)
+
+export const levelNodeV3Schema = z.object({
+  id: z.string().min(1),
+  height: z.number(),
+  rooms: z.array(roomNodeV3Schema),
+})
+
+export const houseNodeV3Schema: z.ZodType<HouseNode> = z.object({
+  id: z.string().min(1),
+  type: z.literal('house'),
+  name: z.string().min(1),
+  style: z.string().optional(),
+  levels: z.array(levelNodeV3Schema).min(1),
+  entranceRoomId: z.string().optional(),
+  entranceDir: z.enum(['north', 'south', 'east', 'west']).optional(),
+})
+
+/** 完整 v3 场景（数据入口校验：本地项目库 / 分享口令，校验通过才放行） */
+export const sceneModelV3Schema: z.ZodType<SceneModel> = z.object({
+  version: z.literal(3),
+  root: houseNodeV3Schema,
+})

@@ -16,6 +16,7 @@ import {
 import type { ModelNode, Point2D, Position, SceneModel } from '../types/model'
 import type { Op } from '../types/ops'
 import { useChatStore } from './useChatStore'
+import { syncDirtyWithSaved } from './useProjectStore'
 
 /** 以不可变方式更新场景中某节点位置；root 恒为整屋，故在此收窄类型 */
 function withUpdatedPosition(scene: SceneModel, id: string, position: Position): SceneModel {
@@ -264,6 +265,8 @@ export const useModelStore = create<ModelState>()(
           const future = state.scene
             ? [...state.future, state.scene].slice(-HISTORY_LIMIT)
             : state.future
+          // 撤销可能回到「已保存」状态：离散操作做一次全量比对清除脏标记（坑 B7）
+          syncDirtyWithSaved(previous)
           return { scene: previous, past: state.past.slice(0, -1), future }
         }),
 
@@ -272,6 +275,7 @@ export const useModelStore = create<ModelState>()(
           if (state.future.length === 0) return state
           const next = state.future[state.future.length - 1]
           const past = state.scene ? [...state.past, state.scene].slice(-HISTORY_LIMIT) : state.past
+          syncDirtyWithSaved(next)
           return { scene: next, past, future: state.future.slice(0, -1) }
         }),
     }),

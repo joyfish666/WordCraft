@@ -104,7 +104,8 @@ describe('HomeToolbar', () => {
 
   it('语言切换按钮在 zh/en 间翻转', () => {
     renderToolbar()
-    fireEvent.click(screen.getByRole('button', { name: 'Switch to English' }))
+    // zh 界面下按钮可访问名 = 当前语言描述动作「切换为英文」
+    fireEvent.click(screen.getByRole('button', { name: '切换为英文' }))
     expect(useSettingsStore.getState().language).toBe('en')
   })
 })

@@ -1,5 +1,7 @@
 import { findNodeById } from './modelTree'
 import { footprintCenter } from './footprint'
+import { sameFootprint } from './geometry'
+import { EPSILON } from './constants'
 import type { Op } from '../types/ops'
 import type { Dimensions, Position, RoomNode, SceneModel } from '../types/model'
 
@@ -15,26 +17,20 @@ import type { Dimensions, Position, RoomNode, SceneModel } from '../types/model'
  * - 无法表达（节点不存在 / 无实际变化）时返回空数组，调用方不记录。
  */
 
-const EPS = 1e-6
-
-function sameFootprint(a: { x: number; z: number }[], b: { x: number; z: number }[]): boolean {
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) {
-    if (Math.abs(a[i].x - b[i].x) > EPS || Math.abs(a[i].z - b[i].z) > EPS) return false
-  }
-  return true
-}
-
 function dimsEqual(a: Dimensions, b: Dimensions): boolean {
   return (
-    Math.abs(a.length - b.length) <= EPS &&
-    Math.abs(a.width - b.width) <= EPS &&
-    Math.abs(a.height - b.height) <= EPS
+    Math.abs(a.length - b.length) <= EPSILON &&
+    Math.abs(a.width - b.width) <= EPSILON &&
+    Math.abs(a.height - b.height) <= EPSILON
   )
 }
 
 function posEqual(a: Position, b: Position): boolean {
-  return Math.abs(a.x - b.x) <= EPS && Math.abs(a.y - b.y) <= EPS && Math.abs(a.z - b.z) <= EPS
+  return (
+    Math.abs(a.x - b.x) <= EPSILON &&
+    Math.abs(a.y - b.y) <= EPSILON &&
+    Math.abs(a.z - b.z) <= EPSILON
+  )
 }
 
 /** 递归查找家具所属房间（含嵌套），未找到返回 null */
