@@ -14,6 +14,7 @@ interface SettingsState extends AppSettings {
   setColorMode: (mode: ColorMode) => void
   toggleWireframe: () => void
   setWireframeLineWidth: (width: number) => void
+  setShadows: (value: boolean) => void
   setDebugMode: (value: boolean) => void
   setLanguage: (lang: Language) => void
 }
@@ -31,6 +32,8 @@ export const useSettingsStore = create<SettingsState>()(
       colorMode: 'standard',
       // 默认实体色块渲染（关闭线框），家具/房间呈现为有遮挡关系的实心方块
       wireframe: { enabled: false, lineWidth: 1 },
+      // 实时阴影默认开启（低端设备可关）
+      shadows: true,
       debugMode: false,
       language: 'zh',
 
@@ -65,19 +68,26 @@ export const useSettingsStore = create<SettingsState>()(
       setWireframeLineWidth: (width) =>
         set((state) => ({ wireframe: { ...state.wireframe, lineWidth: width } })),
 
+      setShadows: (value) => set({ shadows: value }),
+
       setDebugMode: (value) => set({ debugMode: value }),
       setLanguage: (lang) => set({ language: lang }),
     }),
     {
       name: STORAGE_KEY,
-      version: 3,
-      // v2 起默认关闭线框；v3 起新增语言字段（旧数据缺省为中文）
+      version: 5,
+      // v2 起默认关闭线框；v3 起新增语言字段（旧数据缺省为中文）；
+      // v4 起新增屋顶/阴影开关；v5 起移除屋顶渲染（一层户型被檐口遮挡内部），
+      // 旧存档里的 roof 字段一并剔除，避免残留进状态
       migrate: (persistedState) => {
-        const persisted = persistedState as AppSettings
+        const persisted = persistedState as AppSettings & { roof?: boolean }
+        const { roof, ...rest } = persisted
+        void roof
         return {
-          ...persisted,
+          ...rest,
           wireframe: { enabled: false, lineWidth: 1 },
-          language: persisted.language ?? 'zh',
+          language: rest.language ?? 'zh',
+          shadows: rest.shadows ?? true,
         }
       },
     },

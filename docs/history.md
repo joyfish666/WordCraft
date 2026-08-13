@@ -220,6 +220,28 @@ README 路线图「移动端基础适配」以**横屏限定**方式落地（验
 - **测试补齐**：PlanToolbar（桌面工具行/移动端弹出面板）、LanguageToggle、lib 薄测试（viewport/palette/sampleModel/watermark）、migration 畸形 v3、useProjectStore 快照与 syncDirtyWithSaved。
 - **文档同步**：README 双版技术栈 Axios→fetch 修正、design.md §9 验收表补行与数字统一、notes.md 坑号重排、ui-preview.html 补"仅供参考"标注。
 
+### 房屋造型材质层（2026-08-13，M1 材质 + M2 造型细节）
+
+解决"各房间仅颜色不同、无材质纹理"的观感问题，纯前端零外部资源：
+
+- **程序化纹理**（`lib/materials.ts`）：6 张 256² Canvas 贴图（木地板/瓷砖/混凝土/家具木纹/织物/草地），全部用周期函数（正弦 + 取模值噪声）生成，`RepeatWrapping` 天然无缝；共享单例缓存 + `materialParams` 把规格解析为可直传 `meshStandardMaterial` 的参数。
+- **材质分类**：地板按房间名自动匹配（卫生间/厨房→瓷砖、走廊→混凝土、阳台→防腐木、其余→木地板），中性灰纹理 × 房间识别色淡化 tint 相乘——**识别色保留在地板、墙身中性化**（内墙暖白抹灰 `WALL_INTERIOR_COLOR`、外墙涂料 + 混凝土纹理 + 按段长拉伸 UV）；家具按（种类, 明度档）匹配 木纹/织物/金属/陶瓷/玻璃/塑料；色盲模式统一中性灰、靠明度与图案区分。
+- **造型细节**（`ModelNodeView.tsx`）：彩色踢脚线（房间色加深）、门套（立柱+横梁）、实体窗框（上下轨/立柱/大窗中梃，替换原线框示意）、外墙多材质六面盒（±z 面外侧面用饰面，`WallEdge.shared=false` 判定）；聚焦/虚化/线框/截图等既有状态全部兼容。
+- **平屋顶 + 女儿墙檐口**（`RoofView.tsx`）：整屋包围盒外挑屋檐，聚焦房间看内部时自动隐藏，可经设置开关；**室外地面**（`GroundView.tsx`）：草地平面（接收阴影）+ 入户方向石板小径。
+- **光照升级**（`SceneViewer.tsx`）：新增半球光，主光开启阴影贴图（2048²、家具/墙/屋顶投影、地板/墙面/地面接收），设置页可关（`roof`/`shadows` 两个新开关，settings 持久化 v4 迁移默认开启）。
+
+### 房屋造型材质层·写实化与修复批次（2026-08-13 晚，验收：490 用例全绿）
+
+材质层落地后按用户反馈打磨观感并修复渲染缺陷（坑 77-79 见 notes）：
+
+- **写实化改造（仍零外部资源）**：ACES 色调映射 + PCFSoft 软阴影（`shadows='soft'`，顺带修复 shadowMap 此前从未启用的静默问题）；drei 程序化 `<Sky>` + 地平线雾（仅 3D 模式，Sky 材质显式 `fog=false`）；`EnvironmentBridge`（PMREMGenerator + three 自带 `RoomEnvironment`）写入 `scene.environment`（intensity 0.4）供玻璃/金属反射；重配光 ambient 0.35 / hemisphere 0.35 / directional 1.4（总光降下来压住过曝）；阴影贴图边界随房屋包围盒动态伸缩（不再固定 ±18）。
+- **UV 双重缩放修复（关键 bug，坑 78）**：`getTexture` 曾对共享纹理全局设 `repeat = 1/tileMeters`，墙面/屋顶/地面几何又在几何层按 `len/tileMeters` 拉伸 UV——两者相乘实际平铺周期 = tile²（混凝土墙 6.25m、草地 4m 一贴），墙面纹理糊成一片。修复：base 纹理 repeat=1（归一化 UV 几何自行按米拉伸），地板（Extrude 顶面 UV 为世界坐标）经新增 `getWorldUvTexture` 使用带 repeat 的克隆（共享图像，仅 repeat 不同）。
+- **色板重建（三档明度层次）**：外墙近白抹灰 `#f5f1e6`、屋顶 `#56503f`、草地 `#a8b795`、石板 `#c7bda1`——建筑从米色环境中跳出；房间地板 tint 策略改为向暖白抹灰 `#f0ede4` 混 80%（木地板），识别色只留淡暖色调，不再乘出脏灰"马卡龙"。
+- **纹理重绘**：木地板（顺纹沿板长拉长、板间独立明暗、板边倒角压暗、底色 158→188 提亮）、草地（中性灰双层噪声 + 半透明草丛斑块 + 草叶短划，跨边回绕无缝）、新增外墙抹灰纹理 `plasterWall`（细颗粒 + 低频抹痕）；走廊地板混凝土 → 木地板（与暖色房间群融合），`CORRIDOR_COLOR` 灰绿 → 暖灰褐。
+- **造型细节**：外墙底部**基座勒脚**（0.28m 深灰、外凸 3cm，墙段与窗台下连续、门段留空）；玻璃改**反射玻璃**（深蓝灰 `#3a4a55` + metalness 0.85 + roughness 0.12，吃环境反射）；门头黄色标识牌与门套上横梁移除（门洞上方不再有横杠）；入户石板小径改按墙体方案中真实 `entrance` 门段对齐门洞中心（入口墙被窗占满时系统兜底换墙也跟随）。
+- **屋顶整体移除（用户决策，坑 79）**：一层户型屋檐遮挡内部视野，`RoofView.tsx` 删除、`roof` 设置项全链路清理（types/settings、useSettingsStore、设置页 UI、i18n 中英 key），settings persist 升 **v5** 并在 migrate 中剔除旧存档残留的 `roof` 字段。
+- **z-fighting 根因修复（坑 77）**：墙底/勒脚底/踢脚线底/门套立柱底等**同法向共面**面叠在同一平面导致连接处闪烁（反向共面会被背面剔除、永不互掐——此前 notes 坑 6「只发生在垂直面」的认知被证伪，水平朝下底面同样会闪）。修法：每层底面与外侧面逐一错开 1~2.5mm（`BASE_CLEARANCE`/`POST_CLEAR`/`PLINTH_CLEAR`/`PLINTH_INNER_CLEAR`）；墙/家具整体沉入地板顶面 2mm（`FLOOR_EMBED`/`FLOOR_TOP_Y`，Gizmo y 换算同步）；石板抬 1mm 不与草地共面。
+
 ## 给后来者的三条主线经验
 
 1. **不要回到"LLM 直接给绝对坐标"**：几何确定性是一切（撤销/测试/分享/多轮）的基石；

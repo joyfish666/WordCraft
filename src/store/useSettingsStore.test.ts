@@ -12,6 +12,7 @@ describe('useSettingsStore', () => {
       thinking: 'disabled',
       colorMode: 'standard',
       wireframe: { enabled: false, lineWidth: 1 },
+      shadows: true,
       debugMode: false,
       language: 'zh',
     })
@@ -49,8 +50,42 @@ describe('useSettingsStore', () => {
     expect(useSettingsStore.getState().language).toBe('zh')
   })
 
+  it('v3 旧数据迁移：缺 shadows 时默认开启（造型层不丢）', async () => {
+    useSettingsStore.setState({ shadows: false })
+    localStorage.setItem(
+      'wordcraft.settings',
+      JSON.stringify({
+        state: {
+          apiKeys: [],
+          activeKeyId: null,
+          defaultBaseUrl: '',
+          defaultModel: 'deepseek-v4-flash',
+          thinking: 'disabled',
+          colorMode: 'standard',
+          wireframe: { enabled: false, lineWidth: 1 },
+          debugMode: false,
+          language: 'zh',
+        },
+        version: 3,
+      }),
+    )
+    await useSettingsStore.persist.rehydrate()
+    expect(useSettingsStore.getState().shadows).toBe(true)
+  })
+
   it('默认关闭线框（实体色块渲染）', () => {
     expect(useSettingsStore.getState().wireframe.enabled).toBe(false)
+  })
+
+  it('阴影开关默认开启且可切换并持久化', () => {
+    const s = useSettingsStore.getState()
+    expect(s.shadows).toBe(true)
+    s.setShadows(false)
+    expect(useSettingsStore.getState().shadows).toBe(false)
+    const saved = JSON.parse(localStorage.getItem('wordcraft.settings') as string) as {
+      state: { shadows: boolean }
+    }
+    expect(saved.state.shadows).toBe(false)
   })
 
   it('新增 API Key 并自动激活', () => {

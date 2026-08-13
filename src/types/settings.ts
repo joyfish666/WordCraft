@@ -33,6 +33,8 @@ export interface AppSettings {
     enabled: boolean
     lineWidth: number
   }
+  /** 是否开启实时阴影（阴影贴图；低端设备可关闭） */
+  shadows: boolean
   /** 调试模式：开启后记录生成过程日志（设置页开关） */
   debugMode: boolean
   /** 界面语言：zh / en（侧边栏按钮快速切换） */

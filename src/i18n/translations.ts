@@ -139,6 +139,8 @@ export const zh = {
   'settings.colorColorblind': '色盲模式',
   'settings.showWireframe': '显示线框',
   'settings.wireframeWidth': '线框粗细',
+  'settings.showShadows': '实时阴影',
+  'settings.showShadowsHint': '家具/墙体落影，真实感提升明显；低端设备可关闭。',
   'settings.debugSection': '调试',
   'settings.debugMode': '开启调试模式',
   'settings.debugHint':
@@ -453,6 +455,8 @@ export const en: Record<TKey, string> = {
   'settings.colorColorblind': 'Colorblind',
   'settings.showWireframe': 'Show wireframe',
   'settings.wireframeWidth': 'Wireframe width',
+  'settings.showShadows': 'Real-time shadows',
+  'settings.showShadowsHint': 'Soft shadows under furniture and walls; turn off on low-end devices.',
   'settings.debugSection': 'Debug',
   'settings.debugMode': 'Enable debug mode',
   'settings.debugHint':
