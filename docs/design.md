@@ -118,7 +118,7 @@ StairNode  { id, fromLevel, toLevel, position, dimensions } // Phase 5 预留
 
 ## 4. 契约动词化：操作序列（Phase 2 ✓ 已实施）
 
-> **P2 落地实录**（2026-08-09）：本节的 ops 契约、确定性执行器（`src/lib/executor.ts`）与提示词重写（`chat.ts`）均已实施，用例覆盖于 `executor.test.ts` / `chat.test.ts`。实施要点：
+> **P2 落地实录**（2026-08-09）：本节的 ops 契约、确定性执行器（`src/lib/executor.ts`，2026-08-13 拆为 `lib/executor/` 目录）与提示词重写（`chat.ts`）均已实施，用例覆盖于 `executor.test.ts` / `chat.test.ts`。实施要点：
 >
 > - **当时 11 种操作**（P2 落地；P3 补 `nestRoom`、P4 补 `splitRoom`/`mergeRoom`，现共 14 种，见 §4.1）：`setHouse / macro / addRoom / updateRoom / removeRoom / moveRoom / addFurniture / updateFurniture / removeFurniture / setOpenings / addAdjacency`，Zod 判别联合白名单（`schemas/ops.schema.ts`），类型在 `types/ops.ts`。
 > - **执行器**：`executeOps(scene, ops, {furnitureConventions})` 逐条 try/catch，失败仅跳过该条并记录原因；全部执行后统一 `normalizeContainment`（+ auto 批次家具常理兜底）+ 楼层高度刷新。`macro` 直接构造 v2 HouseNode 调 `resolveLayout`，老引擎零浪费。
@@ -151,7 +151,7 @@ type Op =
   | { op: 'macro', name: 'corridor' | 'living' | 'custom', params? }   // 复用旧布局引擎
 ```
 
-### 4.2 确定性执行器（新 `src/lib/executor.ts`）
+### 4.2 确定性执行器（新 `src/lib/executor/`，2026-08-13 由单文件拆为目录）
 
 - 逐条执行，**每条独立 try/catch，失败跳过并回滚该条**——LLM 再飘也不毁整屋；
 - `macro` 操作直接映射现有 `resolveCorridor` / `resolveLiving`（`layout.ts`），老引擎零浪费；

@@ -56,13 +56,13 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 44. **卫生间默认只开一扇门（2026-08-09 用户反馈）**：普通"卫生间"同时邻走廊和卧室时，旧规则每面共享墙都开门（双门）。新规则（computeWallPlan 内 `bathroomDoorTargets` 预扫描）：每间卫生间至多一扇**推导门**——① 命名归属房间存在（主卧卫生间→主卧）只对它开门；② 否则（公共/普通卫生间）**走廊优先**（"卫生间移开走廊门"=用户要求两门时用 setOpenings 在实心墙上显式加门）；③ 无走廊时选邻居 id 最小者（确定性）。注意：门判定在共享墙两侧是对称的（卫生间侧不开时邻居侧也不开，否则会出现"卧室侧有门、卫生间侧实心"的半扇门）。改 `computeWallPlan` 的门逻辑时，别把普通卫生间退回"每面墙都开门"。
 
-45. **把已有房间"内嵌"成嵌套子房间必须用 `nestRoom`**（2026-08-09 用户反馈）：用户要求"主卧卫生间内嵌到主卧"，LLM 输出了 `moveRoom`（relativeTo）——它只能把房间贴到目标房间外侧，无法变成嵌套子房间（嵌套只在 macro/addRoom 的 nestedRooms 里生成）。修复：新增 op `{"op":"nestRoom","id":"主卧卫生间","into":"主卧","side":"可选"}`——执行器从原父容器移除该房间（顶层或已嵌套均可），按布局引擎 `placeNested` 的角落规则（side→父房间对应角，默认东北角，去墙厚余量）平移到父房间内部，家具与嵌套子房间整体随动（`translateRoomNode`），再挂进父房间 `nestedRooms`；环检测（父房间不能是待移动房间的后代）与非法输入跳过；结束统一 `normalizeContainment` 兜底（过大时钳制居中、父家具推出占地）。已嵌套的房间可再次 nestRoom 转移父房间。提示词已补充该操作。**设计决策：nestRoom 移走房间后留下的空隙不自动补位**（其他房间保持不动——op 是局部修改语义，自动滑动会改动用户未提及的房间；想补位用 moveRoom 让 LLM 移动相邻房间，见坑 46 的对齐修正）。
+45. **把已有房间"内嵌"成嵌套子房间必须用 `nestRoom`**（2026-08-09 用户反馈）：用户要求"主卧卫生间内嵌到主卧"，LLM 输出了 `moveRoom`（relativeTo）——它只能把房间贴到目标房间外侧，无法变成嵌套子房间（嵌套只在 macro/addRoom 的 nestedRooms 里生成）。修复：新增 op `{"op":"nestRoom","id":"主卧卫生间","into":"主卧","side":"可选"}`——执行器从原父容器移除该房间（顶层或已嵌套均可），按布局引擎 `placeNested` 的角落规则（side→父房间对应角，默认东北角，去墙厚余量）平移到父房间内部，家具与嵌套子房间整体随动（`translateRoom`，lib/geometry.ts，原 modelTree.translateRoomContents），再挂进父房间 `nestedRooms`；环检测（父房间不能是待移动房间的后代）与非法输入跳过；结束统一 `normalizeContainment` 兜底（过大时钳制居中、父家具推出占地）。已嵌套的房间可再次 nestRoom 转移父房间。提示词已补充该操作。**设计决策：nestRoom 移走房间后留下的空隙不自动补位**（其他房间保持不动——op 是局部修改语义，自动滑动会改动用户未提及的房间；想补位用 moveRoom 让 LLM 移动相邻房间，见坑 46 的对齐修正）。
 
-46. **贴靠放置必须对齐走廊边线（moveRoom/addRoom 的 relativeTo）**（2026-08-09 用户反馈）："次卧和主卧相邻"后，次卧开走廊门但地板与走廊有 0.25m 缝隙——`adjacentCenter` 在垂直于贴靠方向的轴对齐到**目标房间中心**，房间宽度与目标不一致时（次卧宽 3 < 主卧宽 3.5），其走廊侧边悬在走廊边线上方；缝隙 0.25 < ADJACENCY_GAP(0.4) 仍判相邻 → 有门但地板悬空。修复：`alignAdjacentPlacement`（executor.ts）在 east/west 贴靠时把被移动房间靠走廊一侧的边对齐到**目标房间的同侧边线**（走廊型布局中所有北侧房南边都在走廊北边线上）；`applyAddRoom` 与 `moveAdjacent` 共用（目标就是走廊本身时跳过，语义模糊）。改贴靠逻辑时别丢掉这步对齐。
+46. **贴靠放置必须对齐走廊边线（moveRoom/addRoom 的 relativeTo）**（2026-08-09 用户反馈）："次卧和主卧相邻"后，次卧开走廊门但地板与走廊有 0.25m 缝隙——`adjacentCenter` 在垂直于贴靠方向的轴对齐到**目标房间中心**，房间宽度与目标不一致时（次卧宽 3 < 主卧宽 3.5），其走廊侧边悬在走廊边线上方；缝隙 0.25 < ADJACENCY_GAP(0.4) 仍判相邻 → 有门但地板悬空。修复：`alignAdjacentPlacement`（lib/executor/rooms.ts，2026-08-13 由 executor.ts 拆分）在 east/west 贴靠时把被移动房间靠走廊一侧的边对齐到**目标房间的同侧边线**（走廊型布局中所有北侧房南边都在走廊北边线上）；`applyAddRoom` 与 `moveAdjacent` 共用（目标就是走廊本身时跳过，语义模糊）。改贴靠逻辑时别丢掉这步对齐。
 
 47. **nestRoom 落点必须避开父房间门口禁区，家具必须推出嵌套占地**（2026-08-09 用户反馈）：
     ① **落点压门**：卫生间内嵌到主卧后落在东北角，恰好压在主卧（朝走廊全宽开门）门洞正下方——透过门洞看过去没有墙（嵌套房间与外墙共线的边被覆盖为 open），门洞形同虚设。修复：`applyNestRoom` 用 `computeDoorZones`（与渲染同源，含入户门）+ `doorZoneRect`（furniturePlacement 导出）计算父房间门口禁区，候选角按「请求的 side 优先、其余 东北/西北/东南/西南 确定性尝试」选择第一个不与禁区重叠的角；全部冲突回退到请求的角。⚠️ **2026-08-12 补充：macro 布局路径同样有此坑**——`placeNested`（layout.ts）按角落规则落位时不看门洞，内卫无 side 时默认东北角同样会压门（用户复现"卫生间贴近门的那一侧没有墙壁"）。修复：`resolveLayout` 布局完成后统一跑 `avoidNestedDoorZones`（与 nestRoom 同款避让逻辑，按 东北/西北/东南/西南 确定性换角），覆盖 corridor/living/custom 全部模板。改内嵌落点逻辑时两条路径都要保持避让。
-    ② **家具推不出**：`normalizeContainment` 的 `pushOutOfRects` 有三个缺陷——旧实现只沿最小穿透轴推一次再钳制，**钳制会把家具拉回禁区**（家具贴墙时）；**完全在禁区内的家具**（nestRoom 把卫生间嵌进已有家具的房间时，如床头柜落在卫生间里）最小穿透推不出去；**贴边浮点噪声**（-1.05+0.75=-0.29999...8 与边界 -0.29999...93 差 1e-16）被判为重叠。修复：`overlapsRect` 加 1e-6 容差（与 furniturePlacement 一致，坑 35），候选 = X/Z 最小穿透 + 四个方向「完全退出」（移动到禁区边界外侧）的钳制结果，取重叠数最少的候选。改这两处时别退回旧行为。
+    ② **家具推不出**：`normalizeContainment` 的 `pushOutOfRects` 有三个缺陷——旧实现只沿最小穿透轴推一次再钳制，**钳制会把家具拉回禁区**（家具贴墙时）；**完全在禁区内的家具**（nestRoom 把卫生间嵌进已有家具的房间时，如床头柜落在卫生间里）最小穿透推不出去；**贴边浮点噪声**（-1.05+0.75=-0.29999...8 与边界 -0.29999...93 差 1e-16）被判为重叠。修复：`halfRectOverlaps`（lib/geometry.ts，原 modelTree.overlapsRect，2026-08-13 收拢为共享模块）加 1e-6 容差（与 furniturePlacement 一致，坑 35），候选 = X/Z 最小穿透 + 四个方向「完全退出」（移动到禁区边界外侧）的钳制结果，取重叠数最少的候选。改这两处时别退回旧行为。
 
 48. **取消内嵌/移出嵌套房间必须用 moveRoom（坑 48）**（2026-08-09 用户反馈）：用户说"把主卧卫生间移出来"，LLM 输出 `nestRoom`（又把卫生间嵌进去）——旧契约里 `moveRoom` 只对嵌套房间平移足迹（保持嵌套），**没有"移出"操作**，LLM 无路可走。修复：`moveAdjacent`（moveRoom/addAdjacency 共用）在房间为嵌套时先 `liftToTopLevel`（removeNode + 追加到顶层末尾，世界坐标不变）再贴靠——"移出来/取消内嵌"语义。同时新增 `pickFreePlacement`：贴靠落点若与其他顶层房间（含走廊）重叠，按 北/南/东/西 确定性回退到第一个空侧（防止"移到主卧南侧"直接压到走廊上），addRoom 的 relativeTo 同用；全部冲突回退请求方向。提示词已注明"取消内嵌 → moveRoom，不要用 nestRoom"。
 
@@ -99,7 +99,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 ### 3.5 存储与持久化
 
 27. **持久化迁移**：`useSettingsStore` persist 带 `version` 字段（如 version 2 起默认关闭线框），旧数据自动迁移。localStorage keys：`wordcraft.settings` / `wordcraft.model` / `wordcraft.chat` / `wordcraft.project` / `wordcraft.share`。**改持久化结构必须升 version 并写迁移**（v3 模型的 IndexedDB/口令迁移见 design.md §3.4）。
-28. **项目库脏标记用 lastSavedJsonRef 而非 revision**：HomePage 持 `lastSavedJsonRef`（上次保存的场景 JSON），`useEffect` 订阅 `scene`——与之一致则 `markSaved`、不一致则 `markDirty`；**仅 `currentId !== null` 时跟踪**（游离新场景不算脏）。打开项目/保存成功后必须先 `lastSavedJsonRef.current = JSON.stringify(scene)` 再 `setProject`/`markSaved`，顺序反了会被 effect 误标脏。
+28. **项目库脏标记：快照收在 store（`savedJson` + `commitSavedScene`），只做一次全量比对**（2026-08-13 重构，坑 75）：早期实现是 HomePage 持 `lastSavedJsonRef` + `useEffect` 订阅 `scene` 推算 dirty 并回写 store——拖拽预览每帧换 scene 引用触发**每帧 `JSON.stringify` 全场景**，且 dirty 真值与 store 双源易漂移（`markDirty` 从未被业务主动调用）。现行机制：`useProjectStore` 持 `savedJson`（上次保存的场景 JSON）+ `dirty`；**打开项目/保存成功/新建项目后必须调 `commitSavedScene(JSON.stringify(scene))`**（先 `setScene` 再 `commitSavedScene`，避免订阅把"加载即变"误判为脏）；`hooks/useDirtyTracking`（HomePage）订阅场景变化，只在「干净 → 变化」时比对一次（拖拽首帧置脏后跳过，不再逐帧 stringify）；撤销/重做回到已保存状态由 `useModelStore.undo/redo` 调 `syncDirtyWithSaved` 一次性清除。**仅 `currentId !== null` 时跟踪**（游离新场景不算脏）。约定：dirty 判定必须走 store 快照，别回到"组件 ref + effect 推算"的实现（坑 75）。
 29. **截图三件套**：① Canvas 必须 `gl={{ preserveDrawingBuffer: true }}` 否则 `toDataURL()` 读不到缓冲（空白）；② 场景净化用 `useModelStore.screenshotMode`，置 true 后**等两帧 rAF** 让 React 应用隐藏辅助元素再截图，最后复位；③ jsdom 无 WebGL，HomePage 调用须用 `viewportRef.current?.captureScreenshot?.()`（`?.` 守卫方法本身）。口令历史只持久化 records（上限 20），还原校验走 `migrateModel`（v1/v3 均可，P1 起）；口令编码带 `wc3:` 前缀（P1 起）。
 
 ### 3.6 i18n
@@ -122,7 +122,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 33. **jsdom 无原生 IndexedDB**：`vitest.setup.ts` 加了 `import 'fake-indexeddb/auto'` 供 Dexie 测试（`database.test.ts`）。`ProjectLibraryDialog` 的异步续体用 `aliveRef` 守卫避免卸载后 setState。
 34. **jsdom 无 WebGL**：`HomePage.test.tsx` mock 了 `SceneViewer`，测试 R3F 渲染相关改动注意；`captureScreenshot` 在 mock 下不存在（HomePage 用 `?.()` 防御）。
-35. **重叠判定要容忍浮点贴边**：床贴墙/贴禁区边界时，边缘仅差 ~1e-16 的浮点噪声，严格不等式会误判重叠。`overlaps` 内部用 1e-6 容差，测试判定也按贴边允许处理。
+35. **重叠判定要容忍浮点贴边**：床贴墙/贴禁区边界时，边缘仅差 ~1e-16 的浮点噪声，严格不等式会误判重叠。`halfRectOverlaps`（lib/geometry.ts，与 furniturePlacement 同源）内部用 1e-6 容差（`EPSILON`），测试判定也按贴边允许处理。
 36. **调试日志精简**：`roomGeometry` 不再记录「入户门生成」（该函数每次场景变化都重算导致刷屏）；`chat.ts` 里原始回复本身就是纯净 JSON 时跳过重复的「解析结果」日志。加日志时注意：高频路径（场景变化触发）不加日志。
 
 ### 3.9 v3 足迹模型（P1 落地实录）
@@ -161,7 +161,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 ### P3 落地补充（改 editOps/chat/useModelStore 前读）
 
-9. **手动编辑 → op 必须按编辑后的实际状态取数**：`editDiffToOps(before, after, id)` 与真实提交一致（如 `updateSelected` 先 `normalizeContainment` 再 diff），家具 op 的 `patch.position` 必须是**相对所在房间中心**的换算值（x/z 偏移、y 为高度一半），房间位移/改尺寸统一用 `patch.footprint`（世界坐标顶点环）表达——直接塞绝对坐标会误导 LLM（v2 语义是相对值，坑 9 同源）。
+9. **手动编辑 → op 必须按编辑后的实际状态取数**：`editDiffToOps(before, after, id)` 与真实提交一致（如 `updateSelected` 先 `normalizeContainment` 再 diff），家具 op 的 `patch.position` 必须是**相对所在房间中心**的换算值（x/z 偏移、y 为高度一半），房间位移/改尺寸统一用 `patch.footprint`（世界坐标顶点环）表达——直接塞绝对坐标会误导 LLM（v2 语义是相对值，见本页「P2 落地补充」第 9 条，两节各自独立编号）。
 10. **家具尺寸断言别写死**：示例模型家具经家具常理摆放可能已交换长宽（坑 17），断言编辑后尺寸时应取"编辑后节点的实际 dimensions"而非"规格里的名义长宽"。
 11. **`toChatHistory` 剔除规则只认助手纯 JSON**：以 `{` 开头的助手消息（上一轮 ops 原文）不回传，由场景摘要 + 编辑日志替代；用户消息与带文本的助手消息保留（多轮意图不断裂）。改该过滤规则时注意 `undoLastGeneration` 依赖消息对结构，别误删。
 12. **编辑日志生命周期**：`setScene`/`resetScene`/`clearConversation` 清空 `useChatStore.editOps`——旧日志描述的是已被整体替换的场景，留着会让 LLM 把已作废的改动当成现状；生成失败（场景未变）时日志保留。
@@ -198,7 +198,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 56. **尺寸信息会盖在房间上——必须提供开关**（2026-08-10 用户反馈）：房间内部尺寸线（`roomDimLines`）叠加在房间上会遮挡内容。方案：`useModelStore.showPlanDims`（会话内，默认开、不随 setScene 复位——视图偏好与场景无关）控制渲染，工具栏「尺寸」开关独立一行（第二行，不挤占工具行）。⚠️ 尺寸线「仅选择工具时显示」（编辑工具下让位），开关 ≠ 工具联动。
 57. **房间标签不要重复尺寸**（2026-08-10 用户反馈）：尺寸线已标注长宽后，房间标签再显示「厨房 3.5×3」是重复信息。方案：**标签恒只显示名称**（`PlanAnnotations` 不再调 `roomLabelText`，该函数已随死代码删除）——比"开关联动"更简单且不会因开关/工具状态变化导致标签闪烁。
-58. **空文案提示条会露出黑底空胶囊**（2026-08-10 用户反馈"火腿肠"）：`.plan-toolbar__hint` 是黑底圆角胶囊（`rgba(20,22,27,0.72)` + border-radius），选择工具下文案为空仍渲染出空胶囊。方案：HomePage 里 `planTool !== 'select'` 时才渲染提示条（不要再加空内容 div）。
+58. **空文案提示条会露出黑底空胶囊**（2026-08-10 用户反馈"火腿肠"）：`.plan-toolbar__hint` 是黑底圆角胶囊（`rgba(20,22,27,0.72)` + border-radius），选择工具下文案为空仍渲染出空胶囊。方案（2026-08-13 起在 `PlanToolbar` 内实现，原 HomePage 逻辑随组件拆分迁移）：`hintFor` 对选择工具返回空串，渲染处 `hint && <div>` 空串即不渲染（不要再加空内容 div）。
 59. **平面图增强的三层高度与编辑层交互平面不冲突**：足迹 0.14 / 门窗符号 0.25 / 尺寸线 0.35，全部低于 `PlanEditLayer` 交互平面 0.5——编辑工具下平面先命中（相机俯视按距离排序），足迹/符号不会拦截指针；选择工具下无交互平面，足迹（`onClick` + stopPropagation）可选中家具。改高度时别抬到 0.5 以上。
 60. **门扇符号弧线：atan2 差值恒为 ±π/2，天然是 90° 短弧且落在房间内**：铰链端（段起点门框角）→ 门扇线垂直入房间；弧线从门扇端点扫到洞口另一端，首尾点取精确坐标（浮点缝隙会导致线与墙之间出现断点）。窗洞符号 = 向内偏移 0.1/0.22 的双线（经典双线示意）。
 
@@ -223,7 +223,9 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 ### 3.16 缺陷修复批次（2026-08-13 代码审查落地：静默缺陷 + 渲染性能）
 
-70. **生成竞态：180 秒生成期间的编辑被静默覆盖 / 无 API Key 时草稿被清空**（代码审查发现，2026-08-13）：`send()` 只读发送时刻的场景快照，最长 180s 后无条件 `setScene(model)`——期间用户手动编辑（拖动/属性面板/打开项目/加载示例）被覆盖，撤销栈也被清空；且 `setDraft('')` 在 API Key 检查**之前**执行，无 key 时辛苦输入的草稿消失。修复（HomePage）：① 发送时快照 `generationBaseRef`（场景引用），返回后 `scene !== baseScene` 时 `window.confirm` 询问「仍要应用生成结果覆盖当前编辑吗」，取消则丢弃结果并提示（用户编辑保留）；② `setDraft('')` 移到 key 检查之后。改生成链路时别再出现"无条件覆盖"——结果基于旧版本的场景生成时必须有确认环节。
+> 编号说明：坑 67-69 为早期编辑时跳号（历史遗留），未使用；本节从 70 继续编号，3.17 节接 74。
+
+70. **生成竞态：180 秒生成期间的编辑被静默覆盖 / 无 API Key 时草稿被清空**（代码审查发现，2026-08-13）：`send()` 只读发送时刻的场景快照，最长 180s 后无条件 `setScene(model)`——期间用户手动编辑（拖动/属性面板/打开项目/加载示例）被覆盖，撤销栈也被清空；且 `setDraft('')` 在 API Key 检查**之前**执行，无 key 时辛苦输入的草稿消失。修复（HomePage，2026-08-13 起抽入 `hooks/useGeneration`）：① 发送时快照 `generationBaseRef`（场景引用），返回后 `scene !== baseScene` 时 `window.confirm` 询问「仍要应用生成结果覆盖当前编辑吗」，取消则丢弃结果并提示（用户编辑保留）；② `setDraft('')` 移到 key 检查之后。改生成链路时别再出现"无条件覆盖"——结果基于旧版本的场景生成时必须有确认环节。
 71. **「按名称引用」契约与 id-only 变更函数不一致 → 静默零变更**（代码审查发现，2026-08-13）：提示词允许 LLM 用房间名引用（`findRoom` 也按名回退），但 `updateNodeFields`/`updateNodeFootprint`/`removeNode`/`replaceRoom`/`updateNodePosition`（modelTree/executor）只按 `root.id === id` 精确匹配——按名称的 `updateRoom`/`removeRoom`/`splitRoom`/`mergeRoom`/`moveRoom`/`nestRoom` 全部**静默"成功"但零变更**（`next === scene` 检查被 `{...scene}` 浅拷贝绕过），用户与日志都无法察觉。修复：各 apply 函数先 `findRoom` 解析出真实 `room.id` 再调用 id-only 变更函数；`moveAdjacent` 的自引用判定与 `pickFreePlacement` 排除也改用真实 id。**约定：executor 里凡 findRoom 之后还要传引用给 modelTree/planEdit 的地方，必须传 `room.id` 而非原始 ref**。executor.test.ts 新增「按名称引用」describe（updateRoom/removeRoom/moveRoom/自引用/splitRoom/mergeRoom/nestRoom 七条）。
 72. **墙体方案同一场景每帧重复计算 3 次**（代码审查发现，2026-08-13）：`Viewport3D` / `PlanEnhancements` / `PlanEditLayer`（经 `collectWallHitEdges`）各自 `useMemo` 调用 `computeAllWallPlans`——拖拽预览每帧产生新 scene 引用时三份各算一遍（含嵌套线并集扫描），稳定场景下也是 3 倍浪费。修复：`roomGeometry.ts` 新增 `computeAllWallPlansCached(scene, entrance, entranceRoomId)`——**WeakMap 以场景对象引用为键**（场景被替换自动回收，无泄漏），同一引用只算一次；三个调用方全部改走缓存。⚠️ **共享的 WallPlan Map 是只读对象，调用方（如 ModelNodeView）只能 `.get()` 不能 `.set()`/`.delete()`**——后续若在组件里写 wallPlan 必须改为不可变副本。`computeDoorZones` 的多次调用（生成链路 6-7 次）暂未合并，属后续优化点。
 73. **平面图拖拽时相机每帧重新取景**（代码审查发现，2026-08-13）：`PlanRig` 的 effect 依赖 `scene` 引用，而拖拽预览每帧产生新 scene → 每帧 `computePlanCamera` + `saveState()`，视图持续跳变且「复位视角」基准被覆盖，房间在包围盒边缘时几乎无法编辑。修复：effect 依赖改为取景几何签名（`boundsKey` = houseBounds 数值串），包围盒不变则不重取景；房间结构变化（生成/打开项目）仍正常取景。
