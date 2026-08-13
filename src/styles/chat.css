@@ -192,17 +192,6 @@
   flex-shrink: 0;
 }
 
-.api-hint__link {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--warn);
-  font-size: 12px;
-  font-weight: 600;
-  text-decoration: underline;
-  padding: 0;
-}
-
 .chat-bottom__input {
   display: flex;
   align-items: flex-end;

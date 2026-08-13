@@ -172,6 +172,7 @@ export function SettingsPage() {
                     <input
                       type="radio"
                       name="active-key"
+                      aria-label={entry.name}
                       checked={entry.id === activeKeyId}
                       onChange={() => setActiveKey(entry.id)}
                     />

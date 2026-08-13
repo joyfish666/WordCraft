@@ -219,8 +219,8 @@ export function HomeToolbar({
           type="button"
           className="lang-btn"
           onClick={() => setLanguage(next)}
-          title={next === 'en' ? 'Switch to English' : '切换为中文'}
-          aria-label={next === 'en' ? 'Switch to English' : '切换为中文'}
+          title={next === 'zh' ? t('lang.switchToZh') : t('lang.switchToEn')}
+          aria-label={next === 'zh' ? t('lang.switchToZh') : t('lang.switchToEn')}
         >
           {next === 'en' ? 'EN' : '中文'}
         </button>

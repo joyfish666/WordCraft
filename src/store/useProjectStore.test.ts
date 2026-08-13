@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { useProjectStore } from './useProjectStore'
+import { syncDirtyWithSaved, useProjectStore } from './useProjectStore'
 
 beforeEach(() => {
   localStorage.clear()
-  useProjectStore.setState({ currentId: null, currentName: null, dirty: false })
+  useProjectStore.setState({ currentId: null, currentName: null, dirty: false, savedJson: null })
 })
 
 describe('useProjectStore', () => {
@@ -47,5 +47,47 @@ describe('useProjectStore', () => {
     expect(raw).toContain('"currentId":7')
     expect(raw).toContain('"currentName":"持久化测试"')
     expect(raw).not.toContain('dirty')
+    expect(raw).not.toContain('savedJson')
+  })
+
+  it('commitSavedScene 记录已保存快照并清空脏标记', () => {
+    useProjectStore.getState().markDirty()
+    useProjectStore.getState().commitSavedScene('{"version":3}')
+    expect(useProjectStore.getState().savedJson).toBe('{"version":3}')
+    expect(useProjectStore.getState().dirty).toBe(false)
+  })
+
+  it('clearProject 解绑同时清空已保存快照', () => {
+    useProjectStore.getState().setProject(1, '我的房子')
+    useProjectStore.getState().commitSavedScene('{"version":3}')
+    useProjectStore.getState().clearProject()
+    expect(useProjectStore.getState().currentId).toBeNull()
+    expect(useProjectStore.getState().savedJson).toBeNull()
+    expect(useProjectStore.getState().dirty).toBe(false)
+  })
+
+  it('syncDirtyWithSaved：场景回到已保存快照时清除脏标记', () => {
+    useProjectStore.getState().setProject(1, '我的房子')
+    useProjectStore.getState().commitSavedScene('{"version":3}')
+    useProjectStore.getState().markDirty()
+    syncDirtyWithSaved({
+      version: 3,
+      root: { id: 'h', type: 'house', name: '屋', levels: [] },
+    } as never)
+    expect(useProjectStore.getState().dirty).toBe(true) // JSON 不一致，保持脏
+    syncDirtyWithSaved(JSON.parse('{"version":3}'))
+    expect(useProjectStore.getState().dirty).toBe(false) // 回到已保存状态，清除
+  })
+
+  it('syncDirtyWithSaved：无项目或未脏时不比对', () => {
+    useProjectStore.getState().commitSavedScene('{"version":3}')
+    syncDirtyWithSaved(null)
+    expect(useProjectStore.getState().dirty).toBe(false)
+    // savedJson 为 null 时永不比对相等（clearProject 只清脏、不建快照）
+    useProjectStore.getState().clearProject()
+    useProjectStore.getState().setProject(1, '我的房子')
+    useProjectStore.getState().markDirty()
+    syncDirtyWithSaved(JSON.parse('{"version":3}'))
+    expect(useProjectStore.getState().dirty).toBe(true)
   })
 })

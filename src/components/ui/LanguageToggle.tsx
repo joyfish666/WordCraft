@@ -1,3 +1,4 @@
+import { useT } from '../../i18n'
 import { useSettingsStore } from '../../store/useSettingsStore'
 import { Button } from './Button'
 
@@ -9,14 +10,16 @@ export function LanguageToggle() {
   const language = useSettingsStore((s) => s.language)
   const setLanguage = useSettingsStore((s) => s.setLanguage)
   const next = language === 'zh' ? 'en' : 'zh'
+  const t = useT()
+  const label = next === 'zh' ? t('lang.switchToZh') : t('lang.switchToEn')
 
   return (
     <Button
       variant="ghost"
       className="lang-toggle-btn"
       onClick={() => setLanguage(next)}
-      title={next === 'en' ? 'Switch to English' : '切换为中文'}
-      aria-label={next === 'en' ? 'Switch to English' : '切换为中文'}
+      title={label}
+      aria-label={label}
     >
       {next === 'en' ? 'EN' : '中文'}
     </Button>

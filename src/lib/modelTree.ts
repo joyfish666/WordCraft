@@ -10,6 +10,7 @@ import type {
 } from '../types/model'
 import { footprintBounds, footprintCenter, resizeFootprint, translateFootprint } from './footprint'
 import { doorZoneRect } from './furniturePlacement'
+import { halfRectOverlaps, translateRoom, type Rect } from './geometry'
 import { WALL_THICKNESS, computeDoorZones, type DoorZoneInfo } from './roomGeometry'
 
 /**
@@ -81,22 +82,8 @@ export function countNodes(root: ModelNode): number {
   return count
 }
 
-/**
- * 平移房间（足迹 + 家具 + 嵌套房间，递归），保持内部相对关系。
- * 房间位移必须整体携带内容：家具保持相对房间中心的位置、嵌套房间及其家具同步平移，
- * 否则 normalizeContainment 只会把家具钳制进（移动后的）房间边界，破坏相对布局。
- */
-export function translateRoomContents(room: RoomNode, dx: number, dz: number): RoomNode {
-  return {
-    ...room,
-    footprint: translateFootprint(room.footprint, dx, dz),
-    furniture: room.furniture.map((f) => ({
-      ...f,
-      position: { ...f.position, x: f.position.x + dx, z: f.position.z + dz },
-    })),
-    nestedRooms: room.nestedRooms.map((n) => translateRoomContents(n, dx, dz)),
-  }
-}
+/** 平移房间（足迹 + 家具 + 嵌套房间，递归），保持内部相对关系。同源实现见 geometry.translateRoom */
+export { translateRoom as translateRoomContents } from './geometry'
 
 /** 判断新足迹是否为旧足迹的纯平移（每顶点位移一致）；非纯平移（改形状/缩放）返回 null */
 function footprintTranslation(
@@ -119,7 +106,7 @@ export function updateNodePosition(root: ModelNode, id: string, position: Positi
   if (root.id === id) {
     if (root.type === 'room') {
       const c = footprintCenter(root.footprint)
-      return translateRoomContents(root, position.x - c.x, position.z - c.z)
+      return translateRoom(root, position.x - c.x, position.z - c.z)
     }
     if (root.type === 'house') return root // 整屋无 position 字段
     return { ...root, position }
@@ -148,7 +135,7 @@ export function updateNodeFootprint(root: ModelNode, id: string, footprint: Poin
     // 足迹变化是纯平移时（如编辑日志回放 updateRoom.patch.footprint 的房间移动），
     // 家具与嵌套房间须同步平移，与 updateNodePosition/updateNodeFields 行为一致
     const t = footprintTranslation(root.footprint, footprint)
-    if (t) return translateRoomContents(root, t.dx, t.dz)
+    if (t) return translateRoom(root, t.dx, t.dz)
     return { ...root, footprint }
   }
   if (isContainer(root)) {
@@ -274,7 +261,7 @@ export function updateNodeFields(root: ModelNode, id: string, patch: NodeFieldsP
         const c = footprintCenter(root.footprint)
         const dx = (patch.position.x ?? c.x) - c.x
         const dz = (patch.position.z ?? c.z) - c.z
-        if (dx !== 0 || dz !== 0) next = translateRoomContents(next, dx, dz)
+        if (dx !== 0 || dz !== 0) next = translateRoom(next, dx, dz)
       }
       return next
     }
@@ -318,14 +305,6 @@ function clampTo(value: number, min: number, max: number): number {
 // 父房间家具须被推出其占地（足迹 + 墙厚外扩），而非只约束进父墙内。
 // ---------------------------------------------------------------------------
 
-/** 平面矩形（世界坐标，x/z） */
-interface Rect {
-  minX: number
-  maxX: number
-  minZ: number
-  maxZ: number
-}
-
 /** 嵌套房间的禁止进入区：足迹包围盒 + 墙厚外扩 */
 function nestedKeepOut(room: RoomNode): Rect {
   const b = footprintBounds(room.footprint)
@@ -335,19 +314,6 @@ function nestedKeepOut(room: RoomNode): Rect {
     minZ: b.minZ - WALL_THICKNESS,
     maxZ: b.maxZ + WALL_THICKNESS,
   }
-}
-
-/** 重叠判定容差：贴边（含浮点噪声，如 -1.05+0.75=-0.29999...8 与边界 -0.29999...93 差 1e-16）不算重叠（坑 35/47） */
-const OVERLAP_EPS = 1e-6
-
-/** 家具（半宽 hx/hz）是否与禁区重叠 */
-function overlapsRect(x: number, z: number, hx: number, hz: number, k: Rect): boolean {
-  return (
-    x + hx > k.minX + OVERLAP_EPS &&
-    x - hx < k.maxX - OVERLAP_EPS &&
-    z + hz > k.minZ + OVERLAP_EPS &&
-    z - hz < k.maxZ - OVERLAP_EPS
-  )
 }
 
 /**
@@ -372,7 +338,7 @@ function pushOutOfRects(
     z: clampTo(pz, bounds.minZ + hz, bounds.maxZ - hz),
   })
   const overlapCount = (px: number, pz: number): number =>
-    keepOuts.reduce((n, k) => n + (overlapsRect(px, pz, hx, hz, k) ? 1 : 0), 0)
+    keepOuts.reduce((n, k) => n + (halfRectOverlaps(px, pz, hx, hz, k) ? 1 : 0), 0)
   for (let iter = 0; iter < 4; iter++) {
     const current = overlapCount(x, z)
     if (current === 0) break

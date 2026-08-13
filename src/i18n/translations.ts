@@ -15,8 +15,9 @@ export const zh = {
   'app.desc': '言筑 WordCraft —— 通过自然语言对话快速生成 3D 空间结构模型的纯前端 Web 应用',
   'nav.home': '首页',
   'nav.settings': '设置',
-  'nav.footer': '纯前端 · 数据本地存储',
   'nav.label': '页面导航',
+  'lang.switchToZh': '切换为中文',
+  'lang.switchToEn': '切换为英文',
 
   // ---------- HomePage 工具栏 ----------
   'home.loadSample': '示例',
@@ -91,12 +92,6 @@ export const zh = {
 
   // ---------- 状态栏 ----------
   'home.breadcrumbAria': '当前位置',
-  'home.viewTitle': '视角',
-  'home.panLeftTitle': '视角左移 (←)',
-  'home.panRightTitle': '视角右移 (→)',
-  'home.panUpTitle': '视角上移 (↑)',
-  'home.panDownTitle': '视角下移 (↓)',
-  'home.resetView': '复位视角',
   'home.selectedInfo': '已选：{name} · 长 {l}m × 宽 {w}m × 高 {h}m · 中心 ({x}, {z})',
   'home.selectedChildren': ' · {count} 个子模块',
   'home.focusedHint': '已进入房间聚焦视图',
@@ -297,6 +292,8 @@ export const zh = {
   'error.noJson': '模型返回内容中未找到 JSON，请重试',
   'error.invalidJson': '模型返回的 JSON 无法解析，请重试',
   'error.invalidSchema': '模型返回的 JSON 不符合 v2 数据结构（{issues}），请重试',
+  'error.noOps': 'ops 为空或全部无效',
+  'error.unknownFormat': '未知格式',
   'error.timeout': '请求超时，请检查网络或稍后重试',
   'error.requestFailed': '请求失败：{detail}',
   'error.httpStatus': 'HTTP {status}：{detail}',
@@ -325,8 +322,9 @@ export const en: Record<TKey, string> = {
     'WordCraft 言筑 — a pure front-end web app that generates 3D spatial models from natural-language conversation',
   'nav.home': 'Home',
   'nav.settings': 'Settings',
-  'nav.footer': 'Pure front-end · Data stays local',
   'nav.label': 'Page navigation',
+  'lang.switchToZh': 'Switch to Chinese',
+  'lang.switchToEn': 'Switch to English',
 
   // ---------- HomePage toolbar ----------
   'home.loadSample': 'Sample',
@@ -405,12 +403,6 @@ export const en: Record<TKey, string> = {
 
   // ---------- Status bar ----------
   'home.breadcrumbAria': 'Current location',
-  'home.viewTitle': 'View',
-  'home.panLeftTitle': 'Pan left (←)',
-  'home.panRightTitle': 'Pan right (→)',
-  'home.panUpTitle': 'Pan up (↑)',
-  'home.panDownTitle': 'Pan down (↓)',
-  'home.resetView': 'Reset view',
   'home.selectedInfo': 'Selected: {name} · {l}m × {w}m × {h}m · center ({x}, {z})',
   'home.selectedChildren': ' · {count} sub-modules',
   'home.focusedHint': 'Inside room focus view',
@@ -623,6 +615,8 @@ export const en: Record<TKey, string> = {
   'error.noJson': "No JSON found in the model's reply, please retry",
   'error.invalidJson': "Couldn't parse the model's JSON, please retry",
   'error.invalidSchema': "The model's JSON doesn't match the v2 structure ({issues}), please retry",
+  'error.noOps': 'ops are empty or all invalid',
+  'error.unknownFormat': 'Unknown format',
   'error.timeout': 'Request timed out. Check your network or try again later',
   'error.requestFailed': 'Request failed: {detail}',
   'error.httpStatus': 'HTTP {status}: {detail}',

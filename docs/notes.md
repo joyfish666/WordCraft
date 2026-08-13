@@ -228,13 +228,19 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 72. **墙体方案同一场景每帧重复计算 3 次**（代码审查发现，2026-08-13）：`Viewport3D` / `PlanEnhancements` / `PlanEditLayer`（经 `collectWallHitEdges`）各自 `useMemo` 调用 `computeAllWallPlans`——拖拽预览每帧产生新 scene 引用时三份各算一遍（含嵌套线并集扫描），稳定场景下也是 3 倍浪费。修复：`roomGeometry.ts` 新增 `computeAllWallPlansCached(scene, entrance, entranceRoomId)`——**WeakMap 以场景对象引用为键**（场景被替换自动回收，无泄漏），同一引用只算一次；三个调用方全部改走缓存。⚠️ **共享的 WallPlan Map 是只读对象，调用方（如 ModelNodeView）只能 `.get()` 不能 `.set()`/`.delete()`**——后续若在组件里写 wallPlan 必须改为不可变副本。`computeDoorZones` 的多次调用（生成链路 6-7 次）暂未合并，属后续优化点。
 73. **平面图拖拽时相机每帧重新取景**（代码审查发现，2026-08-13）：`PlanRig` 的 effect 依赖 `scene` 引用，而拖拽预览每帧产生新 scene → 每帧 `computePlanCamera` + `saveState()`，视图持续跳变且「复位视角」基准被覆盖，房间在包围盒边缘时几乎无法编辑。修复：effect 依赖改为取景几何签名（`boundsKey` = houseBounds 数值串），包围盒不变则不重取景；房间结构变化（生成/打开项目）仍正常取景。
 
+### 3.17 全面审查批次（2026-08-13 落地：数据入口 + 去重重构 + 性能 + a11y）
+
+74. **v3 数据入口无结构校验（migration 裸断言放行畸形数据）**（全面审查发现，2026-08-13）：v1 迁移路径有完整 zod，但 v3 分支只查 `root.type/levels` 就用 `as unknown as SceneModel` 放行——畸形分享口令/损坏的项目库数据可注入非法模型（缺字段/足迹 <4 点/字段类型错）。修复：`schemas/model.schema.ts` 新增 `sceneModelV3Schema`（递归房间/家具/开洞/楼层全结构校验），`migration.ts` 校验通过才放行（返回原对象保持引用不变，幂等测试不受影响）。**约定：凡本地/口令 JSON 数据入口，必须有 zod 结构校验**（v2 快照、v1、v3 三条路径现已全覆盖）。
+75. **脏标记双源 + 拖拽每帧 JSON.stringify 全场景**（全面审查发现，2026-08-13）：`dirty` 真值由 HomePage 的 `lastSavedJsonRef` + effect 推算并回写 store（store 的 `markDirty` 从未被业务主动调用，职责分裂易漂移）；且 `previewSelected`/`previewFootprint` 拖拽每帧产生新 scene 引用，触发 effect **每帧 `JSON.stringify` 全场景**（20+ 房间约 100KB × 60fps）。修复：快照与判定收敛到 `useProjectStore`（`savedJson` + `commitSavedScene`），订阅只在「干净 → 变化」时比对一次（拖拽首帧置脏后跳过，不再逐帧 stringify）；「撤销回到已保存状态清除脏标记」由 `useModelStore.undo/redo` 调 `syncDirtyWithSaved` 一次性全量比对（离散操作，可接受）。HomePage 逻辑抽为 `hooks/useDirtyTracking.ts`。**约定：dirty 判定必须走 store 快照，不要在组件里用 ref+effect 推算；高频预览路径不得做全量序列化**。
+76. **SSE 流式解析是最关键的零测试生产路径**（全面审查发现，2026-08-13）：`streamChatCompletion`（分片缓冲/`[DONE]`/坏行忽略/中断处理）此前零测试，回归只能靠真实请求。补 10 个用例（跨分片行拼接/`[DONE]`/坏行/空 delta/流结束/HTTP 错误透传/无 body/网络失败/读取中断/用户中止 AbortError）。另：`extractModelJson` 只认 `{` 开头，提示词允许的纯 ops 数组输出提取失败——补 `[` 直出与代码块内数组提取。
+
 ## 6. 快速文件地图
 
 | 需求 | 改哪里 |
 |------|--------|
 | 生成链路/提示词（ops 契约 + 场景摘要 + 编辑日志 + 快照容错 + **macro.name 容错修复【2026-08-12】**） | `lib/chat.ts`（`buildSystemPrompt`/`buildSceneSummary`/`buildEditOpsLog`/`resolveRawOutput`/`parseOps`/`repairMacroName`） |
 | 双向同步（手动编辑 → op 日志）【P3 新增】 | `lib/editOps.ts`（`editDiffToOps`）+ `useModelStore`（提交处记录）+ `useChatStore.editOps`/`toChatHistory` |
-| ops 执行器（逐条容错/macro/addRoom 贴靠/家具/开洞/**splitRoom/mergeRoom【P4】**/**房间按名称引用【2026-08-12】**） | `lib/executor.ts`（`executeOps`/`applyOp`/`diffSceneV2`/`findRoom`/`mapRoom`）【新增】 |
+| ops 执行器（逐条容错/macro/addRoom 贴靠/家具/开洞/**splitRoom/mergeRoom【P4】**/**房间按名称引用【2026-08-12】**） | `lib/executor/`（2026-08-13 由单文件拆为目录：`index.ts` 门面 + `core.ts` executeOps/applyOp + `rooms.ts` + `furniture.ts` + `openings.ts` + `diff.ts` + `shared.ts`；`findRoom`/`mapRoom` 在 shared）【新增】 |
 | 平面图编辑纯函数（网格吸附/正交顶点拖拽/自交校验/墙命中/平移吸附/拆合布局）【P4】 | `lib/planEdit.ts`（`snapToGrid`/`dragVertexFootprint`/`footprintValid`/`hitWallOnEdge`/`snapRoomTranslation`/`splitRoomLayout`/`mergeRoomsLayout`）【新增】 |
 | ops 契约类型 | `types/ops.ts`【新增】 |
 | ops Zod 校验（判别联合白名单） | `schemas/ops.schema.ts`【新增】 |
@@ -266,6 +272,11 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | 调试日志面板 / 键盘快捷键 / 紧凑视口判定【2026-08-13 从 HomePage 拆出】 | `components/ui/DebugPanel.tsx`（含 `debugLog.formatDebugText` 复制/下载）+ `hooks/useKeyboardShortcuts.ts`（方向键/R/撤销重做）+ `hooks/useMobileCompact.ts` + `lib/viewport.ts`（与 OrientationGuard 共享阈值） |
 | HTTP 请求（fetch 统一 + 连通性检测降级）【2026-08-13 移除 axios】 | `lib/api.ts`（`streamChatCompletion`/`testConnection`/`describeHttpError`；`testConnection` 400 时 `max_tokens` → `max_completion_tokens` 重试一次） |
 | 样式（按域拆分，@import 顺序 = 层叠顺序）【2026-08-13】 | `styles/*.css`（variables/base/home/toolbar/chat/property/compass/debug/dialog/settings/project/share/plan/mobile/error-boundary；`global.css` 仅 @import 链） |
+| 平面几何共享纯函数（重叠判定/房间平移/足迹相等/嵌套落点符号/名称回退查找）【2026-08-13 审查批次】 | `lib/geometry.ts`（`rectsOverlap`/`halfRectOverlaps`/`translateRoom`/`sameFootprint`/`NEST_CORNER`/`NEST_CORNER_ORDER`/`findRoomInList`）【新增】 |
+| 跨模块几何/布局常量（单一来源）【2026-08-13 审查批次】 | `lib/constants.ts`（`EPSILON`/`WALL_THICKNESS`/`ADJACENCY_GAP`/`DOOR_CLEARANCE`/`DOOR_WIDTH`/`DEFAULT_HEIGHT`/`ROOM_SPACING`/`DEFAULT_CORRIDOR_WIDTH`；roomGeometry 同名常量改自此再导出）【新增】 |
+| 通用对话框（a11y：aria-labelledby/焦点陷阱/Escape/焦点归还）【2026-08-13 审查批次】 | `components/ui/Dialog.tsx`（ShareDialog/ProjectLibraryDialog/HelpDialog 统一使用）【新增】 |
+| 对话生成链路 / 项目库脏标记【2026-08-13 审查批次从 HomePage 拆出】 | `hooks/useGeneration.ts`（send/撤销生成/生成计时/竞态防护）+ `hooks/useDirtyTracking.ts`（savedJson 快照比对订阅）+ `store/useProjectStore.ts`（`savedJson`/`commitSavedScene`/`syncDirtyWithSaved`） |
+| v3 数据入口结构校验【2026-08-13 审查批次，坑 74】 | `schemas/model.schema.ts`（`sceneModelV3Schema`）+ `lib/migration.ts`（v3 分支校验通过才放行） |
 | 应用版本号（状态栏展示）【2026-08-13】 | `vite.config.ts`（define `__APP_VERSION__` ← package.json）+ `src/vite-env.d.ts` 声明 + `HomePage.tsx` 状态栏 |
 | 墙体方案共享缓存（坑 72）【2026-08-13】 | `lib/roomGeometry.ts`（`computeAllWallPlansCached`，WeakMap 按场景引用）+ `Viewport3D`/`PlanEnhancements`/`lib/planEdit.ts`（`collectWallHitEdges`） |
 | 平面图取景依赖包围盒数值（坑 73）【2026-08-13】 | `PlanRig.tsx`（取景 spec 按包围盒数值 memo，effect 依赖 spec 引用） |

@@ -7,6 +7,7 @@ import type {
   Position,
   RoomNode,
 } from '../types/model'
+import { DEFAULT_HEIGHT } from './constants'
 
 /**
  * v3 足迹几何（footprint）纯函数：包围盒 / 中心 / 平移 / 缩放 / 矩形构造。
@@ -120,7 +121,7 @@ export function houseLevelsBounds(house: HouseNode): Bounds | null {
 /** 整屋展示用尺寸（length/width = 足迹并集；height = 最高楼层净高） */
 export function houseDims(house: HouseNode): Dimensions {
   const b = houseLevelsBounds(house)
-  const height = Math.max(...house.levels.map((l) => l.height), 2.8)
+  const height = Math.max(...house.levels.map((l) => l.height), DEFAULT_HEIGHT)
   if (!b) return { length: 4, width: 3, height }
   return { length: b.maxX - b.minX, width: b.maxZ - b.minZ, height }
 }
@@ -141,7 +142,7 @@ export function nodeDims(node: HouseNode | RoomNode | FurnitureNode): Dimensions
 
 /** 楼层高度：取该层房间最大层高 */
 export function levelHeight(rooms: RoomNode[]): number {
-  return Math.max(...rooms.map((r) => r.height), 2.8)
+  return Math.max(...rooms.map((r) => r.height), DEFAULT_HEIGHT)
 }
 
 /** 便捷：某层所有房间（含嵌套） */

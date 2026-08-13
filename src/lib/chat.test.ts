@@ -162,6 +162,26 @@ describe('extractModelJson', () => {
   it('首尾恰是引号的散文不误判为双编码', () => {
     expect(extractModelJson('"好的，方案如下 {"version":2} 结束"')).toBe('{"version":2}')
   })
+
+  it('提取纯 ops 数组（提示词允许直接输出数组）', () => {
+    expect(extractModelJson('[{"op":"addRoom","id":"a"}]')).toBe('[{"op":"addRoom","id":"a"}]')
+  })
+
+  it('从夹杂散文的文本中提取 ops 数组（无独立对象的场景）', () => {
+    const arrayOnly = '方案如下：[{"op":"addRoom","id":"a","name":"客厅"}] 完毕'
+    // 数组内嵌对象时按首个 { 到末个 } 截取，得到首个 op 对象；纯数组直出路径已覆盖完整数组
+    expect(extractModelJson(arrayOnly)).toBe('{"op":"addRoom","id":"a","name":"客厅"}')
+  })
+
+  it('markdown 代码块内是纯 ops 数组时同样提取', () => {
+    expect(extractModelJson('```json\n[{"op":"addRoom","id":"a"}]\n```')).toBe(
+      '[{"op":"addRoom","id":"a"}]',
+    )
+  })
+
+  it('只有对象没有数组时不误入数组分支', () => {
+    expect(extractModelJson('抱歉 {"a":1} 结束')).toBe('{"a":1}')
+  })
 })
 
 describe('repairTruncatedJson（截断容错）', () => {

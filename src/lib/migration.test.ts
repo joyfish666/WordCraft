@@ -135,6 +135,98 @@ describe('migrateModel（v1 → v3）', () => {
     expect(migrateModel({ version: 3, root: null })).toBeNull()
   })
 
+  it('畸形 v3 输入返回 null（结构校验放行闸门，坑 A1）', () => {
+    // 缺少楼层
+    expect(migrateModel({ version: 3, root: { id: 'h', type: 'house', name: '屋' } })).toBeNull()
+    // 楼层为空数组
+    expect(
+      migrateModel({
+        version: 3,
+        root: { id: 'h', type: 'house', name: '屋', levels: [] },
+      }),
+    ).toBeNull()
+    // 房间足迹顶点不足 4 个
+    const badFootprint = {
+      version: 3,
+      root: {
+        id: 'h',
+        type: 'house',
+        name: '屋',
+        levels: [
+          {
+            id: 'l1',
+            height: 2.8,
+            rooms: [
+              {
+                id: 'r1',
+                type: 'room',
+                name: '客厅',
+                footprint: [
+                  { x: 0, z: 0 },
+                  { x: 3, z: 0 },
+                  { x: 3, z: 3 },
+                ],
+                height: 2.8,
+                doors: [],
+                windows: [],
+                furniture: [],
+                nestedRooms: [],
+              },
+            ],
+          },
+        ],
+      },
+    }
+    expect(migrateModel(badFootprint)).toBeNull()
+    // 缺家具/门/窗数组（字段类型错误）
+    expect(
+      migrateModel({
+        version: 3,
+        root: {
+          id: 'h',
+          type: 'house',
+          name: '屋',
+          levels: [
+            {
+              id: 'l1',
+              height: 2.8,
+              rooms: [
+                {
+                  id: 'r1',
+                  type: 'room',
+                  name: '客厅',
+                  footprint: [
+                    { x: 0, z: 0 },
+                    { x: 3, z: 0 },
+                    { x: 3, z: 3 },
+                    { x: 0, z: 3 },
+                  ],
+                  height: 2.8,
+                  doors: 'bad',
+                  windows: [],
+                  furniture: [],
+                  nestedRooms: [],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toBeNull()
+    // 合法 v3 放行（防误杀回归）
+    expect(
+      migrateModel({
+        version: 3,
+        root: {
+          id: 'h',
+          type: 'house',
+          name: '屋',
+          levels: [{ id: 'l1', height: 2.8, rooms: [] }],
+        },
+      }),
+    ).not.toBeNull()
+  })
+
   it('v1 字段缺失时兜底默认值（不崩溃）', () => {
     const model = migrateModel({ version: 1, root: { type: 'house', children: [] } })!
     expect(model.root.name).toBe('整屋')

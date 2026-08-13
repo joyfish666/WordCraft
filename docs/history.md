@@ -203,6 +203,23 @@ README 路线图「移动端基础适配」以**横屏限定**方式落地（验
 - **CI 补 format:check 门**：此前 54 个文件存在格式漂移导致该门被注释（注释与文档声称的「CI lint/format/typecheck/test」不一致）——全仓 `npm run format` 一次收敛后正式入 CI。
 - **顺手清理**：tsconfig 移除无使用的 `allowImportingTsExtensions`（新增 `resolveJsonModule` 供 vite.config 读 package.json）；`chat.generatedModel` 文案更新（方向键视角 → 平面图自由编辑）。
 
+### 全面审查与重构批次（2026-08-13，坑 74-76）
+
+对框架/实现/UI/文档的全面审视后落地（验收：468 用例全绿，30+ 测试文件；typecheck/lint/format 全过）：
+
+- **数据入口加固（坑 74）**：`migration.ts` 的 v3 分支此前只查 `root.type/levels` 就用 `as unknown as SceneModel` 放行——畸形分享口令/损坏项目数据可注入非法模型（对比 v1 有完整 zod，v3 反而裸奔）。新增 `sceneModelV3Schema`（递归房间/家具/开洞/楼层全结构校验），校验通过才放行，失败返回 null 走既有降级提示。
+- **几何共享模块**：重叠判定（executor 两处、modelTree、furniturePlacement 四处复制）、房间平移（layout.translateRoom ≡ modelTree.translateRoomContents）、足迹相等（executor/editOps 双份）、嵌套落点符号（NEST_CORNER 双份）、"id 优先名称回退"查找（executor/roomGeometry/layout 三处）全部收拢到 `lib/geometry.ts`——消除"一处修容差、另一处漏修"的漂移风险。
+- **常量集中**：`lib/constants.ts` 单一来源（EPSILON/墙厚/门宽/邻接容差/门口留空/默认层高/房间间隔/走廊宽），roomGeometry 同名常量改为再导出；chat 邻接判定 GAP 0.4 与墙体验证共用 `ADJACENCY_GAP`。
+- **executor 按 op 组拆分（1072 行 → 目录）**：`lib/executor/`（index 门面 + core 逐条容错执行 + rooms 整屋/房间 + furniture 家具 + openings 开洞 + diff 快照 diff + shared 树操作辅助），依赖单向无环，公共 API 原样再导出（chat.ts/测试零改动）。
+- **脏标记收敛到 useProjectStore（坑 75）**：`dirty` 真值此前由 HomePage 的 `lastSavedJsonRef` + effect 推算回写（双源易漂移），且 `previewSelected`/`previewFootprint` 拖拽每帧换 scene 引用触发**每帧 JSON.stringify 全场景**。现改为 store 内 `savedJson` 快照 + 订阅只在「干净 → 变化」时比对一次（拖拽首帧置脏后跳过），撤销/重做回到已保存状态由 `syncDirtyWithSaved` 一次性清除；HomePage 相应逻辑抽为 `hooks/useDirtyTracking.ts`。
+- **SSE 流式测试补齐（坑 76）**：`streamChatCompletion` 是零测试的最关键生产路径——补分片边界拼接/[DONE]/坏行忽略/空 delta/流结束/HTTP 错误透传/无 body/网络失败/读取中断/用户中止（AbortError）共 10 用例。
+- **extractModelJson 支持纯 ops 数组输出**：提示词允许"直接输出 ops 数组"但提取只认 `{` 开头；补 `[` 直出与代码块内数组提取。
+- **对话框 a11y 收敛**：ShareDialog/ProjectLibraryDialog/HelpDialog 三处复制改为通用 `components/ui/Dialog.tsx`（role=dialog + aria-labelledby + aria-modal + Escape 关闭 + 遮罩点击关闭 + 打开聚焦首个可聚焦元素 + Tab 焦点陷阱 + 关闭归还焦点）；ShareDialog 删除按钮/属性面板关闭按钮补 aria-label，设置页 API Key 单选补可访问名。
+- **i18n 补漏与死代码清理**：语言切换按钮（HomeToolbar/LanguageToggle 双份硬编码）与 schema 错误文案入词典（`lang.switchToZh/En`、`error.noOps`、`error.unknownFormat`）；删除 7 个死 key（nav.footer/home.viewTitle/home.pan*Title/home.resetView）与死 CSS（`.api-hint__link`、`--danger-soft`）。
+- **HomePage 再瘦身（~480 → ~390 行）**：对话生成链路（send/撤销生成/生成计时/竞态防护）抽为 `hooks/useGeneration.ts`，脏标记订阅抽为 `hooks/useDirtyTracking.ts`。
+- **测试补齐**：PlanToolbar（桌面工具行/移动端弹出面板）、LanguageToggle、lib 薄测试（viewport/palette/sampleModel/watermark）、migration 畸形 v3、useProjectStore 快照与 syncDirtyWithSaved。
+- **文档同步**：README 双版技术栈 Axios→fetch 修正、design.md §9 验收表补行与数字统一、notes.md 坑号重排、ui-preview.html 补"仅供参考"标注。
+
 ## 给后来者的三条主线经验
 
 1. **不要回到"LLM 直接给绝对坐标"**：几何确定性是一切（撤销/测试/分享/多轮）的基石；
