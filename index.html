@@ -12,6 +12,10 @@
       // 单页应用深链接还原（与 404.html 配对）：GitHub Pages 对未命中路径返回 404.html，
       // 它以 /WordCraft/?/settings 形式重定向到这里——把路径从查询串还原给应用路由
       // （history.replaceState 后 BrowserRouter 读到真实路径），深链接刷新不丢页面。
+      // ⚠️ 必须保留 base 前缀（项目站点 /WordCraft/）：旧实现写死 '/' 会把前缀丢掉——
+      // 首次还原能显示，但地址栏变成 /settings 后再次刷新不在项目站点下、必然 404。
+      // base 从当前 pathname 推导（404.html 的重定向目标恒为 base + '/?/' + rest），
+      // 与 main.tsx 的 BrowserRouter basename（import.meta.env.BASE_URL）同源。
       ;(function () {
         var s = window.location.search
         if (s.indexOf('?/') === 0) {
@@ -19,7 +23,12 @@
           try {
             decoded = decodeURIComponent(decoded)
           } catch (e) {}
-          window.history.replaceState(null, '', '/' + decoded.replace(/^\/+/, '') + window.location.hash)
+          var base = window.location.pathname.replace(/\/+$/, '')
+          window.history.replaceState(
+            null,
+            '',
+            base + '/' + decoded.replace(/^\/+/, '') + window.location.hash,
+          )
         }
       })()
     </script>

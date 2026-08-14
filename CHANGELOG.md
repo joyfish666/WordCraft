@@ -2,6 +2,32 @@
 
 本文件记录 WordCraft 的功能、修复与工程化变更。版本号沿用 package.json（单一来源）。
 
+## Unreleased（2026-08-16 全面审查批次，版本号未升）
+
+### 2026-08-16 全面审查批次（坑 128-135，五批代码改动 + 文档整体重构，717 → 720 用例）
+
+#### 修复与健壮性
+
+- **拖拽热路径同房级联重建（坑 128）**：`RoomShell`/`FurnitureView` 的 memo 依赖房间对象引用，而拖拽家具时 `updateNodePosition` 会重建命中房间（`rebuildContainer`）——同房整面墙 JSX（六面材质/踢脚线/勒脚对象）与全部家具部件模型每帧重建；`PlanEnhancements` 的家具足迹无 memo，2D 编辑手势期间全屋家具每帧重算朝向标记。修复：**memo 依赖改内容而非引用**——`RoomShell` 改收 `footprint`/`height`/`roomName`，`FurnitureView` 改收按内容 memo 的 `parentGeom`，`PlanEnhancements` 新增 `RoomFootprints` 分组 memo（选中态内部订阅 store）。
+- **v2 快照容错路径静默丢弃既有房间位移（坑 129）**：`diffRooms` 只比对名称/尺寸/显式 footprint，从不比对 v2 `position`——快照移动既有房间（其余不变）时不产出任何 op，位移静默丢失。修复：`position` 与当前足迹中心不一致时产出 `updateRoom.patch.footprint`（平移当前足迹保持原形状、纯平移带动家具；位移+改尺寸一步到位避免尺寸补丁被 footprint 覆盖）。新增两条回归。
+- **深链接还原丢 base 前缀——二次刷新必 404（坑 130）**：`index.html` 还原脚本写死 `'/'` 把 `/WordCraft` 前缀丢掉，首次还原能显示但地址栏 `/settings` 再刷新不在项目站点下。修复：还原脚本从当前 `pathname` 推导 base，`BrowserRouter` 同步加 `basename`（`import.meta.env.BASE_URL` 与 vite base 单一来源）。
+- **零净位移幽灵撤销条目（坑 131）**：`updateNodePosition` 零增量也产生新数组（`translateFootprint` 恒 map），`translateSelected`/`resetSelectedPosition` 无条件 `pushPast`——「复位到已在原位」产生内容相同的冗余撤销条目。修复：`updateNodePosition` 零位移短路返回原引用，store 两路径场景引用未变时不压历史、不记编辑日志。
+- **阴影边界依赖 scene 引用（坑 132）**：`SceneViewer.shadowBounds` 依赖 `[sceneModel]`——拖拽每帧 `houseLevelsBounds` 全遍历 + shadow-camera 四边 props 每帧换新值（阴影相机每帧重算投影矩阵）。修复：依赖取包围盒**原始数值**（坑 73 同款模式），包围盒不变时 bounds 对象保持稳定引用。
+- **常理摆放触发集误纳 updateRoom（坑 133）**：`FURNITURE_AFFECTING_OPS` 含 `updateRoom`/`moveRoom`——auto macro + updateRoom 批次末尾把 `resolveLayout` 刚摆好的整屋家具再推一遍。修复：触发集收窄为 `addRoom`/`addFurniture`，与 chat.ts `addsFurniture` 口径统一；新增回归断言 conventions 只跑一次。
+- **外墙门/窗段丢失外墙饰面（坑 134）**：`WallSegmentBox` 只有 `kind==='wall'` 分支用外墙饰面，门侧墙/窗台/窗楣渲染室内暖白——外立面在门窗处出现室内色带。修复：抽取 `SolidSegment`（六面多材质 + plasterWall 按米 UV）供墙/门侧墙/窗台/窗楣共用。
+
+#### 可访问性与一致性（坑 135）
+
+- SettingsPage API Key 表单 / ShareDialog 口令与粘贴框 / ProjectLibraryDialog 新建与重命名输入补 `aria-label`（同页其它字段有 `<label htmlFor>`，这 3 处是漏网）。
+- 顶栏导航 tooltip 补 `:focus-visible` 显示（键盘用户可见标签）；分享按钮 `title` 统一为「分享」（原用对话框标题「分享与口令」与 aria-label 语义不一）。
+- `HomePage.handleScreenshot` 下载 anchor 挂 DOM 再点击（与 DebugPanel 已修复模式对齐，Safari 等浏览器要求）。
+
+#### 文档与工程
+
+- **文档整体重构（2026-08-16）**：`architecture.md` 改为「现行事实」单一职责——超长版本头（批次历史堆积 ~2KB）与页脚批次段落替换为职责划分说明（92KB → 69KB），§9 测试章节由逐批叙述改为按域清单；`design.md` 标注历史定位（设计决策记录），移除全部批次进度块与 §9 已完成行（44KB → 24KB）；`notes.md` 新增 §3.29（坑 128-135）+ 坑 89 更新（base 前缀约定）+ 文件地图补充；README 双语部署章节同步。**约定：今后批次只写 CHANGELOG.md + notes.md，不再向 architecture.md/design.md 追加历史段落**。
+- 测试 717 → 720（新增 3 用例：快照位移 ×2、触发集收敛 ×1）。
+- 全门绿：lint / format:check / typecheck / test（720）/ build。
+
 ## Unreleased（2026-08-15 契约与工程审查批次，版本号未升）
 
 ### 2026-08-15 契约与工程审查批次（坑 119-127，全面审查落地，705 → 717 用例）

@@ -129,6 +129,7 @@ export function ProjectLibraryDialog({
           className="input"
           autoFocus
           placeholder={t('project.namePlaceholder')}
+          aria-label={t('project.namePlaceholder')}
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
@@ -167,6 +168,7 @@ export function ProjectLibraryDialog({
                     className="input project-row__rename"
                     value={renameDraft}
                     autoFocus
+                    aria-label={t('project.rename')}
                     onChange={(e) => setRenameDraft(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') void commitRename(rec)

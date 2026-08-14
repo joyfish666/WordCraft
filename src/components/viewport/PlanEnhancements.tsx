@@ -1,5 +1,5 @@
 import { Html, Line } from '@react-three/drei'
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import { BACK_AXIS, facingFromRoom, furnitureKind } from '../../lib/furniturePresets'
 import { roomCenter, roomDims } from '../../lib/footprint'
 import { ENTRANCE_DOOR_COLOR, FURNITURE_PART_INK } from '../../lib/palette'
@@ -15,6 +15,7 @@ import {
 import { useModelStore } from '../../store/useModelStore'
 import type { FurnitureNode, RoomNode, SceneModel } from '../../types/model'
 import type { FacingDir } from '../../lib/furniturePresets'
+import type { Dimensions, Position } from '../../types/model'
 
 /** 家具足迹层高度（略高于地板顶面 0.12，避免 z-fighting） */
 const FP_Y = 0.14
@@ -61,25 +62,27 @@ function orientationMarker(
   }
 }
 
-/** 家具足迹：半透明填充 + 轮廓线 + 朝向标记，点击选中（平面图模式下 3D 家具网格不渲染） */
-function FurnitureFootprint({
+/**
+ * 家具足迹：半透明填充 + 轮廓线 + 朝向标记，点击选中（平面图模式下 3D 家具网格不渲染）。
+ * memo 化（审查批次修复）：拖拽房间/顶点时**未变房间**的 node/parentGeom 引用保持稳定
+ * （不可变更新只重建命中路径），浅比较短路后这些家具不再每帧重算 facingFromRoom/
+ * orientationMarker/轮廓数组——此前无 memo，2D 编辑手势期间全屋家具每帧重渲染。
+ * 选中态直接订阅 store（原子 selector），不随父组件重渲染变化。
+ */
+const FurnitureFootprint = memo(function FurnitureFootprint({
   furniture,
-  room,
-  selected,
+  parentGeom,
 }: {
   furniture: FurnitureNode
-  room: RoomNode
-  selected: boolean
+  /** 父房间几何（facingFromRoom 输入），按内容 memo 稳定化 */
+  parentGeom: { position: Position; dimensions: Dimensions }
 }) {
+  const selected = useModelStore((s) => s.selectedId === furniture.id)
   const selectNode = useModelStore((s) => s.selectNode)
   const { x, z } = furniture.position
   const L = furniture.dimensions.length
   const W = furniture.dimensions.width
-  const facing = facingFromRoom(
-    furniture,
-    { position: roomCenter(room), dimensions: roomDims(room) },
-    BACK_AXIS[furnitureKind(furniture.name)],
-  )
+  const facing = facingFromRoom(furniture, parentGeom, BACK_AXIS[furnitureKind(furniture.name)])
   const marker = orientationMarker(furniture, facing)
   const outline: [number, number, number][] = [
     [x - L / 2, FP_Y, z - W / 2],
@@ -111,7 +114,26 @@ function FurnitureFootprint({
       )}
     </group>
   )
-}
+})
+
+/**
+ * 单房间家具足迹组（memo 化）：parentGeom 按「足迹+层高」内容 memo——拖拽房间/顶点时
+ * 房间引用每帧重建，但只有被编辑房间的足迹变化，未变房间整组短路（含其全部家具）。
+ */
+const RoomFootprints = memo(function RoomFootprints({ room }: { room: RoomNode }) {
+  const parentGeom = useMemo(
+    () => ({ position: roomCenter(room), dimensions: roomDims(room) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 内容依赖：足迹+层高已覆盖全部消费
+    [room.footprint, room.height],
+  )
+  return (
+    <>
+      {room.furniture.map((f) => (
+        <FurnitureFootprint key={f.id} furniture={f} parentGeom={parentGeom} />
+      ))}
+    </>
+  )
+})
 
 /** 房间尺寸线：线 + 端部刻度 + 文案（与整屋尺寸线同风格） */
 function RoomDimLine({ line, horizontal }: { line: DimLine; horizontal: boolean }) {
@@ -153,7 +175,6 @@ function RoomDimLine({ line, horizontal }: { line: DimLine; horizontal: boolean 
  */
 export function PlanEnhancements() {
   const scene = useModelStore((s) => s.scene)
-  const selectedId = useModelStore((s) => s.selectedId)
   const planTool = useModelStore((s) => s.planTool)
   const showPlanDims = useModelStore((s) => s.showPlanDims)
   const screenshotMode = useModelStore((s) => s.screenshotMode)
@@ -170,12 +191,10 @@ export function PlanEnhancements() {
 
   return (
     <>
-      {/* 家具足迹 */}
-      {rooms.map(({ node }) =>
-        node.furniture.map((f) => (
-          <FurnitureFootprint key={f.id} furniture={f} room={node} selected={f.id === selectedId} />
-        )),
-      )}
+      {/* 家具足迹（按房间分组 memo：拖拽编辑时未变房间整组短路） */}
+      {rooms.map(({ node }) => (
+        <RoomFootprints key={node.id} room={node} />
+      ))}
 
       {/* 门窗符号（与 3D 墙体方案同源：门扇 + 弧线、窗洞双线） */}
       {Array.from(wallPlans.entries()).flatMap(([roomId, plan]) =>

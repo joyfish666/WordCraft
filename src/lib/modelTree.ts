@@ -114,14 +114,27 @@ function footprintTranslation(
   return { dx, dz }
 }
 
-/** 不可变更新：将指定节点的 position 替换为新值（房间 → 平移足迹），返回新的树 */
+/** 不可变更新：将指定节点的 position 替换为新值（房间 → 平移足迹），返回新的树。
+ *  零位移（目标与当前一致）时返回原引用——调用方（translateSelected/resetSelectedPosition）
+ *  据此短路，避免「无净位移也压入幽灵撤销条目」（审查批次修复：translateFootprint 对
+ *  零增量也产生新数组，此前每次调用都生成新场景引用 + 无条件 pushPast）。 */
 export function updateNodePosition(root: ModelNode, id: string, position: Position): ModelNode {
   if (root.id === id) {
     if (root.type === 'room') {
       const c = footprintCenter(root.footprint)
-      return translateRoom(root, position.x - c.x, position.z - c.z)
+      const dx = position.x - c.x
+      const dz = position.z - c.z
+      if (dx === 0 && dz === 0) return root
+      return translateRoom(root, dx, dz)
     }
     if (root.type === 'house') return root // 整屋无 position 字段
+    if (
+      root.position.x === position.x &&
+      root.position.y === position.y &&
+      root.position.z === position.z
+    ) {
+      return root
+    }
     return { ...root, position }
   }
   if (isContainer(root)) {

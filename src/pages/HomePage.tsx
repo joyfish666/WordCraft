@@ -213,7 +213,11 @@ export function HomePage() {
     const a = document.createElement('a')
     a.href = shot
     a.download = `wordcraft-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`
+    // 挂进 DOM 再点击（与 DebugPanel 下载同模式）：部分浏览器（Safari 等）对未挂载
+    // anchor 的 download 属性不触发下载
+    document.body.appendChild(a)
     a.click()
+    a.remove()
   }
 
   /** 从分享口令还原模型：未保存守卫 → setScene，成为游离场景（不属于任何项目） */

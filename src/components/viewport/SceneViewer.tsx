@@ -86,13 +86,17 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
   const shadows = useSettingsStore((s) => s.shadows)
   const sceneModel = useModelStore((s) => s.scene)
 
-  // 阴影贴图边界随房屋尺寸动态伸缩（过大浪费精度、过小截断阴影）
+  // 阴影贴图边界随房屋尺寸动态伸缩（过大浪费精度、过小截断阴影）。
+  // 依赖取包围盒原始数值而非 scene 引用（坑 73 同款模式）：拖拽预览每帧产生新 scene
+  // 但包围盒不变，bounds 对象保持稳定引用——否则 shadow-camera 四边 props 每帧换新值，
+  // 方向光阴影相机每帧重算投影矩阵（拖拽热路径上的不必要重活）
+  const houseB = sceneModel ? houseLevelsBounds(sceneModel.root) : null
   const shadowBounds = useMemo(() => {
-    const b = sceneModel ? houseLevelsBounds(sceneModel.root) : null
-    if (!b) return { left: -18, right: 18, top: 18, bottom: -18 }
-    const half = Math.max(b.maxX - b.minX, b.maxZ - b.minZ) / 2 + 4
+    if (!houseB) return { left: -18, right: 18, top: 18, bottom: -18 }
+    const half = Math.max(houseB.maxX - houseB.minX, houseB.maxZ - houseB.minZ) / 2 + 4
     return { left: -half, right: half, top: half, bottom: -half }
-  }, [sceneModel])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 数值依赖已覆盖 houseB 全部消费
+  }, [houseB?.minX, houseB?.minZ, houseB?.maxX, houseB?.maxZ])
 
   useImperativeHandle(ref, () => ({
     resetView: () => controlsRef.current?.reset(),

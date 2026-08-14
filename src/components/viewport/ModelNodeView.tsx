@@ -42,7 +42,14 @@ import {
 import { useModelStore } from '../../store/useModelStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
 import type { ColorMode } from '../../types/settings'
-import type { FurnitureNode, ModelNode, Position, RoomNode } from '../../types/model'
+import type {
+  Dimensions,
+  FurnitureNode,
+  ModelNode,
+  Point2D,
+  Position,
+  RoomNode,
+} from '../../types/model'
 
 /** 地板厚度：做成可见的实体板，墙体从地板顶面升起（墙的底部是地板） */
 export const FLOOR_THICKNESS = 0.12
@@ -101,6 +108,69 @@ const PLINTH_INNER_CLEAR = 0.0015
 const END_CLEAR = 0.002
 
 /**
+ * 实心盒段（墙 / 窗台 / 窗楣 / 门侧墙共用）：外墙时外侧面（外向法线一侧）用外墙饰面
+ * 材质（plasterWall 贴图 + 六面多材质，UV 按米拉伸），内面/端面/顶底面暖白抹灰；
+ * 非外墙（内墙/隔墙）单材质。审查批次修复：此前外墙的 door/window 段只渲染
+ * wallMaterial（室内色），同一面外墙在门窗处出现室内色带、外立面连续感断裂。
+ */
+function SolidSegment({
+  position,
+  len,
+  height,
+  thickness,
+  exterior,
+  outwardIsPlusZ,
+  wallMaterial,
+  exteriorParams,
+  castShadow = true,
+  receiveShadow = true,
+}: {
+  position: [number, number, number]
+  len: number
+  height: number
+  thickness: number
+  /** 是否外墙：外侧面用外墙饰面材质 */
+  exterior: boolean
+  /** 外向法线是否在局部 +z（决定六面材质数组的外侧下标） */
+  outwardIsPlusZ: boolean
+  wallMaterial: THREE.MeshStandardMaterialParameters
+  exteriorParams: THREE.MeshStandardMaterialParameters
+  castShadow?: boolean
+  receiveShadow?: boolean
+}) {
+  const exteriorGeo = exterior
+    ? boxWallGeometry(len, height, thickness, TEXTURE_TILE_METERS.plasterWall)
+    : null
+  // 六面材质：±x 端面、±y 顶底面均为抹灰；±z 面中外侧面用外墙饰面
+  const faceMats: Record<number, THREE.MeshStandardMaterialParameters> = {
+    0: wallMaterial,
+    1: wallMaterial,
+    2: wallMaterial,
+    3: wallMaterial,
+    4: wallMaterial,
+    5: wallMaterial,
+  }
+  if (exteriorGeo) faceMats[outwardIsPlusZ ? 4 : 5] = exteriorParams
+  return (
+    <mesh position={position} castShadow={castShadow} receiveShadow={receiveShadow}>
+      {exteriorGeo ? (
+        <>
+          <primitive object={exteriorGeo} attach="geometry" />
+          {([0, 1, 2, 3, 4, 5] as const).map((i) => (
+            <meshStandardMaterial key={i} attach={`material-${i}`} {...faceMats[i]} />
+          ))}
+        </>
+      ) : (
+        <>
+          <boxGeometry args={[len, height, thickness]} />
+          <meshStandardMaterial {...wallMaterial} />
+        </>
+      )}
+    </mesh>
+  )
+}
+
+/**
  * 渲染沿局部 X 轴的一段墙。
  * - 'wall'：实体墙（外墙外侧面用饰面材质 + 按米平铺纹理，内面暖白抹灰；内侧踢脚线）
  * - 'door'：门洞（左右墙段 + 室内侧门套 + 入户门扇/门头标识；室内门保持空门洞）
@@ -136,20 +206,6 @@ function WallSegmentBox({
     depthWrite: material.depthWrite,
     wireframe: material.wireframe,
   }
-  // 六面材质：±x 端面、±y 顶底面均为抹灰；±z 面中外侧面用外墙饰面
-  const faceMats: Record<number, THREE.MeshStandardMaterialParameters> = {
-    0: wallMaterial,
-    1: wallMaterial,
-    2: wallMaterial,
-    3: wallMaterial,
-    4: wallMaterial,
-    5: wallMaterial,
-  }
-  const outwardIdx = outwardIsPlusZ ? 4 : 5
-  faceMats[outwardIdx] = exteriorParams
-  const exteriorGeo = exterior
-    ? boxWallGeometry(len, height, thickness, TEXTURE_TILE_METERS.plasterWall)
-    : null
 
   const trim = {
     transparent: material.transparent,
@@ -162,22 +218,16 @@ function WallSegmentBox({
   if (kind === 'wall') {
     return (
       <>
-        <mesh position={[center, height / 2, 0]} castShadow receiveShadow>
-          {exteriorGeo ? (
-            <primitive object={exteriorGeo} attach="geometry" />
-          ) : (
-            <boxGeometry args={[len, height, thickness]} />
-          )}
-          {exteriorGeo ? (
-            <>
-              {([0, 1, 2, 3, 4, 5] as const).map((i) => (
-                <meshStandardMaterial key={i} attach={`material-${i}`} {...faceMats[i]} />
-              ))}
-            </>
-          ) : (
-            <meshStandardMaterial {...wallMaterial} />
-          )}
-        </mesh>
+        <SolidSegment
+          position={[center, height / 2, 0]}
+          len={len}
+          height={height}
+          thickness={thickness}
+          exterior={exterior}
+          outwardIsPlusZ={outwardIsPlusZ}
+          wallMaterial={wallMaterial}
+          exteriorParams={exteriorParams}
+        />
         {/* 基座勒脚：外墙底部深色压边，外凸墙面（门段留空）；
             底面 +2.5mm、内侧面深 1.5mm、端部内收 2mm——与墙底/踢脚线外侧面/墙端盖均不共面 */}
         {exterior && (
@@ -247,10 +297,17 @@ function WallSegmentBox({
           </mesh>
         )}
         {sillH > 0 && (
-          <mesh position={[center, sillH / 2, 0]} castShadow>
-            <boxGeometry args={[len, sillH, thickness]} />
-            <meshStandardMaterial {...wallMaterial} />
-          </mesh>
+          <SolidSegment
+            position={[center, sillH / 2, 0]}
+            len={len}
+            height={sillH}
+            thickness={thickness}
+            exterior={exterior}
+            outwardIsPlusZ={outwardIsPlusZ}
+            wallMaterial={wallMaterial}
+            exteriorParams={exteriorParams}
+            receiveShadow={false}
+          />
         )}
         {paneH > 0 && (
           <>
@@ -291,10 +348,17 @@ function WallSegmentBox({
           </>
         )}
         {rest > 0 && (
-          <mesh position={[center, sillH + paneH + rest / 2, 0]} castShadow>
-            <boxGeometry args={[len, rest, thickness]} />
-            <meshStandardMaterial {...wallMaterial} />
-          </mesh>
+          <SolidSegment
+            position={[center, sillH + paneH + rest / 2, 0]}
+            len={len}
+            height={rest}
+            thickness={thickness}
+            exterior={exterior}
+            outwardIsPlusZ={outwardIsPlusZ}
+            wallMaterial={wallMaterial}
+            exteriorParams={exteriorParams}
+            receiveShadow={false}
+          />
         )}
       </>
     )
@@ -322,14 +386,26 @@ function WallSegmentBox({
     <>
       {sideLen > 0 && (
         <>
-          <mesh position={[from + sideLen / 2, height / 2, 0]} castShadow receiveShadow>
-            <boxGeometry args={[sideLen, height, thickness]} />
-            <meshStandardMaterial {...wallMaterial} />
-          </mesh>
-          <mesh position={[to - sideLen / 2, height / 2, 0]} castShadow receiveShadow>
-            <boxGeometry args={[sideLen, height, thickness]} />
-            <meshStandardMaterial {...wallMaterial} />
-          </mesh>
+          <SolidSegment
+            position={[from + sideLen / 2, height / 2, 0]}
+            len={sideLen}
+            height={height}
+            thickness={thickness}
+            exterior={exterior}
+            outwardIsPlusZ={outwardIsPlusZ}
+            wallMaterial={wallMaterial}
+            exteriorParams={exteriorParams}
+          />
+          <SolidSegment
+            position={[to - sideLen / 2, height / 2, 0]}
+            len={sideLen}
+            height={height}
+            thickness={thickness}
+            exterior={exterior}
+            outwardIsPlusZ={outwardIsPlusZ}
+            wallMaterial={wallMaterial}
+            exteriorParams={exteriorParams}
+          />
           {/* 门洞两侧墙段也带踢脚线（贴室内侧）；底面 +1mm、外侧面内收 1mm、端部内收 2mm 不共面 */}
           <mesh
             position={[
@@ -377,10 +453,10 @@ function WallSegmentBox({
  * 地板多边形：足迹在非共享边外扩一个墙厚（共享边到边界，邻居地板接续）。
  * 逐边求偏移线交点——正交多边形下与旧"矩形四边外扩"语义一致。
  */
-function floorPolygon(room: RoomNode, plan: WallPlan): { x: number; z: number }[] {
+function floorPolygon(footprint: Point2D[], plan: WallPlan): { x: number; z: number }[] {
   const edges = plan.edges
   const n = edges.length
-  if (n < 3) return room.footprint
+  if (n < 3) return footprint
   const offset = edges.map((e) => {
     const t = e.shared ? 0 : WALL_THICKNESS
     const d = e.dir === 'north' || e.dir === 'east' ? t : -t
@@ -396,7 +472,7 @@ function floorPolygon(room: RoomNode, plan: WallPlan): { x: number; z: number }[
       z: prev.axis === 'x' ? prev.line : cur.line,
     })
   }
-  return pts.length >= 3 ? pts : room.footprint
+  return pts.length >= 3 ? pts : footprint
 }
 
 /**
@@ -416,7 +492,12 @@ function wallPlanKey(plan: WallPlan): string {
 }
 
 interface RoomShellProps {
-  room: RoomNode
+  /** 房间足迹（引用在拖拽家具时稳定——不可变更新只重建命中路径，memo 短路的依据） */
+  footprint: Point2D[]
+  /** 房间层高（独立于足迹） */
+  height: number
+  /** 房间名（地板材质按房间类型匹配） */
+  roomName: string
   material: ShellMaterial
   isSelected: boolean
   plan: WallPlan
@@ -436,12 +517,16 @@ interface RoomShellProps {
 
 /**
  * 房间外壳：足迹实体地板（外扩覆盖墙脚）+ 沿足迹边分段实心墙（门洞/窗洞留空）。
- * memo 化（坑 75 绩效热路径延续）：拖拽预览期间未变房间的 props 引用全部稳定
- * （room/plan/material/roomColor 等），浅比较短路后墙段 JSX 不再逐帧重建；
+ * memo 化（坑 75 绩效热路径延续）：依赖的是「足迹引用 + 层高 + 房间名 + 墙方案内容」
+ * 而非房间对象引用——拖拽家具时房间引用每帧重建（rebuildContainer 重建命中路径），
+ * 但足迹/层高/名称/墙线内容都不变，浅比较短路后墙段 JSX 与材质对象不再逐帧重建
+ * （否则同房整面墙每帧重协调 + 新分配六面材质/踢脚线/勒脚，坑：拖拽热路径级联重建）；
  * 选中/虚化/截图等派生状态由父级 ModelNodeView 的 store 订阅驱动重渲染。
  */
 const RoomShell = memo(function RoomShell({
-  room,
+  footprint,
+  height: H,
+  roomName,
   material,
   isSelected,
   plan,
@@ -452,8 +537,7 @@ const RoomShell = memo(function RoomShell({
   ghosted,
   colorMode,
 }: RoomShellProps) {
-  const H = room.height
-  const bounds = footprintBounds(room.footprint)
+  const bounds = footprintBounds(footprint)
   const bw = bounds.maxX - bounds.minX
   const bd = bounds.maxZ - bounds.minZ
   const cx = (bounds.minX + bounds.maxX) / 2
@@ -464,15 +548,15 @@ const RoomShell = memo(function RoomShell({
   const floorLift = nested ? 0.012 : 0
 
   // 地板形状：Shape 位于 XY 平面，经 -90° X 旋转铺平到 XZ（shape 坐标 y = -世界 z）。
-  // memo 依赖为 footprint 引用 + 墙体方案内容签名：拖拽家具预览每帧产生新 scene/新 plan
+  // memo 依赖为足迹引用 + 墙体方案内容签名：拖拽家具预览每帧产生新 scene/新 plan
   // 引用，但足迹与墙线内容不变——形状与 ExtrudeGeometry 不重建（否则每帧每房间分配 + GC）。
   // 依赖故意只取 floorPolygon 实际消费的内容（wallPlanKey），非 plan/room 引用本身。
   const floorShape = useMemo(
-    () => new THREE.Shape(floorPolygon(room, plan).map((p) => new THREE.Vector2(p.x, -p.z))),
-    [room.footprint, wallPlanKey(plan)], // eslint-disable-line react-hooks/exhaustive-deps
+    () => new THREE.Shape(floorPolygon(footprint, plan).map((p) => new THREE.Vector2(p.x, -p.z))),
+    [footprint, wallPlanKey(plan)], // eslint-disable-line react-hooks/exhaustive-deps
   )
   // 地板材质：按房间类型匹配 木纹/瓷砖/混凝土，乘房间识别色淡化 tint
-  const floor = roomFloorMaterial(room.name, colorMode, siblingIndex)
+  const floor = roomFloorMaterial(roomName, colorMode, siblingIndex)
 
   const wall = (edge: (typeof plan.edges)[number], idx: number) => {
     const isX = edge.axis === 'x'
@@ -548,18 +632,21 @@ interface ModelNodeViewProps {
 /**
  * 家具 3D 视图（memo 化，坑 75 性能热路径）：
  * 拖拽预览每帧产生新 scene 引用 → 整棵树重新 render。家具是本树叶子与数量大头，
- * 未变家具的 node/parentRoom 引用在不可变更新中保持稳定（updateNodePosition 只重建命中路径），
+ * 未变家具的 node/parentGeom 引用在不可变更新中保持稳定（updateNodePosition 只重建命中路径；
+ * parentGeom 由父房间足迹+层高派生，按内容 memo 稳定——若直接传房间引用，拖动本房任一
+ * 家具会使同房全部家具的 memo 失效、每帧重跑 buildFurnitureParts/partsBounds），
  * memo 短路后拖拽期间未变家具不再逐帧执行 buildFurnitureParts/partsBounds 与 React 协调。
  * 选择/虚化等派生状态全部直接订阅 store（原子 selector，不随父组件重渲染变化）。
  */
 const FurnitureView = memo(function FurnitureView({
   node,
-  parentRoom,
+  parentGeom,
   roomGhosted,
   planMode,
 }: {
   node: FurnitureNode
-  parentRoom: RoomNode
+  /** 父房间几何（facingFromRoom 的输入：中心 + 尺寸），按内容 memo 稳定化 */
+  parentGeom: { position: Position; dimensions: Dimensions }
   /** 父房间是否虚化（聚焦其他房间）：家具虚化状态与父房间一致 */
   roomGhosted: boolean
   planMode: boolean
@@ -573,11 +660,7 @@ const FurnitureView = memo(function FurnitureView({
   // 平面图模式：3D 家具网格不渲染（由 PlanEnhancements 以 2D 足迹呈现）
   if (planMode) return null
   const kind = furnitureKind(node.name)
-  const facing = facingFromRoom(
-    node,
-    { position: roomCenter(parentRoom), dimensions: roomDims(parentRoom) },
-    BACK_AXIS[kind],
-  )
+  const facing = facingFromRoom(node, parentGeom, BACK_AXIS[kind])
   const parts = buildFurnitureParts(
     kind,
     node.dimensions.length,
@@ -680,7 +763,7 @@ export const ModelNodeView = memo(function ModelNodeView({
 
   // 房间外壳材质/父中心在顶层计算（hooks 不可入条件分支）：
   // 二者仅房间分支消费，但 memo 化子树要求引用稳定（拖拽预览期间 focusId/colorMode/
-  // wireframe/房间引用未变时不重建对象）；叶子节点不消费，计算开销可忽略。
+  // wireframe/房间足迹未变时不重建对象）；叶子节点不消费，计算开销可忽略。
   const baseColor = roomFaceColor(node.name, siblingIndex, colorMode)
   const material = useMemo<ShellMaterial>(() => {
     if (isFocusedRoom) {
@@ -709,9 +792,20 @@ export const ModelNodeView = memo(function ModelNodeView({
       wireframe: wireframeEnabled,
     }
   }, [isFocusedRoom, ghosted, baseColor, wireframeEnabled])
+  // 父中心/父几何只依赖足迹+层高（不可变更新中引用稳定）：依赖收窄到内容，避免
+  // 拖拽家具时房间引用每帧重建导致嵌套子树/同房家具的 memo 全部失效（级联重建）
   const roomCenterPos = useMemo(
     () => (isContainer(node) && node.type === 'room' ? roomCenter(node as RoomNode) : null),
-    [node],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 内容依赖：足迹+层高已覆盖全部消费
+    [(node as RoomNode).footprint, (node as RoomNode).height],
+  )
+  const parentGeom = useMemo(
+    () =>
+      isContainer(node) && node.type === 'room'
+        ? { position: roomCenter(node as RoomNode), dimensions: roomDims(node as RoomNode) }
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 内容依赖：足迹+层高已覆盖全部消费
+    [(node as RoomNode).footprint, (node as RoomNode).height],
   )
 
   const handleClick = () => {
@@ -769,7 +863,9 @@ export const ModelNodeView = memo(function ModelNodeView({
         }}
       >
         <RoomShell
-          room={node}
+          footprint={node.footprint}
+          height={node.height}
+          roomName={node.name}
           material={material}
           isSelected={isSelected}
           plan={plan}
@@ -784,7 +880,7 @@ export const ModelNodeView = memo(function ModelNodeView({
           <FurnitureView
             key={child.id}
             node={child}
-            parentRoom={node}
+            parentGeom={parentGeom!}
             roomGhosted={ghosted}
             planMode={planMode}
           />

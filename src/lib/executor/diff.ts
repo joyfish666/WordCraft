@@ -1,6 +1,6 @@
 import { sameFootprint } from '../geometry'
 import { EPSILON } from '../constants'
-import { footprintBounds, footprintCenter } from '../footprint'
+import { footprintBounds, footprintCenter, resizeFootprint, translateFootprint } from '../footprint'
 import type { Op, RoomSpec } from '../../types/ops'
 import type {
   Dimensions,
@@ -115,6 +115,25 @@ function diffRooms(currentRooms: RoomNode[], targetRooms: RoomNodeV2[]): Op[] {
     if (Object.keys(dimPatch).length > 0) patch.dimensions = dimPatch
     if (t.footprint && !sameFootprint(cur.footprint, t.footprint)) {
       patch.footprint = t.footprint
+    }
+    // 位移（审查批次修复）：v2 快照的 position 是绝对中心（y 为层高一半）。旧实现只比对
+    // 名称/尺寸/显式 footprint，快照把既有房间**移动**（position 变、其余不变）时不产出
+    // 任何 op → 位移静默丢弃（custom 快照靠 position 定位，这是最常见形态）。现与当前
+    // 足迹中心比对，不一致则平移当前足迹到目标中心——保持原形状（L 形等不退化），
+    // 且纯平移 footprint 由 updateNodeFootprint 带动家具/嵌套房间，与 editDiffToOps 同构。
+    if (!t.footprint && t.position) {
+      const c = footprintCenter(cur.footprint)
+      if (Math.abs(c.x - t.position.x) > EPSILON || Math.abs(c.z - t.position.z) > EPSILON) {
+        const dx = t.position.x - c.x
+        const dz = t.position.z - c.z
+        let fp = translateFootprint(cur.footprint, dx, dz)
+        // 位移 + 尺寸同时变化时一步到位：applyUpdateRoom 先应用 dimensions 再整体替换
+        // footprint，只发位移会让尺寸补丁被 footprint 覆盖而丢失
+        if (dimPatch.length !== undefined || dimPatch.width !== undefined) {
+          fp = resizeFootprint(fp, t.dimensions.length, t.dimensions.width)
+        }
+        patch.footprint = fp
+      }
     }
     if (patch.name || patch.dimensions || patch.footprint) {
       ops.push({ op: 'updateRoom', id: cur.id, patch })

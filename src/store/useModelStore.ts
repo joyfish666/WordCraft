@@ -238,9 +238,12 @@ export const useModelStore = create<ModelState>()(
             y: cur.y + dy,
             z: cur.z + dz,
           }
+          // 零净位移（updateNodePosition 已对房间/家具短路返回原引用）不记历史、
+          // 不追加编辑日志——否则「复位到已在原位」产生内容相同的幽灵撤销条目
+          const scene = withUpdatedPosition(state.scene, state.selectedId, next)
+          if (scene === state.scene) return state
           // 入栈前快照编辑日志（不含本次提交的新日志）：撤销时据此恢复（见 undo）
           const editLog = useChatStore.getState().editOps.slice()
-          const scene = withUpdatedPosition(state.scene, state.selectedId, next)
           recordEditOps(state.scene, scene, state.selectedId)
           syncDirtyWithSaved(scene)
           return { scene, ...pushPast(state, editLog) }
@@ -251,8 +254,9 @@ export const useModelStore = create<ModelState>()(
           if (!state.scene || !state.selectedId) return state
           const original = state.initialPositions[state.selectedId]
           if (!original) return state
-          const editLog = useChatStore.getState().editOps.slice()
           const scene = withUpdatedPosition(state.scene, state.selectedId, original)
+          if (scene === state.scene) return state // 已在初始位置：无净位移不记历史（幽灵撤销条目）
+          const editLog = useChatStore.getState().editOps.slice()
           recordEditOps(state.scene, scene, state.selectedId)
           syncDirtyWithSaved(scene)
           return { scene, ...pushPast(state, editLog) }
