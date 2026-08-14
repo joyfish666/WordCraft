@@ -1,5 +1,7 @@
 import { walkRooms } from './planGeometry'
+import { edgeMetaOf } from './geometry'
 import { computeAllWallPlansCached, type WallSegment } from './roomGeometry'
+import { EPSILON } from './constants'
 import {
   footprintBounds,
   footprintCenter,
@@ -25,12 +27,12 @@ export const MIN_EDGE_LENGTH = 0.3
 export const MIN_ROOM_SIDE = 1.0
 /** 点墙放门窗时指针距墙线的最大距离（米） */
 export const WALL_HIT_THRESHOLD = 0.4
+/** 命中点距开洞段区间边缘的容差（米）：点门/窗段边缘附近也算命中（hitWallOnEdge 用） */
+export const SEGMENT_HIT_SLACK = 0.15
 /** 拖房间平移时贴墙吸附的最大线差（米） */
 export const WALL_SNAP_THRESHOLD = 0.25
 /** 窗洞默认宽度（米）：单一来源见 executor/shared.ts 的 DEFAULT_WINDOW_WIDTH */
 export { DEFAULT_WINDOW_WIDTH as WINDOW_WIDTH } from './executor/shared'
-
-const EPS = 1e-6
 
 /** 数值吸附到网格：四舍五入到 step 的整数倍 */
 export function snapToGrid(v: number, step = SNAP_STEP): number {
@@ -70,7 +72,8 @@ export function footprintIsRect(fp: Point2D[]): boolean {
     { x: b.minX, z: b.maxZ },
   ]
   for (const p of fp) {
-    if (!corners.some((c) => Math.abs(c.x - p.x) < EPS && Math.abs(c.z - p.z) < EPS)) return false
+    if (!corners.some((c) => Math.abs(c.x - p.x) < EPSILON && Math.abs(c.z - p.z) < EPSILON))
+      return false
   }
   return true
 }
@@ -79,19 +82,19 @@ export function footprintIsRect(fp: Point2D[]): boolean {
 function rangesOverlap(a1: number, a2: number, b1: number, b2: number): boolean {
   const lo = Math.max(Math.min(a1, a2), Math.min(b1, b2))
   const hi = Math.min(Math.max(a1, a2), Math.max(b1, b2))
-  return hi - lo >= -EPS
+  return hi - lo >= -EPSILON
 }
 
 /** 轴对齐线段是否相交（平行共线看区间重叠；垂直看交点落入两段区间） */
 export function segmentsIntersect(a: Point2D, b: Point2D, c: Point2D, d: Point2D): boolean {
-  const aH = Math.abs(a.z - b.z) < EPS
-  const cH = Math.abs(c.z - d.z) < EPS
+  const aH = Math.abs(a.z - b.z) < EPSILON
+  const cH = Math.abs(c.z - d.z) < EPSILON
   if (aH === cH) {
     if (aH) {
-      if (Math.abs(a.z - c.z) >= EPS) return false
+      if (Math.abs(a.z - c.z) >= EPSILON) return false
       return rangesOverlap(a.x, b.x, c.x, d.x)
     }
-    if (Math.abs(a.x - c.x) >= EPS) return false
+    if (Math.abs(a.x - c.x) >= EPSILON) return false
     return rangesOverlap(a.z, b.z, c.z, d.z)
   }
   const horiz = aH ? a : c
@@ -101,10 +104,10 @@ export function segmentsIntersect(a: Point2D, b: Point2D, c: Point2D, d: Point2D
   const hx = [Math.min(horiz.x, hEnd.x), Math.max(horiz.x, hEnd.x)] as const
   const vz = [Math.min(vert.z, vEnd.z), Math.max(vert.z, vEnd.z)] as const
   return (
-    vert.x >= hx[0] - EPS &&
-    vert.x <= hx[1] + EPS &&
-    horiz.z >= vz[0] - EPS &&
-    horiz.z <= vz[1] + EPS
+    vert.x >= hx[0] - EPSILON &&
+    vert.x <= hx[1] + EPSILON &&
+    horiz.z >= vz[0] - EPSILON &&
+    horiz.z <= vz[1] + EPSILON
   )
 }
 
@@ -120,8 +123,8 @@ export function footprintValid(fp: Point2D[], opts?: { minEdge?: number }): bool
   for (let i = 0; i < n; i++) {
     const a = fp[i]!
     const b = fp[(i + 1) % n]!
-    const h = Math.abs(a.z - b.z) < EPS
-    const v = Math.abs(a.x - b.x) < EPS
+    const h = Math.abs(a.z - b.z) < EPSILON
+    const v = Math.abs(a.x - b.x) < EPSILON
     if (!h && !v) return false
     const len = h ? Math.abs(b.x - a.x) : Math.abs(b.z - a.z)
     if (len < minEdge) return false
@@ -152,8 +155,8 @@ export function dragVertexFootprint(fp: Point2D[], i: number, target: Point2D): 
   const next = fp[(idx + 1) % n]!
   const t = snapPoint(target)
   const out = fp.map((pt) => ({ ...pt }))
-  const prevEdgeH = Math.abs(prev.z - p.z) < EPS // 边 idx-1 水平
-  const nextEdgeH = Math.abs(p.z - next.z) < EPS // 边 idx 水平
+  const prevEdgeH = Math.abs(prev.z - p.z) < EPSILON // 边 idx-1 水平
+  const nextEdgeH = Math.abs(p.z - next.z) < EPSILON // 边 idx 水平
   if (prevEdgeH && !nextEdgeH) {
     // 边 idx-1 水平（prev.z 固定线）、边 idx 垂直（next.x 固定线）
     out[idx] = { x: t.x, z: t.z }
@@ -216,7 +219,7 @@ export function snapRoomTranslation(
     for (let i = 0; i < f.length; i++) {
       const p = f[i]!
       const q = f[(i + 1) % f.length]!
-      if (Math.abs(p.z - q.z) < EPS) {
+      if (Math.abs(p.z - q.z) < EPSILON) {
         x.push({ line: p.z, a: Math.min(p.x, q.x), b: Math.max(p.x, q.x) })
       } else {
         z.push({ line: p.x, a: Math.min(p.z, q.z), b: Math.max(p.z, q.z) })
@@ -257,16 +260,7 @@ export function snapRoomTranslation(
 
 /** 足迹第 i 条边的外向法线方向（按几何判定，不依赖环起点） */
 function edgeDirOf(fp: Point2D[], i: number): Dir | null {
-  const n = fp.length
-  const idx = ((i % n) + n) % n
-  const a = fp[idx]!
-  const b = fp[(idx + 1) % n]!
-  const h = Math.abs(a.z - b.z) < EPS
-  const v = Math.abs(a.x - b.x) < EPS
-  if (!h && !v) return null
-  const c = footprintBounds(fp)
-  if (h) return a.z > c.minZ + (c.maxZ - c.minZ) / 2 ? 'north' : 'south'
-  return a.x > c.minX + (c.maxX - c.minX) / 2 ? 'east' : 'west'
+  return edgeMetaOf(fp, i)?.dir ?? null
 }
 
 /** 方向对应的矩形足迹边下标（坑 39 约定：0=南 1=东 2=北 3=西） */
@@ -304,7 +298,7 @@ function alongAxisOf(dir: Dir): 'x' | 'z' {
 
 /**
  * 把矩形房间的显式开洞映射到新矩形（split/merge 共用）：
- * - 与新矩形同向且共线的边：局部区间按新边起点平移（±EPS 容忍浮点）；
+ * - 与新矩形同向且共线的边：局部区间按新边起点平移（±EPSILON 容忍浮点）；
  * - 变成内部墙的边（线不在新矩形边界上）丢弃；
  * - split 时平行于切线的边按切线归属 A/B，跨切线的丢弃。
  */
@@ -319,7 +313,7 @@ function remapRectOpenings(
   for (const o of openings) {
     const dir = edgeDirOf(oldFp, o.edgeIndex)
     if (!dir) continue
-    if (Math.abs(lineOf(oldBounds, dir) - lineOf(newBounds, dir)) > EPS) continue // 内部墙，丢弃
+    if (Math.abs(lineOf(oldBounds, dir) - lineOf(newBounds, dir)) > EPSILON) continue // 内部墙，丢弃
     const alongX = alongAxisOf(dir) === 'x'
     const oldStart = alongX ? oldBounds.minX : oldBounds.minZ
     const wFrom = oldStart + o.from
@@ -331,9 +325,9 @@ function remapRectOpenings(
       alongAxisOf(dir) === opts.cutAxis
     ) {
       const cutPos = opts.cutPos
-      if (wTo <= cutPos + EPS) {
+      if (wTo <= cutPos + EPSILON) {
         if (opts.keepSide === 'b') continue // 在 A 侧
-      } else if (wFrom >= cutPos - EPS) {
+      } else if (wFrom >= cutPos - EPSILON) {
         if (opts.keepSide === 'a') continue // 在 B 侧
       } else {
         continue // 跨切线，丢弃
@@ -343,7 +337,7 @@ function remapRectOpenings(
     const len = alongX ? newBounds.maxX - newBounds.minX : newBounds.maxZ - newBounds.minZ
     const from = Math.min(Math.max(wFrom - newStart, 0), len)
     const to = Math.min(Math.max(wTo - newStart, from), len)
-    if (to - from < 1e-6) continue
+    if (to - from < EPSILON) continue
     out.push({ edgeIndex: rectEdgeIndexByDir(dir), from, to, width: to - from })
   }
   return out
@@ -397,8 +391,10 @@ export function splitRoomLayout(
           b.maxZ - position,
         )
 
-  const inA = (p: Point2D): boolean => (axis === 'x' ? p.x < position - EPS : p.z < position - EPS)
-  const inB = (p: Point2D): boolean => (axis === 'x' ? p.x > position + EPS : p.z > position + EPS)
+  const inA = (p: Point2D): boolean =>
+    axis === 'x' ? p.x < position - EPSILON : p.z < position - EPSILON
+  const inB = (p: Point2D): boolean =>
+    axis === 'x' ? p.x > position + EPSILON : p.z > position + EPSILON
   const sideOf = (p: Point2D): boolean => {
     if (inA(p)) return true
     if (inB(p)) return false
@@ -477,7 +473,7 @@ export function unionRectOf(a: Bounds, c: Bounds): Bounds | null {
   }
   const unionArea = (b.maxX - b.minX) * (b.maxZ - b.minZ)
   const sumArea = (a.maxX - a.minX) * (a.maxZ - a.minZ) + (c.maxX - c.minX) * (c.maxZ - c.minZ)
-  if (Math.abs(unionArea - sumArea) > 1e-6) return null
+  if (Math.abs(unionArea - sumArea) > EPSILON) return null
   return b
 }
 
@@ -568,30 +564,13 @@ function ringIndexOf(
   e: { axis: 'x' | 'z'; line: number; start: number; length: number },
 ): number {
   for (let i = 0; i < fp.length; i++) {
-    const a = fp[i]!
-    const b = fp[(i + 1) % fp.length]!
-    let axis: 'x' | 'z'
-    let line: number
-    let start: number
-    let length: number
-    if (Math.abs(a.z - b.z) < EPS) {
-      axis = 'x'
-      line = a.z
-      start = Math.min(a.x, b.x)
-      length = Math.abs(b.x - a.x)
-    } else if (Math.abs(a.x - b.x) < EPS) {
-      axis = 'z'
-      line = a.x
-      start = Math.min(a.z, b.z)
-      length = Math.abs(b.z - a.z)
-    } else {
-      continue
-    }
+    const meta = edgeMetaOf(fp, i)
+    if (!meta) continue
     if (
-      axis === e.axis &&
-      Math.abs(line - e.line) < EPS &&
-      Math.abs(start - e.start) < EPS &&
-      Math.abs(length - e.length) < EPS
+      meta.axis === e.axis &&
+      Math.abs(meta.line - e.line) < EPSILON &&
+      Math.abs(meta.start - e.start) < EPSILON &&
+      Math.abs(meta.length - e.length) < EPSILON
     ) {
       return i
     }
@@ -623,7 +602,9 @@ export function hitWallOnEdge(
     for (const seg of e.segments) {
       const from = e.start + seg.from
       const to = e.start + seg.to
-      if (along < from - 0.15 || along > to + 0.15) continue
+      // 命中点距开洞区间边缘的容差（米）：点击门洞/窗洞边缘附近也算命中该段，
+      // 与 WALL_HIT_THRESHOLD（距墙线）语义独立，各自命名避免混淆
+      if (along < from - SEGMENT_HIT_SLACK || along > to + SEGMENT_HIT_SLACK) continue
       if (d < bestDist || (d === bestDist && best === null)) {
         best = { edge: e, seg, along }
         bestDist = d
