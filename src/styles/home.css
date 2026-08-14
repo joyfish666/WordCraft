@@ -128,7 +128,7 @@
 }
 
 .chip:hover {
-  background: rgba(61, 122, 72, 0.2);
+  background: var(--accent-soft-strong);
 }
 
 /* 未配置 API Key 时的示例加载引导 */

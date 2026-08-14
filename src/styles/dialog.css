@@ -6,7 +6,7 @@
   z-index: 100;
   display: grid;
   place-items: center;
-  background: rgba(45, 42, 34, 0.55);
+  background: var(--overlay);
 }
 
 .dialog {

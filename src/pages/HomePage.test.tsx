@@ -305,5 +305,9 @@ describe('HomePage 对话交互', () => {
     await waitFor(() => {
       expect(useModelStore.getState().scene?.root.name).toBe('示例小屋')
     })
+    // 还原后旧场景的口令/截图不再展示（防止误以为展示的码属于新场景）
+    await waitFor(() => {
+      expect(document.querySelector('.share-code')).toBeNull()
+    })
   })
 })

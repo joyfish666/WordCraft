@@ -30,8 +30,12 @@ import type { FurnitureNode, RoomNode, SceneModel } from '../types/model'
 /** 平面坐标（y 保持不变，家具只调整 x/z） */
 type XZ = { x: number; z: number }
 
-/** 独立放置（不贴墙）的家具：名字含这些词时保持中心/原位，仅约束进墙内 */
-const FREE_STANDING_RE = /茶几|餐桌|饭桌|圆桌|咖啡桌|地毯|椅子|凳子|吧台|岛台/
+/** 独立放置（不贴墙）的家具：名字含这些词时保持中心/原位，仅约束进墙内。
+ * 中英双语词表（与 furniturePresets/roomGeometry 同批）：英文 UI 下 LLM 产出英文名，
+ * 配套补全也产出英文名（Coffee Table/Chair/Dining Chair 等），漏英文词会把独立家具
+ * 误当靠墙家具贴到墙上。词表与中文语义一一对应：茶几/餐桌/圆桌/地毯/椅凳/吧台/岛台。 */
+const FREE_STANDING_RE =
+  /茶几|餐桌|饭桌|圆桌|咖啡桌|地毯|椅子|凳子|吧台|岛台|\b(?:coffee table|cocktail table|side table|end table|tea table|dining table|round table|circular table|rug|carpet|chair|stool|bar|island)\b/i
 
 /** 是否默认贴墙放置（未命中独立词表时按靠墙处理） */
 export function isWallAnchored(name: string): boolean {

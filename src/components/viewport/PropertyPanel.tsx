@@ -133,6 +133,32 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
   )
   const [dragging, setDragging] = useState(false)
 
+  /** 把偏移钳制到视口容器内：面板头部（含标题/关闭按钮）必须保持可交互，不能被拖出视口 */
+  const clampOffset = (offset: { x: number; y: number }): { x: number; y: number } => {
+    const host = document.querySelector('.home__viewport') as HTMLElement | null
+    if (!host) return offset
+    const hostW = host.clientWidth
+    const hostH = host.clientHeight
+    const margin = 8
+    // 宽度固定 270px；y 方向至少露出头部 40px 供再次拖回
+    return {
+      x: Math.min(Math.max(offset.x, margin), Math.max(margin, hostW - 270 - margin)),
+      y: Math.min(Math.max(offset.y, margin), Math.max(margin, hostH - 40 - margin)),
+    }
+  }
+
+  // 窗口尺寸变化（缩放/横竖屏切换）时重新钳制：面板曾被拖到边缘、窗口变窄后
+  // 可能整体出视口且头部不可见，无法拖回
+  useEffect(() => {
+    if (panelOffset === null) return
+    const onResize = () => {
+      setPanelOffset((cur) => (cur ? clampOffset(cur) : cur))
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelOffset !== null])
+
   const startDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
     const host = e.currentTarget.closest('.home__viewport') as HTMLElement | null
@@ -148,11 +174,15 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
   const moveDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
     const d = dragState.current
     if (!d) return
-    setPanelOffset({ x: d.baseX + e.clientX - d.startX, y: d.baseY + e.clientY - d.startY })
+    setPanelOffset(
+      clampOffset({ x: d.baseX + e.clientX - d.startX, y: d.baseY + e.clientY - d.startY }),
+    )
   }
   const endDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
     dragState.current = null
     setDragging(false)
+    // 松手时把越界偏移拉回容器内（拖过头时面板不会被丢在视口外）
+    setPanelOffset((cur) => (cur ? clampOffset(cur) : cur))
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId)
     }
@@ -190,11 +220,12 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
       {node.type !== 'house' && (
         <div className="prop-panel__section">
           <span className="prop-panel__section-title">{t('property.gizmoMode')}</span>
-          <div className="segmented">
+          <div className="segmented" role="group" aria-label={t('property.gizmoMode')}>
             <button
               type="button"
               className={`segmented__btn ${gizmoMode === 'translate' ? 'segmented__btn--active' : ''}`}
               onClick={() => setGizmoMode('translate')}
+              aria-pressed={gizmoMode === 'translate'}
             >
               {t('property.gizmoTranslate')}
             </button>
@@ -202,6 +233,7 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
               type="button"
               className={`segmented__btn ${gizmoMode === 'scale' ? 'segmented__btn--active' : ''}`}
               onClick={() => setGizmoMode('scale')}
+              aria-pressed={gizmoMode === 'scale'}
             >
               {t('property.gizmoScale')}
             </button>
@@ -261,13 +293,14 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
 
       <div className="prop-panel__section">
         <span className="prop-panel__section-title">{t('property.nudgeSection')}</span>
-        <div className="prop-panel__step">
+        <div className="prop-panel__step" role="group" aria-label={t('property.nudgeSection')}>
           {STEP_OPTIONS.map((s) => (
             <button
               key={s}
               type="button"
               className={`step-btn ${stepSize === s ? 'step-btn--active' : ''}`}
               onClick={() => setStepSize(s)}
+              aria-pressed={stepSize === s}
             >
               {s}m
             </button>

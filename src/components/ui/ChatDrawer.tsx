@@ -88,6 +88,7 @@ export const ChatDrawer = forwardRef<ChatDrawerHandle, ChatDrawerProps>(function
         className="chat-bottom__toggle"
         onClick={onToggle}
         title={collapsed ? t('home.chatExpandTitle') : t('home.chatCollapseTitle')}
+        aria-label={collapsed ? t('home.chatExpandTitle') : t('home.chatCollapseTitle')}
         aria-expanded={!collapsed}
         aria-controls="chat-log"
       >

@@ -26,6 +26,9 @@ function roomSpecFromV2(room: RoomNodeV2): RoomSpec {
     side: room.side,
     position: room.position,
     footprint: room.footprint,
+    // relativeTo 必须透传：v2 契约里 position 与 relativeTo 均可选，仅靠 relativeTo
+    // 定位的新房间若被丢字段，custom 布局会落到原点重叠/东侧兜底（静默几何错误）
+    relativeTo: room.relativeTo,
     furniture: room.children
       .filter((c) => c.type !== 'room')
       .map((f) => ({
@@ -122,7 +125,8 @@ function diffRooms(currentRooms: RoomNode[], targetRooms: RoomNodeV2[]): Op[] {
     if (!currentRooms.some((c) => c.id === t.id)) {
       const spec = roomSpecFromV2(t)
       // position/footprint/relativeTo 全量透传（历史坑：缺 position 时按 position 布局的
-      // custom 快照房间全部落到"排东侧"兜底，静默几何错误；addRoom op 需显式携带）
+      // custom 快照房间全部落到"排东侧"兜底；缺 relativeTo 时仅靠贴靠定位的新房间
+      // 落点错误——静默几何错误；addRoom op 需显式携带）
       ops.push({
         op: 'addRoom',
         id: spec.id,
@@ -131,6 +135,7 @@ function diffRooms(currentRooms: RoomNode[], targetRooms: RoomNodeV2[]): Op[] {
         side: spec.side,
         footprint: spec.footprint,
         position: spec.position,
+        relativeTo: spec.relativeTo,
         furniture: spec.furniture,
         nestedRooms: spec.nestedRooms,
       })
@@ -149,10 +154,17 @@ function diffFurniture(currentRoom: RoomNode, targetFurniture: FurnitureNodeV2[]
       ops.push({ op: 'removeFurniture', roomId: currentRoom.id, id: f.id })
       continue
     }
-    const patch: { name?: string; dimensions?: Partial<Dimensions>; position?: Partial<Position> } =
-      {}
+    const patch: {
+      name?: string
+      dimensions?: Partial<Dimensions>
+      position?: Partial<Position>
+      rotationY?: number
+    } = {}
     if (f.name !== t.name) patch.name = t.name
     if (dimsDiffer(f.dimensions, t.dimensions)) patch.dimensions = t.dimensions
+    // rotationY 必须比对：v2 家具合法字段，漏掉会让快照中的旋转修改被静默丢弃
+    // （执行器只认 undefined 以外的值；t 无 rotationY 而当前有时无法表达"清除"，保持现状）
+    if (t.rotationY !== undefined && f.rotationY !== t.rotationY) patch.rotationY = t.rotationY
     // v2 家具 position 本身即「相对房间中心」，与当前绝对位置换算成相对后比较
     const curRel: Position = {
       x: f.position.x - c.x,
@@ -162,7 +174,7 @@ function diffFurniture(currentRoom: RoomNode, targetFurniture: FurnitureNodeV2[]
     if (posDiffer(curRel, t.position)) {
       patch.position = { x: t.position.x, y: t.position.y, z: t.position.z }
     }
-    if (patch.name || patch.dimensions || patch.position) {
+    if (patch.name || patch.dimensions || patch.position || patch.rotationY !== undefined) {
       ops.push({ op: 'updateFurniture', roomId: currentRoom.id, id: f.id, patch })
     }
   }

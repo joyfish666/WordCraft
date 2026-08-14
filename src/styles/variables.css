@@ -13,11 +13,16 @@
   --accent: #3d7a48;
   --accent-hover: #356840;
   --accent-soft: rgba(61, 122, 72, 0.12);
+  /* 派生色一律用 color-mix 从主题令牌取，避免硬编码 rgba 与令牌脱节（改主题即全链失效） */
+  --accent-soft-strong: color-mix(in srgb, var(--accent) 20%, transparent);
   --danger: #b3403a;
+  --danger-soft: color-mix(in srgb, var(--danger) 35%, transparent);
   --ok: #2f8f5b;
   --ok-soft: rgba(47, 143, 91, 0.12);
   --warn: #b57918;
   --warn-soft: rgba(181, 121, 24, 0.12);
+  --warn-strong: color-mix(in srgb, var(--warn) 35%, transparent);
+  --overlay: color-mix(in srgb, var(--text) 55%, transparent);
   --shadow-sm: 0 1px 3px rgba(80, 65, 40, 0.1);
   --shadow-md: 0 4px 14px rgba(80, 65, 40, 0.13);
   --shadow-lg: 0 8px 28px rgba(80, 65, 40, 0.16);

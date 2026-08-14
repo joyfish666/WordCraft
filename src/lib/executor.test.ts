@@ -2117,6 +2117,77 @@ describe('diffSceneV2 - 快照容错路径', () => {
     expect(roomCenter(b).z).toBeCloseTo(3, 5)
     expect((b.furniture[0] as FurnitureNode).rotationY).toBe(90)
   })
+
+  it('快照新增房间透传 relativeTo（贴靠定位不被丢成原点/东侧兜底）；已有家具 rotationY 变化产出补丁', () => {
+    const base = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          name: '示例房',
+          rooms: [
+            {
+              id: 'a',
+              name: '房A',
+              dimensions: { length: 3, width: 3, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+              furniture: [
+                {
+                  id: 'f1',
+                  name: '柜子',
+                  dimensions: { length: 1, width: 0.5, height: 1 },
+                  position: { x: 0, y: 0.5, z: 0.8 },
+                  rotationY: 0,
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ])
+    const target = v2Scene([
+      {
+        id: 'a',
+        type: 'room',
+        name: '房A',
+        dimensions: { length: 3, width: 3, height: 2.8 },
+        children: [
+          {
+            id: 'f1',
+            type: 'furniture',
+            name: '柜子',
+            dimensions: { length: 1, width: 0.5, height: 1 },
+            position: { x: 0, y: 0.5, z: 0.8 },
+            rotationY: 90,
+          },
+        ],
+      },
+      {
+        id: 'b',
+        type: 'room',
+        name: '房B',
+        dimensions: { length: 2, width: 2, height: 2.8 },
+        relativeTo: { roomId: 'a', dir: 'east' },
+        children: [],
+      },
+    ])
+    const ops = diffSceneV2(base, target)
+    const add = ops.find((o) => o.op === 'addRoom' && o.id === 'b')
+    expect(add && add.op === 'addRoom' && add.relativeTo).toEqual({ roomId: 'a', dir: 'east' })
+    // 已存在家具的旋转修改必须进入补丁（此前快照路径静默丢弃 rotationY）
+    expect(ops).toContainEqual({
+      op: 'updateFurniture',
+      roomId: 'a',
+      id: 'f1',
+      patch: { rotationY: 90 },
+    })
+    const scene = executeOps(base, ops).scene
+    const a = findNodeById(scene.root, 'a') as RoomNode
+    const b2 = findNodeById(scene.root, 'b') as RoomNode
+    // b 贴靠在 a 东侧（无缝共墙），而不是落到原点/东侧兜底
+    expect(roomCenter(b2).x).toBeCloseTo(roomCenter(a).x + 2.5, 5)
+    expect((findNodeById(scene.root, 'f1') as FurnitureNode).rotationY).toBe(90)
+  })
 })
 
 describe('executeOps - 端点行为', () => {

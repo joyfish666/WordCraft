@@ -104,7 +104,7 @@
 
 .chat-msg--user .chat-msg__body {
   background: var(--accent-soft);
-  border-color: rgba(61, 122, 72, 0.18);
+  border-color: var(--accent-soft-strong);
   color: var(--text);
 }
 
@@ -115,7 +115,7 @@
 
 .chat-msg--error .chat-msg__body {
   color: var(--danger);
-  border-color: rgba(179, 64, 58, 0.35);
+  border-color: var(--danger-soft);
 }
 
 .chat-msg--generating .chat-msg__body {
@@ -186,7 +186,7 @@
   padding: 6px 12px;
   border-radius: var(--radius-xs);
   background: var(--warn-soft);
-  border: 1px solid rgba(181, 121, 24, 0.35);
+  border: 1px solid var(--warn-strong);
   color: var(--warn);
   font-size: 12px;
   flex-shrink: 0;

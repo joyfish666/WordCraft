@@ -52,7 +52,7 @@
 | Code compression | **lz-string** | Efficient JSON compression |
 | HTTP | **fetch (streaming SSE)** | OpenAI-compatible chat completions, unified fetch stack |
 | Build | **Vite** | Fast dev/build tooling |
-| Testing | **Vitest + Testing Library** | Unit and component tests (601 cases, run in CI) |
+| Testing | **Vitest + Testing Library** | Unit and component tests (614 cases, run in CI) |
 
 ## Project Docs
 
@@ -87,7 +87,7 @@ npm run build    # type check + build
 A: The app is pure front-end; you configure an OpenAI-compatible API Key yourself on the Settings page (DeepSeek by default). Keys stay in browser local storage (IndexedDB/localStorage) and are never sent anywhere but the provider.
 
 **Q: Room classification (corridor/bathroom) doesn't work in English UI?**
-A: Room-name matching is based on Chinese word lists (e.g. 走廊, 卫生间); English room names may miss corridor detection and private-room door rules. This is a known limitation; multilingual word lists are planned.
+A: Room/furniture classifiers now ship **bilingual word lists** (corridor/open/private/bathroom detection, 20 furniture kinds, wall-anchored vs free-standing). In English UI the LLM receives an English system prompt and produces English names, which are matched by the English half of each word list. Boundary: classification depends on the name matching the word lists — unconventional compound names (e.g. "Master En-suite") or words outside the lists may miss. Chinese and English word lists are maintained in sync (`roomGeometry.ts` / `furniturePresets.ts` / `furniturePlacement.ts`).
 
 **Q: Can I save and share the generated model?**
 A: Yes. "Save" stores into the local project library (IndexedDB); "Share" generates a compressed code + watermarked screenshot — pasting the code restores the model (old versions auto-migrate).

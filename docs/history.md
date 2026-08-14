@@ -272,6 +272,24 @@ README 路线图「移动端基础适配」以**横屏限定**方式落地（验
 - **共面审计回归防线**：`furniturePresets.test.ts` 新增 61 用例——全种类 × 全档尺寸 × 四朝向，枚举所有 box 部件的 6 个面，断言任意两部件不存在「同法向（1e-7 平面差）+ 区间重叠（1e-6）」组合；圆柱跳过。后续改任何部件几何必须过此审计。
 - **文档同步**：architecture（v2.15、§5.1 共面错位补坑 88、§9 测试数）、design（进度块、§9 验收表）、notes（3.21 节坑 88 + 文件地图）、README 双版 513→574。
 
+### 代码审查批次（2026-08-14，坑 105-114，验收：614 用例全绿，新增 13 用例 + ConfirmDialog 测试文件）
+
+对框架/实现/UI/文档的又一轮全面审视（承接坑 95-104，那些条目见 CHANGELOG），全部直击根源：
+
+- **重试语义与计费**（坑 105）：`streamChatCompletion` 注释承诺"流中途中断不重试（避免重复计费）"，但 `reader.read()` 抛错被包成普通 Error、`isRetryableStreamError` 对普通 Error 一律可重试——流已产出大半内容后中断仍整请求重试（重复计费）。修复：`StreamInterruptedError` 专属类型，可重试仅限「连接建立前失败」与 429/5xx；回归测试断言 fetch 只调一次。
+- **墙体内容签名缺房间名**（坑 106）：`wallPlanContentKey` 不含 `r.name`，而 `computeWallPlan` 门/墙推导高度依赖名字——重命名房间后 3D/平面图/墙命中三处全部命中陈旧方案。签名补名字 + 回归测试（主卧→客厅：共享墙应变 open）。
+- **独立/靠墙词表双语化**（坑 107）：`FREE_STANDING_RE` 补英文（英文 UI 下 Coffee Table/Chair 被误贴墙）。
+- **migrate 用户偏好保护**（坑 108）：settings migrate 用 `version` 参数门控——仅 v<2 强制关线框，v2+ 保留用户显式设置（此前每次升级静默重置）。
+- **拖拽提交语义收敛**（坑 109）：`commitEdit` 统一 commitDrag/commitPlanEdit——场景必收敛为约束后版本，内容 diff 为空不压历史（幽灵撤销条目消除）；离散提交点 `syncDirtyWithSaved` 全量比对，拖回原位脏标记不再卡死。
+- **快捷键对话框守卫**（坑 110）：`[role="dialog"]` 打开时全局快捷键全部让位。
+- **v2 快照路径透传补全**（坑 111）：diff 补 rotationY/relativeTo，快照容错与手写 ops 等价。
+- **开洞按足迹环几何取边**（坑 112）：`edgeByRingIndex` 替代对过滤后数组的直接下标访问（退化边足迹下开洞落错墙）。
+- **ConfirmProvider 请求队列化**（坑 113）：重入不再悬挂前一个 Promise。
+- **截图竞态防护**（坑 114）：flushSync 同步提交净化状态 + 请求序号防重叠复位。
+- **资源上限**：messages 100 条 + toChatHistory 最近 30 条；口令还原后清空旧分享口令/截图。
+- **a11y 与样式**：segmented/工具行 aria-pressed、输入框焦点环、非左键不启动平面图拖拽、color-mix 派生色令牌化、属性面板偏移钳制、调试下载 revoke 延迟。
+- **文档同步**：architecture（v2.18、i18n 边界改写、§9 测试数）、design（进度块）、notes（3.25 节坑 105-114）、CHANGELOG、README 双版 FAQ 改写 + 601→614。
+
 ## 给后来者的三条主线经验
 
 1. **不要回到"LLM 直接给绝对坐标"**：几何确定性是一切（撤销/测试/分享/多轮）的基石；

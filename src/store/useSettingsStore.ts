@@ -96,8 +96,8 @@ export const useSettingsStore = create<SettingsState>()(
       version: 5,
       // v2 起默认关闭线框；v3 起新增语言字段（旧数据缺省跟随系统语言）；
       // v4 起新增屋顶/阴影开关；v5 起移除屋顶渲染（一层户型被檐口遮挡内部），
-      // 旧存档里的 roof 字段一并剔除，避免残留进状态
-      migrate: (persistedState) => {
+      // 旧存档里的 roof 字段一并剔除，避免残留进状态。
+      migrate: (persistedState, version) => {
         const persisted = persistedState as AppSettings & { roof?: boolean }
         const { roof, ...rest } = persisted
         void roof
@@ -106,7 +106,12 @@ export const useSettingsStore = create<SettingsState>()(
         const hasManualLanguage = Object.prototype.hasOwnProperty.call(persistedState, 'language')
         return {
           ...rest,
-          wireframe: { enabled: false, lineWidth: 1 },
+          // ⚠️ wireframe 只在 v1（默认开线框的旧时代）强制关闭；v2+ 存档必须保留用户显式偏好——
+          // migrate 对任何版本差都会执行，无条件重置会让每次升级都静默丢掉用户设置
+          wireframe:
+            version < 2
+              ? { enabled: false, lineWidth: 1 }
+              : (rest.wireframe ?? { enabled: false, lineWidth: 1 }),
           language: rest.language ?? detectSystemLanguage(),
           languageFollowsSystem: rest.languageFollowsSystem ?? !hasManualLanguage,
           shadows: rest.shadows ?? true,
