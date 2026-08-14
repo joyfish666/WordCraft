@@ -408,11 +408,11 @@ export interface FloorMaterialSpec extends MaterialSpec {
 
 /** 房间名 → 地板类别：卫生间/厨房=瓷砖、阳台=防腐木、其余（含走廊）=木地板。
  *  走廊用木地板而非混凝土：混凝土的灰绿色在暖色木地板房间群中格格不入，
- *  走廊与相邻房间同材质才能融入整体。 */
+ *  走廊与相邻房间同材质才能融入整体。中英双语词表（英文 UI 下房间名为英文）。 */
 export function roomFloorKind(name: string): FloorTextureKind {
-  if (/卫生间|浴室|厕所|洗漱/.test(name)) return 'tile'
-  if (/厨房/.test(name)) return 'tile'
-  if (/阳台|露台|阳光房/.test(name)) return 'deck'
+  if (/卫生间|浴室|厕所|洗漱|bathroom|toilet|restroom|washroom|lavatory/.test(name)) return 'tile'
+  if (/厨房|kitchen/.test(name)) return 'tile'
+  if (/阳台|露台|阳光房|balcony|terrace|sunroom/.test(name)) return 'deck'
   return 'wood'
 }
 
@@ -450,11 +450,6 @@ export function roomFloorMaterial(
     metalness: 0,
     uvMode: 'world',
   }
-}
-
-/** 内墙 / 外墙材质（外墙可加混凝土纹理，内墙纯色抹灰） */
-export function interiorWallMaterial(): MaterialSpec {
-  return { color: '#f0ede4', roughness: 0.92, metalness: 0 }
 }
 
 export function exteriorWallMaterial(): MaterialSpec {

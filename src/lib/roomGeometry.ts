@@ -23,37 +23,54 @@ const OPPOSITE: Record<DoorDirection, DoorDirection> = {
   west: 'east',
 }
 
-/** 封闭房间类型词：名字包含这些词的复合名（如"走廊卫生间"）不应被当作走廊/开放空间 */
-const ROOM_TYPE_RE = /卫生间|浴室|卧室|书房|厕所|储物|衣帽|阳台/
+/** 封闭房间类型词：名字包含这些词的复合名（如"走廊卫生间"）不应被当作走廊/开放空间。
+ * 中英双语词表：英文 UI 下 LLM 按英文提示词产出英文房间名（坑 27 的英文补齐） */
+const ROOM_TYPE_RE =
+  /卫生间|浴室|卧室|书房|厕所|储物|衣帽|阳台|bathroom|toilet|restroom|washroom|lavatory|bedroom|study|closet|pantry|balcony|wardrobe/i
+
+/** 走廊/连廊名（复合名由 ROOM_TYPE_RE 排除） */
+const CORRIDOR_RE = /走廊|连廊|过道|通道|hallway|corridor|passage|vestibule|entrance hall/i
+
+/** 开放空间名（客厅/餐厅/厨房/走廊等）：与走廊/开放空间之间不设墙（走廊本身也是开放空间） */
+const OPEN_ROOM_RE =
+  /客厅|餐厅|厨房|起居室|玄关|门厅|中庭|走廊|连廊|过道|通道|living room|living|dining room|dining|kitchen|foyer|entrance|atrium|mudroom|great room|hallway|corridor|passage/i
+
+/** 私密房间名（卧室/书房等）：彼此之间不直接开门，经走廊/卫生间连通 */
+const PRIVATE_ROOM_RE =
+  /卧室|主卧|次卧|书房|客房|儿童房|榻榻米|bedroom|master|study|office|guest|children|kids|nursery|tatami/i
 
 /** 判断房间名是否为走廊/连廊（排除"走廊卫生间"等复合名） */
 export function isCorridorName(name: string): boolean {
-  return /走廊|连廊|过道|通道/.test(name) && !ROOM_TYPE_RE.test(name)
+  return CORRIDOR_RE.test(name) && !ROOM_TYPE_RE.test(name)
 }
 
 /** 判断是否为开放空间（客厅/餐厅/厨房等）：与走廊/开放空间之间不设墙 */
 export function isOpenRoom(name: string): boolean {
-  return (
-    /客厅|餐厅|厨房|起居室|玄关|门厅|走廊|连廊|过道|通道|中庭/.test(name) &&
-    !ROOM_TYPE_RE.test(name)
-  )
+  return OPEN_ROOM_RE.test(name) && !ROOM_TYPE_RE.test(name)
 }
 
 /** 判断是否为私密房间（卧室/书房等）：彼此之间不直接开门，经走廊/卫生间连通 */
 export function isPrivateRoom(name: string): boolean {
-  return /卧室|主卧|次卧|书房|客房|儿童房|榻榻米/.test(name)
+  return PRIVATE_ROOM_RE.test(name)
 }
 
-/** 卫生间的归属房间名：'主卧卫生间'→'主卧'，'走廊卫生间'→'走廊'；非卫生间返回 null */
+/** 卫生间的归属房间名：'主卧卫生间'→'主卧'，'Master Bathroom'→'Master'；非卫生间返回 null */
 export function bathroomOwner(name: string): string | null {
-  const idx = name.indexOf('卫生间')
-  if (idx <= 0) return null
-  return name.slice(0, idx)
+  const zhIdx = name.indexOf('卫生间')
+  if (zhIdx > 0) return name.slice(0, zhIdx)
+  const enMatch = name.match(/(bathroom|toilet|restroom|washroom|lavatory)/i)
+  if (enMatch && enMatch.index !== undefined && enMatch.index > 0) {
+    return name.slice(0, enMatch.index).trim()
+  }
+  return null
 }
 
-/** 是否为卫生间类房间（命名归属如"主卧卫生间"，或普通"卫生间/浴室/厕所"） */
+/** 是否为卫生间类房间（命名归属如"主卧卫生间"/"Master Bathroom"，或普通卫生间/浴室/厕所） */
 function isBathroomName(name: string): boolean {
-  return bathroomOwner(name) !== null || /卫生间|浴室|厕所/.test(name)
+  return (
+    bathroomOwner(name) !== null ||
+    /卫生间|浴室|厕所|bathroom|toilet|restroom|washroom|lavatory/i.test(name)
+  )
 }
 
 /**
@@ -682,16 +699,48 @@ export function computeAllWallPlans(
  */
 const allWallPlanCache = new WeakMap<SceneModel, Map<string, WallPlan>>()
 
+/** 墙体方案内容签名（单条目缓存）：遍历所有房间足迹 + 显式开洞 + 入口参数，
+ * 只保留 computeWallPlan 实际消费的字段（几何/开洞决定分段，与渲染一致）。 */
+function wallPlanContentKey(
+  rooms: RoomNode[],
+  entrance: DoorDirection,
+  entranceRoomId?: string,
+): string {
+  const parts: string[] = [`${entrance}@${entranceRoomId ?? ''}`]
+  const walk = (r: RoomNode): void => {
+    parts.push(`${r.id}:`)
+    for (const p of r.footprint) parts.push(`${p.x.toFixed(3)},${p.z.toFixed(3)}`)
+    for (const op of r.doors) parts.push(`d${op.edgeIndex}:${op.from}:${op.to}`)
+    for (const op of r.windows) parts.push(`w${op.edgeIndex}:${op.from}:${op.to}`)
+    for (const c of r.nestedRooms) walk(c)
+  }
+  for (const r of rooms) walk(r)
+  return parts.join('|')
+}
+
+/**
+ * 单条目内容签名缓存：拖拽预览每帧产生新场景引用（WeakMap 按引用键必然 miss），
+ * 但内容（足迹/开洞/入口）不变时墙体方案不必重算（O(房间² × 边数)）。
+ * 命中时把新引用登记进 WeakMap，后续帧与既有引用均走该共享方案（坑 72 姊妹）。
+ */
+let wallPlanContentCache: { key: string; plan: Map<string, WallPlan> } | null = null
+
 export function computeAllWallPlansCached(
   scene: SceneModel,
   entrance: DoorDirection,
   entranceRoomId?: string,
 ): Map<string, WallPlan> {
-  let plan = allWallPlanCache.get(scene)
-  if (!plan) {
-    plan = computeAllWallPlans(scene.root.levels[0]?.rooms ?? [], { entrance, entranceRoomId })
-    allWallPlanCache.set(scene, plan)
+  const cached = allWallPlanCache.get(scene)
+  if (cached) return cached
+  const rooms = scene.root.levels[0]?.rooms ?? []
+  const key = wallPlanContentKey(rooms, entrance, entranceRoomId)
+  if (wallPlanContentCache?.key === key) {
+    allWallPlanCache.set(scene, wallPlanContentCache.plan)
+    return wallPlanContentCache.plan
   }
+  const plan = computeAllWallPlans(rooms, { entrance, entranceRoomId })
+  allWallPlanCache.set(scene, plan)
+  wallPlanContentCache = { key, plan }
   return plan
 }
 

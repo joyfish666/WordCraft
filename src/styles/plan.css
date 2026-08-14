@@ -30,14 +30,14 @@
   margin-left: 4px;
   padding: 5px 12px;
   font-size: 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
 }
 
 .plan-toolbar__hint {
   padding: 4px 10px;
-  border-radius: 6px;
-  background: rgba(237, 232, 221, 0.92);
+  border-radius: var(--radius-xs);
+  background: var(--bg-panel-92);
   border: 1px solid var(--border);
   color: var(--text-dim);
   font-size: 12px;
@@ -52,7 +52,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-panel);
   color: var(--text);
@@ -86,7 +86,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--bg-panel);
   box-shadow: var(--shadow-lg);
@@ -106,7 +106,7 @@
 
 .plan-toolbar__sheet-btn {
   padding: 8px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text-dim);
@@ -127,7 +127,7 @@
   gap: 6px;
   padding: 2px 8px;
   border-radius: var(--radius-pill);
-  background: rgba(237, 232, 221, 0.92);
+  background: var(--bg-panel-92);
   border: 1px solid var(--border);
   color: var(--text);
   font-size: 12px;
@@ -156,7 +156,7 @@
 .plan-dim {
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(237, 232, 221, 0.92);
+  background: var(--bg-panel-92);
   color: var(--warn);
   font-size: 12px;
   white-space: nowrap;

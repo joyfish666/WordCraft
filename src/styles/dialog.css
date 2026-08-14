@@ -14,7 +14,7 @@
   max-height: 80vh;
   overflow: auto;
   padding: 20px 22px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
   border: 1px solid var(--border);
 }

@@ -5,7 +5,7 @@ import { OrientationGuard } from './components/ui/OrientationGuard'
 import { useT } from './i18n'
 import { HomePage } from './pages/HomePage'
 import { SettingsPage } from './pages/SettingsPage'
-import { useSettingsStore } from './store/useSettingsStore'
+import { detectSystemLanguage, useSettingsStore } from './store/useSettingsStore'
 
 export default function App() {
   const language = useSettingsStore((s) => s.language)
@@ -18,6 +18,16 @@ export default function App() {
     const meta = document.querySelector('meta[name="description"]')
     if (meta) meta.setAttribute('content', t('app.desc'))
   }, [language, t])
+
+  // 跟随系统语言：仅当用户未手动切换（languageFollowsSystem）时，系统语言变化自动更新
+  useEffect(() => {
+    const onLanguageChange = () => {
+      const s = useSettingsStore.getState()
+      if (s.languageFollowsSystem) s.syncSystemLanguage(detectSystemLanguage())
+    }
+    window.addEventListener('languagechange', onLanguageChange)
+    return () => window.removeEventListener('languagechange', onLanguageChange)
+  }, [])
 
   return (
     <OrientationGuard>

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useT } from '../../i18n'
 import { isCompactViewport, isPortraitBlocked } from '../../lib/viewport'
 
@@ -19,6 +19,7 @@ import { isCompactViewport, isPortraitBlocked } from '../../lib/viewport'
 export function OrientationGuard({ children }: { children: ReactNode }) {
   const t = useT()
   const [blocked, setBlocked] = useState(false)
+  const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const el = document.documentElement
@@ -36,11 +37,28 @@ export function OrientationGuard({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // 覆盖层出现时把焦点移入：键盘用户 Tab 不到被遮挡的背景控件
+  useEffect(() => {
+    if (blocked) overlayRef.current?.focus()
+  }, [blocked])
+
+  /** 覆盖层内无可聚焦元素：Tab 留在覆盖层上，不逃逸到背景 */
+  const trapTab = (e: KeyboardEvent<HTMLDivElement>): void => {
+    if (e.key === 'Tab') e.preventDefault()
+  }
+
   return (
     <>
       {children}
       {blocked && (
-        <div className="orientation-guard" role="alert" aria-label={t('orientation.title')}>
+        <div
+          ref={overlayRef}
+          className="orientation-guard"
+          role="alert"
+          aria-label={t('orientation.title')}
+          tabIndex={-1}
+          onKeyDown={trapTab}
+        >
           <div className="orientation-guard__phone" aria-hidden="true" />
           <p className="orientation-guard__title">{t('orientation.title')}</p>
           <p className="orientation-guard__subtitle">{t('orientation.subtitle')}</p>

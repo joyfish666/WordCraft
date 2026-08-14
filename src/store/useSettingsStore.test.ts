@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { useSettingsStore } from './useSettingsStore'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { detectSystemLanguage, useSettingsStore } from './useSettingsStore'
 
 describe('useSettingsStore', () => {
   beforeEach(() => {
@@ -15,20 +15,43 @@ describe('useSettingsStore', () => {
       shadows: true,
       debugMode: false,
       language: 'zh',
+      languageFollowsSystem: true,
     })
   })
 
-  it('setLanguage 切换语言并持久化', () => {
-    useSettingsStore.getState().setLanguage('en')
-    expect(useSettingsStore.getState().language).toBe('en')
-    const saved = JSON.parse(localStorage.getItem('wordcraft.settings') as string) as {
-      state: { language: string }
-    }
-    expect(saved.state.language).toBe('en')
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
-  it('v2 旧数据迁移：缺 language 字段时回退为 zh', async () => {
-    // 先让当前状态为 en（会写入 v3），再覆写为无 language 的 v2 数据，验证 migrate 补回 zh
+  it('setLanguage 切换语言并持久化，且置 languageFollowsSystem=false（尊重手动选择）', () => {
+    useSettingsStore.getState().setLanguage('en')
+    expect(useSettingsStore.getState().language).toBe('en')
+    expect(useSettingsStore.getState().languageFollowsSystem).toBe(false)
+    const saved = JSON.parse(localStorage.getItem('wordcraft.settings') as string) as {
+      state: { language: string; languageFollowsSystem: boolean }
+    }
+    expect(saved.state.language).toBe('en')
+    expect(saved.state.languageFollowsSystem).toBe(false)
+  })
+
+  it('detectSystemLanguage：zh* 系统语言 → zh，其余 → en', () => {
+    const orig = navigator.language
+    Object.defineProperty(navigator, 'language', { value: 'zh-CN', configurable: true })
+    expect(detectSystemLanguage()).toBe('zh')
+    Object.defineProperty(navigator, 'language', { value: 'en-US', configurable: true })
+    expect(detectSystemLanguage()).toBe('en')
+    Object.defineProperty(navigator, 'language', { value: orig, configurable: true })
+  })
+
+  it('syncSystemLanguage 更新语言但不改变 languageFollowsSystem（跟随系统变化）', () => {
+    useSettingsStore.setState({ languageFollowsSystem: true })
+    useSettingsStore.getState().syncSystemLanguage('en')
+    expect(useSettingsStore.getState().language).toBe('en')
+    expect(useSettingsStore.getState().languageFollowsSystem).toBe(true)
+  })
+
+  it('v2 旧数据迁移：缺 language 字段时回退为系统语言并保持跟随', async () => {
+    // 先让当前状态为 en（会写入 v3），再覆写为无 language 的 v2 数据，验证 migrate 补回系统语言
     useSettingsStore.setState({ language: 'en' })
     localStorage.setItem(
       'wordcraft.settings',
@@ -47,7 +70,31 @@ describe('useSettingsStore', () => {
       }),
     )
     await useSettingsStore.persist.rehydrate()
-    expect(useSettingsStore.getState().language).toBe('zh')
+    expect(useSettingsStore.getState().language).toBe(detectSystemLanguage())
+    expect(useSettingsStore.getState().languageFollowsSystem).toBe(true)
+  })
+
+  it('旧存档显式写过 language（本功能之前版本）→ 视为手动选择，不再跟随系统', async () => {
+    useSettingsStore.setState({ language: 'zh' })
+    localStorage.setItem(
+      'wordcraft.settings',
+      JSON.stringify({
+        state: {
+          apiKeys: [],
+          activeKeyId: null,
+          defaultBaseUrl: '',
+          defaultModel: 'deepseek-v4-flash',
+          thinking: 'disabled',
+          colorMode: 'standard',
+          wireframe: { enabled: false, lineWidth: 1 },
+          debugMode: false,
+          language: 'zh',
+        },
+        version: 3,
+      }),
+    )
+    await useSettingsStore.persist.rehydrate()
+    expect(useSettingsStore.getState().languageFollowsSystem).toBe(false)
   })
 
   it('v3 旧数据迁移：缺 shadows 时默认开启（造型层不丢）', async () => {

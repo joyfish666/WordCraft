@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 interface DialogProps {
   open: boolean
@@ -6,6 +7,8 @@ interface DialogProps {
   title: string
   children: ReactNode
   className?: string
+  /** 说明文案 id（挂到消息区后经 aria-describedby 关联，读屏器读出完整语义） */
+  descriptionId?: string
 }
 
 /** 对话框内可聚焦元素选择器（焦点陷阱 / 初始聚焦用） */
@@ -14,13 +17,15 @@ const FOCUSABLE_SELECTOR =
 
 /**
  * 通用模态对话框（a11y 收敛，坑 C9）：
- * - role="dialog" + aria-modal + aria-labelledby（标题关联）；
+ * - role="dialog" + aria-modal + aria-labelledby（标题关联）+ 可选 aria-describedby；
+ * - Portal 到 document.body：祖先的 transform/filter/overflow 不再破坏 fixed 定位与滚动；
+ * - 打开时锁定 body 滚动，关闭时恢复；
  * - Escape 关闭、遮罩点击关闭、内容点击不冒泡；
  * - 打开时聚焦首个可聚焦元素，关闭时焦点归还触发元素；
  * - Tab 焦点陷阱：焦点在首尾元素间循环，不逃出对话框。
  * 保留 .dialog-overlay/.dialog 结构，样式与既有对话框一致。
  */
-export function Dialog({ open, onClose, title, children, className }: DialogProps) {
+export function Dialog({ open, onClose, title, children, className, descriptionId }: DialogProps) {
   const titleId = useId()
   const overlayRef = useRef<HTMLDivElement>(null)
   const lastFocusedRef = useRef<HTMLElement | null>(null)
@@ -29,7 +34,11 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
     if (!open) return
     lastFocusedRef.current = document.activeElement as HTMLElement | null
     overlayRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus()
+    // 模态对话框打开时锁定背景滚动（原实现背景可滚动，与 aria-modal 语义不符）
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     return () => {
+      document.body.style.overflow = prevOverflow
       // 关闭/卸载时焦点归还触发元素
       lastFocusedRef.current?.focus?.()
     }
@@ -58,13 +67,14 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
     }
   }
 
-  return (
+  const overlay = (
     <div
       ref={overlayRef}
       className="dialog-overlay"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
+      aria-describedby={descriptionId}
       onClick={onClose}
       onKeyDown={(e) => {
         trapTab(e)
@@ -79,4 +89,5 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
       </div>
     </div>
   )
+  return createPortal(overlay, document.body)
 }

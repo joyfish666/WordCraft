@@ -77,34 +77,38 @@ function yFromFloor(h: number, H: number): number {
 }
 
 /** 含这些词的家具先归为通用整盒，避免误套大件造型（如床尾凳含「床」会误套床造型） */
-const GENERIC_GUARD_RE = /床尾凳|床幔/
+const GENERIC_GUARD_RE = /床尾凳|床幔|bed bench|foot bench|bed canopy/i
 
 /**
  * 分类词表，按顺序匹配（先易误判词/具体词，后宽松词）。
- * 词表为中文主词表——生成数据由大模型按中文提示词产出，英文名不参与分类（见交接文档坑 27）。
- * 顺序注意：床头柜/床边柜须在「床」之前（含「床」）；电视柜须在「电视」之前（含「电视」）。
+ * 中英双语词表——生成数据由大模型按界面语言产出（中文提示词→中文名，英文提示词→英文名），
+ * 两种语言下家具都应按名称正确分类（英文补齐，坑 27 姊妹）。
+ * 顺序注意：床头柜/床边柜/ bedside 须在「床」之前（含「床」）；电视柜须在「电视」之前。
  */
 const KIND_RE: Array<[FurnitureKind, RegExp]> = [
-  ['sofa', /沙发/],
-  ['nightstand', /床头柜|床边柜|床头几/],
-  ['dressingTable', /梳妆台|化妆台|妆台/],
-  ['bed', /床/],
-  ['roundTable', /圆桌|圆形茶几|圆几/],
-  ['wardrobe', /衣柜|衣橱|衣帽间|壁柜|储物柜/],
-  ['desk', /书桌|写字台|办公桌|电脑桌|学习桌/],
-  ['tvCabinet', /电视柜/],
-  ['bookcase', /书架|书柜/],
-  ['table', /茶几|餐桌|饭桌|边几|咖啡桌/],
-  ['chair', /椅|凳/],
-  ['toilet', /马桶|座便器/],
-  ['sink', /洗手池|洗手盆|洗脸盆|洗漱台|水槽/],
-  ['bathtub', /浴缸|浴盆|泡澡桶/],
-  ['shoeCabinet', /鞋柜|玄关柜|门厅柜|鞋橱/],
-  ['stove', /灶台|燃气灶|炉灶|灶具/],
-  ['oven', /烤箱/],
-  ['microwave', /微波炉|微波/],
-  ['fridge', /冰箱/],
-  ['washer', /洗衣机/],
+  ['sofa', /沙发|sofa|couch|loveseat|sectional|armchair/i],
+  ['nightstand', /床头柜|床边柜|床头几|bedside|nightstand|night stand/i],
+  ['sink', /洗手池|洗手盆|洗脸盆|洗漱台|水槽|sink|washbasin|vanity/i],
+  ['dressingTable', /梳妆台|化妆台|妆台|dressing table|makeup table/i],
+  ['bed', /床|bed/i],
+  ['roundTable', /圆桌|圆形茶几|圆几|round table|round coffee|circular table/i],
+  ['wardrobe', /衣柜|衣橱|衣帽间|壁柜|储物柜|wardrobe|closet|armoire|storage cabinet|dresser/i],
+  [
+    'desk',
+    /书桌|写字台|办公桌|电脑桌|学习桌|desk|writing table|computer table|workstation|work table/i,
+  ],
+  ['tvCabinet', /电视柜|tv cabinet|tv stand|television cabinet|entertainment center/i],
+  ['bookcase', /书架|书柜|bookcase|bookshelf|bookshelves/i],
+  ['table', /茶几|餐桌|饭桌|边几|咖啡桌|coffee table|dining table|side table|end table|tea table/i],
+  ['chair', /椅|凳|chair|stool|bench/i],
+  ['toilet', /马桶|座便器|toilet|commode/i],
+  ['bathtub', /浴缸|浴盆|泡澡桶|bathtub|bath tub|tub/i],
+  ['shoeCabinet', /鞋柜|玄关柜|门厅柜|鞋橱|shoe cabinet|shoe rack|entry cabinet/i],
+  ['stove', /灶台|燃气灶|炉灶|灶具|stove|cooktop|range/i],
+  ['oven', /烤箱|oven/i],
+  ['microwave', /微波炉|微波|microwave/i],
+  ['fridge', /冰箱|fridge|refrigerator/i],
+  ['washer', /洗衣机|washer|washing machine|laundry/i],
 ]
 
 /** 家具名 → 视觉种类；未命中任意词表时回退 generic */

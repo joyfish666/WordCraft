@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { ChatMessage } from '../lib/api'
 import { createId } from '../lib/id'
-import { safeLocalStorage } from '../lib/safeStorage'
+import { createDedupeStorage, safeLocalStorage } from '../lib/safeStorage'
 import type { SceneModel } from '../types/model'
 import type { Op } from '../types/ops'
 
@@ -41,6 +41,8 @@ interface ChatState {
   pushEditOps: (ops: Op[]) => void
   /** 清空手动编辑操作日志 */
   clearEditOps: () => void
+  /** 整体替换手动编辑操作日志（撤销/重做时与场景快照对齐，见 useModelStore.undo/redo） */
+  replaceEditOps: (ops: Op[]) => void
 }
 
 const STORAGE_KEY = 'wordcraft.chat'
@@ -78,9 +80,12 @@ export const useChatStore = create<ChatState>()(
         let restored: SceneModel | null = null
         set((state) => {
           if (state.generationStack.length === 0) return state
-          // 仅当最后一条是"携带模型的助手消息"时才允许撤销（连同其前一条用户消息一起移除）
+          // 仅当最后一条是"携带模型的助手消息"、倒数第二条是"用户消息"时才允许撤销
+          // （成对移除，避免异常路径插入的 error 消息被误删）
           const last = state.messages[state.messages.length - 1]
+          const prev = state.messages[state.messages.length - 2]
           if (!last || last.role !== 'assistant' || !last.model) return state
+          if (!prev || prev.role !== 'user') return state
           restored = state.generationStack[state.generationStack.length - 1]!
           return {
             generationStack: state.generationStack.slice(0, -1),
@@ -98,11 +103,14 @@ export const useChatStore = create<ChatState>()(
         })),
 
       clearEditOps: () => set({ editOps: [] }),
+
+      replaceEditOps: (ops) => set({ editOps: ops.slice(-EDIT_OPS_LIMIT) }),
     }),
     {
       name: STORAGE_KEY,
-      // 写入失败（配额/隐私模式）降级为静默跳过，不打断对话（safeStorage.ts）
-      storage: createJSONStorage(() => safeLocalStorage),
+      // 写入失败（配额/隐私模式）降级为静默跳过，不打断对话（safeStorage.ts）；
+      // 内容去重：isGenerating 等非持久化状态变更不会触发重复写盘
+      storage: createJSONStorage(() => createDedupeStorage(safeLocalStorage)),
       // 仅持久化对话记录；生成状态与历史栈均无需保存。
       // ⚠️ 消息内嵌的 model（整场景快照）不落盘（2026-08-13 审查批次后续，坑 75 姊妹）：
       // 多轮对话每轮各带一份完整 SceneModel，持久化会以每次 addMessage 全量重序列化的代价

@@ -84,13 +84,67 @@ export function describeHttpError(
   return t('error.networkFallback')
 }
 
+/** 生成请求的瞬态失败重试次数（仅连接建立前失败/429/5xx，流中段不重试） */
+const MAX_STREAM_RETRIES = 1
+/** 重试退避（毫秒），第 n 次 = 基数 × 2^n */
+const STREAM_RETRY_BACKOFF_MS = 800
+
+/** 带 HTTP 状态码的流式错误（用于区分可重试的 429/5xx 与其余错误） */
+class StreamHttpError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
+/** 用户中止/超时中止产生的错误：不可重试，提示「请求超时」（与 describeNetworkError 口径一致） */
+class StreamAbortedError extends Error {
+  constructor() {
+    super(t('error.timeout'))
+  }
+}
+
+/** 判断是否值得重试：非用户中止 + （连接建立前失败 或 429/5xx） */
+function isRetryableStreamError(error: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return false
+  if (error instanceof StreamAbortedError) return false
+  if (error instanceof StreamHttpError) return error.status === 429 || error.status >= 500
+  return true
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 /**
  * 以流式方式调用 chat/completions（SSE），逐段返回增量内容。
  * 适合推理型模型（如 DeepSeek v4 系列）：流式连接保持活跃，
  * 避免模型长时间思考导致非流式请求被连接超时/网络中断。
+ * 瞬态失败（连接失败/429/5xx）自动重试一次（退避 800ms）；流中途中断不重试（避免重复计费）。
  * @returns 累积的完整回复文本
  */
 export async function streamChatCompletion(
+  options: ApiClientOptions,
+  messages: ChatMessage[],
+  onChunk?: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= MAX_STREAM_RETRIES; attempt++) {
+    try {
+      return await streamChatAttempt(options, messages, onChunk, signal)
+    } catch (error) {
+      if (!isRetryableStreamError(error, signal)) throw error
+      lastError = error
+      await delay(STREAM_RETRY_BACKOFF_MS * 2 ** attempt)
+    }
+  }
+  throw lastError
+}
+
+async function streamChatAttempt(
   options: ApiClientOptions,
   messages: ChatMessage[],
   onChunk?: (delta: string) => void,
@@ -120,16 +174,26 @@ export async function streamChatCompletion(
       signal,
     })
   } catch (error) {
+    // 中止（用户取消/兜底超时）不可重试：以专用错误透出「请求超时」，避免被自动重试
+    if (
+      signal?.aborted ||
+      (typeof DOMException !== 'undefined' &&
+        error instanceof DOMException &&
+        error.name === 'AbortError')
+    ) {
+      throw new StreamAbortedError()
+    }
     throw new Error(t('error.requestFailed', { detail: describeNetworkError(error) }))
   }
 
   if (!response.ok) {
     const text = await response.text().catch(() => '')
     const detail = extractErrorMessage(text)
-    throw new Error(
+    throw new StreamHttpError(
       detail
         ? t('error.httpStatus', { status: response.status, detail })
         : t('error.httpNoDetail', { status: response.status }),
+      response.status,
     )
   }
   if (!response.body) {
@@ -140,6 +204,26 @@ export async function streamChatCompletion(
   const decoder = new TextDecoder()
   let buffer = ''
   let full = ''
+
+  // 处理单行 SSE 数据；@param line 不含换行符
+  const handleLine = (line: string): void => {
+    const data = line.trim()
+    if (!data.startsWith('data:')) return
+    const payloadLine = data.slice(5).trim()
+    if (payloadLine === '[DONE]') throw DONE_SENTINEL
+    try {
+      const json = JSON.parse(payloadLine) as {
+        choices?: Array<{ delta?: { content?: string } }>
+      }
+      const delta = json.choices?.[0]?.delta?.content
+      if (typeof delta === 'string' && delta) {
+        full += delta
+        onChunk?.(delta)
+      }
+    } catch {
+      // 忽略无法解析的 SSE 数据行
+    }
+  }
 
   // 解析 SSE：data: {...} 行，以 data: [DONE] 结束
   while (true) {
@@ -154,26 +238,32 @@ export async function streamChatCompletion(
     const lines = buffer.split('\n')
     buffer = lines.pop() ?? ''
     for (const line of lines) {
-      const data = line.trim()
-      if (!data.startsWith('data:')) continue
-      const payloadLine = data.slice(5).trim()
-      if (payloadLine === '[DONE]') return full
       try {
-        const json = JSON.parse(payloadLine) as {
-          choices?: Array<{ delta?: { content?: string } }>
-        }
-        const delta = json.choices?.[0]?.delta?.content
-        if (typeof delta === 'string' && delta) {
-          full += delta
-          onChunk?.(delta)
-        }
-      } catch {
-        // 忽略无法解析的 SSE 数据行
+        handleLine(line)
+      } catch (sentinel) {
+        if (sentinel === DONE_SENTINEL) return full
+        throw sentinel
+      }
+    }
+  }
+  // 冲刷尾部：流结束未换行的残留字节（stream:true 模式下 UTF-8 尾字节可能暂存于解码器，
+  // 不冲刷会丢最后一个字符——中文回复常见）
+  if (buffer) {
+    buffer += decoder.decode()
+    for (const line of buffer.split('\n')) {
+      try {
+        handleLine(line)
+      } catch (sentinel) {
+        if (sentinel === DONE_SENTINEL) return full
+        throw sentinel
       }
     }
   }
   return full
 }
+
+/** [DONE] 哨兵（用对象作异常避免与真实错误混淆） */
+const DONE_SENTINEL = Symbol('sse-done')
 
 /**
  * 检测 API Key 连通性：发起一次极小的 chat/completions 请求。

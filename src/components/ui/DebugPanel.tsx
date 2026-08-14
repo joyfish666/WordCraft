@@ -38,7 +38,12 @@ export function DebugPanel({ entries }: { entries: DebugEntry[] }) {
   return (
     <section className="debug-panel">
       <div className="debug-panel__header">
-        <button className="debug-panel__toggle" onClick={() => setOpen((o) => !o)}>
+        <button
+          className="debug-panel__toggle"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          aria-controls="debug-panel-body"
+        >
           {open ? '▾' : '▸'} {t('home.debugLog')}
         </button>
         <span className="debug-panel__count">
@@ -66,7 +71,7 @@ export function DebugPanel({ entries }: { entries: DebugEntry[] }) {
         </div>
       </div>
       {open && (
-        <div className="debug-panel__body" ref={bodyRef}>
+        <div className="debug-panel__body" id="debug-panel-body" ref={bodyRef}>
           {entries.length === 0 ? (
             <p className="debug-panel__empty">{t('home.debugEmpty')}</p>
           ) : (

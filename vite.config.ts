@@ -27,5 +27,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     css: false,
+    // 大型测试文件（executor.test.ts 2400+ 行）与 SSE 模拟在 CI 慢机上有超时风险，
+    // 默认 5s 放宽到 15s
+    testTimeout: 15_000,
   },
 })

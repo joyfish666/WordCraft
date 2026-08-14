@@ -1,4 +1,5 @@
 import { useT, type TKey } from '../../i18n'
+import { IconHome } from './icons'
 
 export interface EmptyStateCardProps {
   /** 是否已配置 API Key（未配置时提示可先加载示例模型体验） */
@@ -22,9 +23,7 @@ export function EmptyStateCard({ hasApiKey, onExample, onLoadSample }: EmptyStat
   return (
     <div className="empty-card">
       <div className="empty-card__icon">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 3L4 9v12h5v-7h6v7h5V9l-8-6z" />
-        </svg>
+        <IconHome />
       </div>
       <h1 className="empty-card__title">{t('home.emptyTitle')}</h1>
       <p className="empty-card__desc">{t('home.emptyDesc')}</p>

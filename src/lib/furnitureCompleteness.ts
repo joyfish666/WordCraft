@@ -1,6 +1,8 @@
 import { furnitureKind, type FurnitureKind } from './furniturePresets'
 import { createId } from './id'
+import { useSettingsStore } from '../store/useSettingsStore'
 import type { Dimensions, FurnitureNode, RoomNode } from '../types/model'
+import type { Language } from '../types/settings'
 
 /**
  * 家具常配套件补全（坑 87，2026-08-13）：
@@ -30,8 +32,28 @@ const SEAT_GAP = 0.35
 /** 书桌/梳妆台/沙发：配套件放在"使用者侧"（背侧的反方向）的偏移 */
 const FRONT_GAP = 0.6
 
-/** 用户明确排除配套的关键词（写在房间任一家具的 description 里，命中整房间跳过补全） */
-const EXCLUDE_RE = /不要|不配|不需要|无需|无须|去掉|去除|免配|免了|别放|不加|不设|免置/
+/** 用户明确排除配套的关键词（写在房间任一家具的 description 里，命中整房间跳过补全）。
+ * 中英双语：中文提示词产出中文描述（"不要椅子"），英文提示词产出英文描述（"no chair"） */
+const EXCLUDE_RE =
+  /不要|不配|不需要|无需|无须|去掉|去除|免配|免了|别放|不加|不设|免置|no chair|no nightstand|no table|no stool|without|do not add|don't add|do not include|skip|exclude|omit/i
+
+/** 补全家具的名称按界面语言产出（中文提示词→中文名，英文提示词→英文名，保证家具分类/展示一致） */
+const COMPANION_NAMES: Record<
+  Language,
+  { chair: string; diningChair: string; nightstand: string; coffeeTable: string }
+> = {
+  zh: { chair: '椅子', diningChair: '餐椅', nightstand: '床头柜', coffeeTable: '茶几' },
+  en: {
+    chair: 'Chair',
+    diningChair: 'Dining Chair',
+    nightstand: 'Nightstand',
+    coffeeTable: 'Coffee Table',
+  },
+}
+
+function companionName(): (typeof COMPANION_NAMES)[Language] {
+  return COMPANION_NAMES[useSettingsStore.getState().language]
+}
 
 /** 房间家具描述里是否出现明确排除配套的意图（用户要求优先级最高的通道） */
 export function hasExcludedCompleteness(room: RoomNode): boolean {
@@ -68,9 +90,10 @@ export function completeRoomFurniture(room: RoomNode): FurnitureNode[] {
 
   for (const f of furniture) {
     const kind = furnitureKind(f.name)
+    const names = companionName()
     // 书桌/梳妆台：使用者侧（背侧反方向，桌/台背面朝墙时椅子自然落在房间中部）补椅子
     if ((kind === 'desk' || kind === 'dressingTable') && !has('chair')) {
-      push(makeFurniture('椅子', CHAIR_DIMS, f.position.x, f.position.z - FRONT_GAP))
+      push(makeFurniture(names.chair, CHAIR_DIMS, f.position.x, f.position.z - FRONT_GAP))
     }
     // 餐桌/圆桌：两侧补餐椅（圆桌直径两侧、餐桌长边两侧）
     if ((kind === 'table' || kind === 'roundTable') && !has('chair')) {
@@ -81,22 +104,24 @@ export function completeRoomFurniture(room: RoomNode): FurnitureNode[] {
           : Math.max(f.dimensions.length, f.dimensions.width) / 2
       const off = half + SEAT_GAP
       if (alongX) {
-        push(makeFurniture('餐椅', CHAIR_DIMS, f.position.x - off, f.position.z))
-        push(makeFurniture('餐椅', CHAIR_DIMS, f.position.x + off, f.position.z))
+        push(makeFurniture(names.diningChair, CHAIR_DIMS, f.position.x - off, f.position.z))
+        push(makeFurniture(names.diningChair, CHAIR_DIMS, f.position.x + off, f.position.z))
       } else {
-        push(makeFurniture('餐椅', CHAIR_DIMS, f.position.x, f.position.z - off))
-        push(makeFurniture('餐椅', CHAIR_DIMS, f.position.x, f.position.z + off))
+        push(makeFurniture(names.diningChair, CHAIR_DIMS, f.position.x, f.position.z - off))
+        push(makeFurniture(names.diningChair, CHAIR_DIMS, f.position.x, f.position.z + off))
       }
     }
     // 床：床头两侧补床头柜（初始在床两侧，摆放流程会随床贴墙落在床头墙边）
     if (kind === 'bed' && !has('nightstand')) {
       const dx = f.dimensions.length / 2 + NIGHTSTAND_DIMS.width / 2 + 0.05
-      push(makeFurniture('床头柜', NIGHTSTAND_DIMS, f.position.x - dx, f.position.z))
-      push(makeFurniture('床头柜', NIGHTSTAND_DIMS, f.position.x + dx, f.position.z))
+      push(makeFurniture(names.nightstand, NIGHTSTAND_DIMS, f.position.x - dx, f.position.z))
+      push(makeFurniture(names.nightstand, NIGHTSTAND_DIMS, f.position.x + dx, f.position.z))
     }
     // 沙发：前方补茶几（背侧反方向）
     if (kind === 'sofa' && !has('table')) {
-      push(makeFurniture('茶几', COFFEE_TABLE_DIMS, f.position.x, f.position.z - FRONT_GAP))
+      push(
+        makeFurniture(names.coffeeTable, COFFEE_TABLE_DIMS, f.position.x, f.position.z - FRONT_GAP),
+      )
     }
   }
   return additions.length > 0 ? [...furniture, ...additions] : furniture

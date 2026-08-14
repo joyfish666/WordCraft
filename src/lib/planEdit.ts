@@ -27,8 +27,8 @@ export const MIN_ROOM_SIDE = 1.0
 export const WALL_HIT_THRESHOLD = 0.4
 /** 拖房间平移时贴墙吸附的最大线差（米） */
 export const WALL_SNAP_THRESHOLD = 0.25
-/** 窗洞默认宽度（米），与执行器 setOpenings 默认一致 */
-export const WINDOW_WIDTH = 1.5
+/** 窗洞默认宽度（米）：单一来源见 executor/shared.ts 的 DEFAULT_WINDOW_WIDTH */
+export { DEFAULT_WINDOW_WIDTH as WINDOW_WIDTH } from './executor/shared'
 
 const EPS = 1e-6
 

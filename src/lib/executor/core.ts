@@ -48,12 +48,15 @@ export function executeOps(
   const skipped: string[] = []
   let applied = 0
   for (const op of ops) {
+    // 防御：运行时数据（分享口令/迁移等外部输入）可能含 null/非对象条目，
+    // 先安全取操作名，避免 catch 内二次解引用 op.op 导致整批崩溃。
+    const opName = op && typeof op === 'object' ? String((op as { op?: unknown }).op ?? '?') : '?'
     try {
       current = applyOp(current, op)
       applied++
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      skipped.push(`第 ${applied + skipped.length + 1} 条 ${op.op}: ${detail}`)
+      skipped.push(`第 ${applied + skipped.length + 1} 条 ${opName}: ${detail}`)
     }
   }
   let result = normalizeContainment(current)
@@ -97,5 +100,9 @@ export function applyOp(scene: SceneModel, op: Op): SceneModel {
       return applySetOpenings(scene, op)
     case 'addAdjacency':
       return applyAddAdjacency(scene, op)
+    default:
+      // 防御：schema 之外的 op 名（运行时脏数据）必须显式失败，
+      // 否则隐式返回 undefined 会污染 current 使整批后续 op 全部失败。
+      throw new Error(`未知操作: ${String((op as { op?: unknown }).op)}`)
   }
 }

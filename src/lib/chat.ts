@@ -1,14 +1,17 @@
 import { t } from '../i18n'
 import { sceneModelV2Schema } from '../schemas/model.schema'
 import { opSchema } from '../schemas/ops.schema'
+import { useSettingsStore } from '../store/useSettingsStore'
 import { ADJACENCY_GAP } from './constants'
 import { logDebug } from './debugLog'
 import { diffSceneV2, emptyScene, executeOps } from './executor'
 import { footprintCenter, roomDims } from './footprint'
 import { normalizeContainment } from './modelTree'
 import { migrateModel } from './migration'
+import type { DoorDirection } from './roomGeometry'
 import type { SceneModel } from '../types/model'
 import type { Op } from '../types/ops'
+import type { Language } from '../types/settings'
 import { streamChatCompletion, type ApiClientOptions, type ChatMessage } from './api'
 
 /** 生成链路中的业务错误，code 供 UI 层区分处理 */
@@ -26,8 +29,11 @@ export class ChatGenerationError extends Error {
  * 指导大模型输出 v3 操作序列（ops）的系统提示词（design.md §4.3）：
  * 从"输出整屋 JSON 快照"改为"输出增量操作"——局部修改不重写整屋；
  * 没有固定模板，macro 仅在用户不关心布局时使用。
+ * 按界面语言选择中/英文提示词：英文 UI 下 LLM 产出英文房间/家具名，
+ * 与房型/家具分类词表（roomGeometry/furniturePresets 双语）配套。
  */
-export function buildSystemPrompt(): string {
+export function buildSystemPrompt(lang: Language = 'zh'): string {
+  if (lang === 'en') return ENGLISH_SYSTEM_PROMPT
   return `你是一个 3D 空间结构建模助手。用户会用自然语言描述空间、房屋、房间与家具的布局需求。
 你通过输出「操作序列」（JSON）来构建或修改 3D 模型，严格遵守以下规则：
 
@@ -58,19 +64,62 @@ export function buildSystemPrompt(): string {
 6. 家具：**每个房间必须包含该房间常见且合理的家具，不要留空房间**——客厅：沙发/茶几/电视柜；卧室：床/衣柜（主卧再加床头柜等）；餐厅：餐桌/餐椅；厨房：橱柜/冰箱/灶台；卫生间：马桶/洗手池等（每类至少配 1-2 件）。**系统会自动补齐常配套件（书桌→椅子、餐桌→餐椅、床→床头柜、梳妆台→椅子、沙发→茶几），你只需输出用户明确要求的家具，无需为配套件重复输出**；**用户明确不要某配套时（如"书房不要椅子"），在该房间任一家具的 description 里注明"不要X"（如 "description":"用户不要椅子"），系统会跳过该房间的自动补全**。家具 position 相对所在房间中心：x/z 为相对中心偏移，y 为家具高度的一半（底面贴房间地面）。摆放应合理（床靠墙、衣柜贴墙、桌椅避开通道、中间留活动空间），只以所在房间为框架考虑、无需考虑整屋布局；家具不得超出房间范围、不得嵌入墙体、不得堵住门洞。
 7. 惯例与墙体：客厅/餐厅/厨房为开放空间，与走廊之间不设墙（开放连通）；卧室/书房/卫生间等保留墙体与门；卧室与卧室之间不直接开门（经走廊/卫生间连通）；**卫生间默认只开一扇门**（命名归属的如"主卧卫生间"朝所属房间开门；公共/普通卫生间朝走廊开门，不向相邻房间开门）——用户要求卫生间开第二扇门时才用 setOpenings 添加。**多房间住宅（含卧室/书房等私密房间）优先用 corridor 模板**：卧室经走廊进入，不会出现"卧室只能从卫生间进出"的死胡同；custom 自由布局没有走廊，卧室/书房与客厅等开放空间之间会自动开门（系统兜底，保证房间可达）。房屋外墙由系统自动保留（除入户门外不与外部相通），入户大门自动生成在**入口房间**（entranceRoomId）的**入口方向外墙**（entranceDir 指定，默认 south 南墙）居中合理位置——用户要求移动入户门/改朝向时，用 setHouse 的 entranceRoomId（换房间）与 entranceDir（换方向，south/east/west/north），**不要用 setOpenings**（它只能在已有实心墙上开洞，移动不了入户门；开在开放/共享墙上没有效果）；入户门必须落在入口房间朝向入口方向的外墙（走廊等内部空间没有外墙时，选它最外沿的方向，如走廊东端用 east）。custom 布局除户外门会自动兜底。
 8. 多轮修改：最新一条用户消息是对当前房屋的修改要求。你必须基于「当前房屋状态」与「手动编辑历史」（若有）修改：只输出必要的操作，未提及的对象不要重复输出、不要无意义地删除重建（会丢失用户改动）；手动编辑历史中的操作已是现状，不要原样重复输出。"卫生间移到卧室北部" → moveRoom {"id":"卫生间id","relativeTo":{"roomId":"卧室id","dir":"north"}}；"客厅再大一点" → updateRoom 改 dimensions。
-9. 合理推断默认尺寸；用户未明确时可补充常见家具尺寸（如双人床约 2×1.5m、衣柜约 1.2×0.6m、沙发约 2×0.9m）。`
+ 9. 合理推断默认尺寸；用户未明确时可补充常见家具尺寸（如双人床约 2×1.5m、衣柜约 1.2×0.6m、沙发约 2×0.9m）。`
 }
+
+/** 英文界面使用的系统提示词（与中文版规则一一对应；房间/家具名一律用英文产出） */
+const ENGLISH_SYSTEM_PROMPT = `You are a 3D spatial modeling assistant. The user describes their home, rooms, and furniture in natural language.
+You build or modify the 3D model by outputting an operation sequence (JSON), strictly following these rules:
+
+1. Output ONLY one JSON object, no explanation text, no markdown code blocks. Format: {"version":3,"ops":[...]} (or a bare ops array). Always prioritize explicit user requirements; only infer by common sense when the user is not explicit. Never silently change what the user specified.
+2. There is NO fixed template: design however the user describes. Only use macro when the user does not care about the layout or asks for a full replan (macro clears and rebuilds the whole house).
+3. Operation whitelist (do not output fields not listed; omit optional fields freely):
+   - {"op":"setHouse","name":"new name"} — rename the house (name/style optional); {"op":"setHouse","entranceRoomId":"room id","entranceDir":"south|east|west|north"} — change which room/direction the entrance door is on (default south, see rule 7)
+   - {"op":"macro","name":"corridor|living|custom","params":{...}} — full layout; **name is the layout type (corridor/living/custom), NOT the house name** — put the house name in params.name; params.rooms is the room spec array (same semantics as addRoom):
+     · corridor (hallway layout, typical multi-room house): params={"name":"house name","corridor":{"width":1.2,"entranceRoomId":"living room id"},"rooms":[...]}
+       The hallway runs along the X axis; the entrance room is placed on the south side of the hallway and gets the entrance door; each room spec sets "side":"left" (south) or "right" (north); children order = arrangement from the entrance end inward; balance both sides.
+     · living (living-room-centered): params={"name":"house name","centerRoomId":"living room id","rooms":[...]}, other rooms set "side":"north"|"south"|"east"|"west" (relative to the living room)
+     · custom (free layout): params={"name":"house name","rooms":[...]}; rooms can use "position" (absolute coordinates, y = half the floor height), "footprint" (orthogonal polygon vertex ring, express L/U shapes directly) or "relativeTo" (snap to the dir side of an earlier listed room, shared wall; reference rooms by id, or by name when no id)
+   - {"op":"addRoom","id":"optional","name":"room name","dimensions":{"length","width","height"},"position":"optional (absolute, y = half height)","relativeTo":{"roomId":"existing room id","dir":"north|south|east|west"},"side":"optional","furniture":[furniture specs...],"nestedRooms":[room specs...]}
+       · Position priority: explicit footprint (L/U vertex ring) > position (absolute) > relativeTo (shared wall on the dir side of a room). **Prefer relativeTo for new rooms**; if omitted, the executor places the room on the east side.
+   - {"op":"updateRoom","id":"room id","patch":{"name":...,"dimensions":{...},"footprint":[...]}} — change name/size/footprint; unmentioned fields stay unchanged
+   - {"op":"removeRoom","id":"room id"}
+   - {"op":"moveRoom","id":"room id","relativeTo":{"roomId":...,"dir":...}} — move a room adjacent to another room's dir side (use for relative repositioning); **for nested rooms (e.g. Master Bathroom) this un-nests them automatically**; if that side is occupied, pick another free side automatically
+   - {"op":"nestRoom","id":"room id","into":"parent room id","side":"optional(north|south|east|west)"} — nest a room inside another (e.g. "Master Bathroom" into "Master Bedroom"); side picks which corner of the parent (default north-east); nested rooms open toward the parent interior. **To un-nest, use moveRoom, not nestRoom**
+   - {"op":"addFurniture","roomId":"room id","id":"optional","name":"furniture name","dimensions":{"length","width","height"},"position":{"x","y","z"}}
+   - {"op":"updateFurniture","roomId":...,"id":...,"patch":{"name":...,"dimensions":{...},"position":{...}}}
+   - {"op":"removeFurniture","roomId":...,"id":...}
+   - {"op":"setOpenings","roomId":...,"side":"north|south|east|west","kind":"door|window","from":"optional","to":"optional","remove":"optional(true)"} — open a door/window on a wall; without from/to it opens centered with standard size (door 0.9m, window 1.5m); **"remove":true deletes that edge's openings of the same kind**; **avoid the entrance wall when placing windows/doors** — windows yield to the entrance door: if windows fill the exterior wall the entrance moves to another exterior wall (window stays whole)
+   - {"op":"splitRoom","id":"room id","axis":"x|z","position":"world coordinate","name":"optional new room name"} — split a **rectangular** room along an axis (x = vertical cut, z = horizontal cut; both halves must be ≥ 1m); a door is automatically opened on the shared wall; the new room defaults to "name2"
+   - {"op":"mergeRoom","keep":"room id to keep","remove":"room id to merge"} — merge two adjacent rooms (the union must be rectangular); keep preserves name and id
+   - {"op":"addAdjacency","roomId":...,"neighborId":...,"side":"..."} — move neighborId adjacent to roomId's side
+4. id rules: all node ids are globally unique; **reuse existing ids when modifying** (see "Current house state"); keep existing ids stable across turns; do not delete unrelated objects. Prefer moveRoom/addRoom (with relativeTo) for layout tweaks; only use macro for a full replan. **Reference rooms by id; if no id exists (new rooms without id) you may use the room name**.
+5. Dimension conventions (meters): length is east-west, width is north-south, height is floor height (default 2.8). Adjacent rooms' walls should touch (zero gap).
+6. Furniture: **every room must contain sensible furniture for its type; never leave a room empty** — living room: sofa/coffee table/TV cabinet; bedroom: bed/wardrobe (master also nightstands); dining: dining table/chairs; kitchen: cabinets/fridge/stove; bathroom: toilet/washbasin etc. (1-2 items per type). **The system auto-completes companions (desk→chair, dining table→chairs, bed→nightstands, vanity→chair, sofa→coffee table); only output furniture the user explicitly asked for — do not repeat companions**. **If the user explicitly excludes a companion (e.g. "no chair in the study"), note it in any furniture's description in that room (e.g. "description":"user wants no chair"); the system skips completion for that room**. Furniture position is relative to the room center: x/z are offsets, y is half the furniture height (bottom sits on the floor). Placement should be sensible (bed against a wall, wardrobe against a wall, chairs clear of traffic, walkable center space); only consider the room itself, not the whole house; furniture must not exceed the room, embed in walls, or block doorways.
+7. Conventions & walls: living/dining/kitchen are open spaces — no walls between them and the hallway (open connection); bedrooms/studies/bathrooms keep walls and doors; no direct doors between two private rooms (connected via hallway/bathroom); **a bathroom has only one door by default** (a named one like "Master Bathroom" opens toward its owner room; a public bathroom opens toward the hallway, not into adjacent rooms) — only use setOpenings to add a second door when the user asks. **For multi-room houses (with bedrooms/studies) prefer the corridor template** so bedrooms are entered from the hallway (no dead ends through bathrooms); in custom layouts without a hallway, doors are auto-opened between private rooms and open spaces as a fallback to keep rooms reachable. The system keeps the exterior walls (no openings to the outside except the entrance); the entrance door is auto-placed centered on the **entrance room's** (entranceRoomId) **exterior wall in the entrance direction** (entranceDir, default south). To move/reorient the entrance, use setHouse with entranceRoomId/entranceDir — **do NOT use setOpenings** (it can only cut solid walls and cannot move the entrance; openings on open/shared walls have no effect); the entrance must land on the entrance room's exterior wall facing the entrance direction (for interior spaces without exterior walls like a hallway, use its outermost direction, e.g. east for a hallway's east end).
+8. Multi-turn edits: the latest user message is a modification request on the current house. Base your edits on the **"Current house state"** and the **"Manual edit history"** (if any): output only the necessary operations; do not re-output unmentioned objects; do not rebuild/delete things pointlessly (it loses user edits); the manual edit history is already applied — do not repeat it. "Move the bathroom north of the bedroom" → moveRoom {"id":"bathroom id","relativeTo":{"roomId":"bedroom id","dir":"north"}}; "Make the living room bigger" → updateRoom dimensions.
+9. Infer reasonable default dimensions; when unspecified, use common furniture sizes (e.g. double bed ≈ 2×1.5m, wardrobe ≈ 1.2×0.6m, sofa ≈ 2×0.9m).
+
+All room names and furniture names must be in English.`
 
 /**
  * 当前房屋状态摘要（供多轮对话上下文，design.md §5.2）：
- * 房间/家具的 id、名称与尺寸 + 顶层房间**邻接表**（邻居与方位）——LLM 靠 id 引用节点、
- * 靠邻接信息判断方位（relativeTo/moveRoom 的 dir 选择）。邻接判定与墙体方案同源：
+ * 房间/家具的 id、名称与尺寸 + 顶层房间**邻接表**（邻居与方位）+ 入户门信息——
+ * LLM 靠 id 引用节点、靠邻接信息判断方位（relativeTo/moveRoom 的 dir 选择）、
+ * 靠入口信息响应"移动入户门"需求。邻接判定与墙体方案同源：
  * 任一边共线（|线差| ≤ 0.4，同 ADJACENCY_GAP）且区间重叠即相邻，方位 = 邻居相对本房间的方向。
+ * 语言随界面语言（英文 UI 下 LLM 产出英文名，方位词与提示词语言保持一致）。
  */
-export function buildSceneSummary(scene: SceneModel): string {
+export function buildSceneSummary(scene: SceneModel, lang: Language = 'zh'): string {
   const rooms = scene.root.levels[0]!.rooms
-  const adjacency = topLevelAdjacency(rooms)
-  const lines: string[] = ['当前房屋状态（id: 名称 长×宽×高，米；房间行括号内为邻接房间-方位）：']
+  const adjacency = topLevelAdjacency(rooms, lang)
+  const isZh = lang === 'zh'
+  const dirWord = (d: DoorDirection): string => (isZh ? DIR_WORD_ZH[d] : d)
+  const lines: string[] = [
+    isZh
+      ? '当前房屋状态（id: 名称 长×宽×高，米；房间行括号内为邻接房间-方位）：'
+      : 'Current house state (id: name L×W×H in meters; neighbor-direction in parentheses):',
+  ]
   const visit = (room: SceneModel['root']['levels'][0]['rooms'][number], depth: number): void => {
     const d = roomDims(room)
     lines.push(
@@ -86,13 +135,36 @@ export function buildSceneSummary(scene: SceneModel): string {
     }
     for (const nested of room.nestedRooms) visit(nested, depth + 1)
   }
-  lines.push(`[整屋] ${scene.root.id} ${scene.root.name}`)
+  lines.push(
+    isZh
+      ? `[整屋] ${scene.root.id} ${scene.root.name}`
+      : `[House] ${scene.root.id} ${scene.root.name}`,
+  )
   for (const room of rooms) visit(room, 0)
+  // 入户门信息（坑：LLM 需知道当前入口在哪才能按规则 7 用 setHouse 改入口）
+  if (scene.root.entranceRoomId) {
+    lines.push(
+      isZh
+        ? `[入户门] 入口房间 ${scene.root.entranceRoomId}，入口方向 ${dirWord(scene.root.entranceDir ?? 'south')}`
+        : `[Entrance] room ${scene.root.entranceRoomId}, direction ${dirWord(scene.root.entranceDir ?? 'south')}`,
+    )
+  }
   return lines.join('\n')
 }
 
-/** 顶层房间邻接表：roomId → 「（邻接：邻居名-方位、…）」，无邻居的房间无条目 */
-function topLevelAdjacency(rooms: SceneModel['root']['levels'][0]['rooms']): Map<string, string> {
+/** 方位词中文（供摘要邻接表/入口行；英文直接用 south/north/east/west） */
+const DIR_WORD_ZH: Record<DoorDirection, string> = {
+  north: '北',
+  south: '南',
+  east: '东',
+  west: '西',
+}
+
+/** 顶层房间邻接表：roomId → 「（邻接：邻居名-方位、…）」/「(adjacent: name-dir, ...)」；无邻居的房间无条目 */
+function topLevelAdjacency(
+  rooms: SceneModel['root']['levels'][0]['rooms'],
+  lang: Language,
+): Map<string, string> {
   interface Edge {
     axis: 'x' | 'z'
     line: number
@@ -113,14 +185,16 @@ function topLevelAdjacency(rooms: SceneModel['root']['levels'][0]['rooms']): Map
     }
     return out
   }
+  const isZh = lang === 'zh'
   const edgeMap = new Map(rooms.map((r) => [r.id, edgesOf(r)]))
   const center = new Map(rooms.map((r) => [r.id, footprintCenter(r.footprint)]))
   const list = new Map<string, string[]>()
   const dirOf = (axis: 'x' | 'z', from: string, to: string): string => {
     const cFrom = center.get(from)!
     const cTo = center.get(to)!
-    if (axis === 'x') return cTo.z > cFrom.z ? '北' : '南'
-    return cTo.x > cFrom.x ? '东' : '西'
+    if (axis === 'x')
+      return isZh ? (cTo.z > cFrom.z ? '北' : '南') : cTo.z > cFrom.z ? 'north' : 'south'
+    return isZh ? (cTo.x > cFrom.x ? '东' : '西') : cTo.x > cFrom.x ? 'east' : 'west'
   }
   for (let i = 0; i < rooms.length; i++) {
     for (let j = i + 1; j < rooms.length; j++) {
@@ -144,7 +218,12 @@ function topLevelAdjacency(rooms: SceneModel['root']['levels'][0]['rooms']): Map
       list.set(B.id, [...(list.get(B.id) ?? []), `${A.name}-${dirOf(shared.axis, B.id, A.id)}`])
     }
   }
-  return new Map([...list.entries()].map(([id, texts]) => [id, `（邻接：${texts.join('、')}）`]))
+  const prefix = isZh ? '（邻接：' : ' (adjacent: '
+  const sep = isZh ? '、' : ', '
+  const suffix = isZh ? '）' : ')'
+  return new Map(
+    [...list.entries()].map(([id, texts]) => [id, `${prefix}${texts.join(sep)}${suffix}`]),
+  )
 }
 
 function fmt(n: number): string {
@@ -156,9 +235,14 @@ function fmt(n: number): string {
  * 与场景摘要一起作为多轮上下文注入——摘要表达"当前是什么"（房间/家具 id·名称·尺寸），
  * 日志表达"用户刚改了什么"（与对话 op 同构的增量操作，按时间顺序）。
  * 逐条紧凑 JSON 输出；操作种类有限（setHouse/updateRoom/updateFurniture），token 开销小。
+ * 标题随界面语言（与系统提示词语言保持一致，LLM 按摘要/日志语言产出后续操作名）。
  */
-export function buildEditOpsLog(ops: Op[]): string {
-  const lines = ['手动编辑历史（用户在当前房屋上手动做过的修改，按时间顺序，引用 id 与上面一致）：']
+export function buildEditOpsLog(ops: Op[], lang: Language = 'zh'): string {
+  const lines = [
+    lang === 'zh'
+      ? '手动编辑历史（用户在当前房屋上手动做过的修改，按时间顺序，引用 id 与上面一致）：'
+      : 'Manual edit history (edits the user made manually on the current house, in chronological order; ids match the state above):',
+  ]
   for (const op of ops) {
     lines.push(`- ${JSON.stringify(op)}`)
   }
@@ -397,6 +481,8 @@ export interface GenerateOptions extends ApiClientOptions {
   editOps?: Op[]
   /** 流式返回时逐段回调（用于展示进度） */
   onChunk?: (delta: string) => void
+  /** 外部中止信号（组件卸载/用户取消）；与内部兜底超时合并 */
+  signal?: AbortSignal
 }
 
 /** 生成请求的整体兜底超时（流式连接自身保持活跃，此超时仅防挂死） */
@@ -408,15 +494,17 @@ const GENERATION_TIMEOUT_MS = 180_000
  * 发送前不进行有效性检测，由调用方确保已配置 API Key。
  */
 export async function generateModelFromChat(options: GenerateOptions): Promise<GenerateResult> {
-  const { history, userInput, currentScene, editOps, onChunk, ...clientOptions } = options
-  const messages: ChatMessage[] = [{ role: 'system', content: buildSystemPrompt() }, ...history]
+  const { history, userInput, currentScene, editOps, onChunk, signal, ...clientOptions } = options
+  // 系统提示词/摘要/编辑日志语言跟随界面语言（英文 UI 产出英文房间名，与分类词表配套）
+  const lang = useSettingsStore.getState().language
+  const messages: ChatMessage[] = [{ role: 'system', content: buildSystemPrompt(lang) }, ...history]
   // 多轮上下文：当前房屋状态摘要（含 id），LLM 靠 id 引用已有节点
   if (currentScene) {
-    messages.push({ role: 'user', content: buildSceneSummary(currentScene) })
+    messages.push({ role: 'user', content: buildSceneSummary(currentScene, lang) })
   }
   // P3 双向同步：用户手动编辑的操作日志（摘要表达"当前是什么"，日志表达"用户刚改了什么"）
   if (editOps && editOps.length > 0) {
-    messages.push({ role: 'user', content: buildEditOpsLog(editOps) })
+    messages.push({ role: 'user', content: buildEditOpsLog(editOps, lang) })
   }
   messages.push({ role: 'user', content: userInput })
 
@@ -432,6 +520,12 @@ export async function generateModelFromChat(options: GenerateOptions): Promise<G
   let content: string
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), GENERATION_TIMEOUT_MS)
+  // 外部中止（组件卸载/用户取消）与内部兜底超时合并：任一触发即中止流式请求
+  const onExternalAbort = () => controller.abort()
+  if (signal) {
+    if (signal.aborted) controller.abort()
+    else signal.addEventListener('abort', onExternalAbort, { once: true })
+  }
   try {
     content = await streamChatCompletion(clientOptions, messages, onChunk, controller.signal)
   } catch (error) {
@@ -440,6 +534,7 @@ export async function generateModelFromChat(options: GenerateOptions): Promise<G
     throw new ChatGenerationError(t('error.httpRequestFailed', { detail }), 'http')
   } finally {
     clearTimeout(timer)
+    signal?.removeEventListener('abort', onExternalAbort)
   }
 
   logDebug('收到模型原始回复', content, 'info')
