@@ -4,6 +4,37 @@
 
 ## Unreleased（2026-08-14 全面审查批次，版本号未升）
 
+### 2026-08-14 追加（坑 105-114：重试语义 / 缓存键 / 提交语义 / 契约透传 / a11y）
+
+#### 修复与健壮性
+
+- **流中途中断不再自动重试**：`reader.read()` 抛错改抛 `StreamInterruptedError`，`isRetryableStreamError` 排除之——此前普通 Error 一律可重试，流已产出大半内容（token 已计费）后中断会重复发起整次 POST（重复计费 + 内容整段替换）。可重试仅限「连接建立前失败」与 429/5xx；回归测试断言 fetch 只调用一次（坑 105）。
+- **墙体方案内容签名补房间名**：`wallPlanContentKey` 纳入 `r.name`——此前只含足迹/开洞/入口，重命名房间后命中陈旧缓存，3D 渲染/平面图/点墙放门窗三处显示旧门墙（坑 106）。
+- **家具独立/靠墙词表双语化**：`FREE_STANDING_RE` 补英文等价词，英文 UI 下 Coffee Table/Chair 等不再被误当靠墙家具贴墙（坑 107）。
+- **settings migrate 保留线框偏好**：仅持久化版本 <2 时强制关闭线框，v2+ 保留用户显式设置（此前每次版本升级都静默重置）（坑 108）。
+- **拖拽提交语义收敛**：新增 `commitEdit` 统一 commitDrag/commitPlanEdit——场景必收敛为约束后版本，但内容 diff（editDiffToOps）为空时不压历史、不追加编辑日志（消除幽灵撤销条目）；所有离散提交点调 `syncDirtyWithSaved`，拖回原位不再脏标记卡死（坑 109）。
+- **快捷键对话框守卫**：`[role="dialog"]` 打开时 Ctrl+Z/R/方向键不再作用于背后场景（坑 110）。
+- **v2 快照路径补 rotationY/relativeTo 透传**：此前快照中家具旋转修改与贴靠定位被静默丢弃，与手写 ops 不等价（坑 111）。
+- **applyOpenings 按足迹环几何取边**：新增 `edgeByRingIndex`——退化边过滤后数组下标会错位，开洞不能直接索引渲染侧数组（坑 112）。
+- **ConfirmProvider 请求队列化**：重入的 confirm/alertMessage 按序弹出，前一个 Promise 不再永久悬挂；卸载兜底 resolve（坑 113）。
+- **截图竞态防护**：`flushSync` 同步提交净化状态 + 请求序号防重叠调用互相复位（坑 114）。
+- **对话消息与历史有上限**：`messages` 上限 100 条、`toChatHistory` 只送最近 30 条（防 5MB 配额逼近）。
+- **口令还原后清空旧分享内容**：ShareDialog 不再显示已不属于当前场景的口令/截图。
+
+#### 可访问性与样式
+
+- **aria 补全**：属性面板 Gizmo/步长、平面图工具行与门窗切换补 `aria-pressed`（工具行含单选组语义）、工具面板按钮补 `aria-expanded`、ChatDrawer 折叠按钮补 `aria-label`。
+- **输入框焦点指示**：`input:focus-visible` 由移除 outline 改为边框变色 + 2px 外发光环（`--accent-soft`），色弱用户不再难以辨认焦点。
+- **平面图编辑只响应左键**：右键/中键保留给 OrbitControls（此前会同时拖房间与转视角）。
+- **派生色令牌化**：硬编码 rgba（accent/danger/warn/遮罩）收敛为 `color-mix` 派生变量（`--accent-soft-strong`/`--danger-soft`/`--warn-strong`/`--overlay`），随主题令牌联动。
+- **属性面板偏移随窗口钳制**：resize/松手时把拖拽偏移钳回视口容器内（拖过头后面板不再整体出视口且头部不可拖回）。
+- **调试日志下载稳健化**：anchor 挂 DOM 再点击 + 延迟 revokeObjectURL（Safari 等浏览器立即 revoke 会下载失败）。
+
+### 工程收尾
+
+- 文档同步：测试数 601→614、architecture v2.17→v2.18、README 双语 FAQ 更新（词表双语化后的真实边界）、notes 新增坑 105-114。
+
+
 ### 修复与健壮性
 
 - **移动端门控统一**：删除 mobile.css 中与 `wc-compact` JS 门控并存的 `@media (max-width: 768px)` 块（760~768px 区间曾出现顶栏/属性面板样式冲突），窄屏样式全部由单一门控驱动。
@@ -44,6 +75,6 @@
 
 ### 工程收尾
 
-- 文档同步：测试数 574→601、architecture v2.16→v2.17。
+- 文档同步：测试数 574→601、architecture v2.16→v2.17（2026-08-14 批次后 601→614、v2.17→v2.18）。
 - CI：job 增加 `timeout-minutes` 与 PR 并发取消；vitest 设 `testTimeout: 15s`。
 - 新增 CHANGELOG.md（本文件）。

@@ -566,6 +566,29 @@ describe('显式开洞覆盖层（doors / windows）', () => {
     expect(edgeOf(plan.get('a')!, 'north')!.segments.some((s) => s.kind === 'window')).toBe(false)
     expect(edgeOf(plan.get('a')!, 'west')!.segments.every((s) => s.kind === 'wall')).toBe(true)
   })
+
+  it('edgeIndex 按顶点环几何匹配：退化边被过滤后直接按下标会错位', () => {
+    // 顶点环含一条退化边（重复点）：过滤后 plan.edges 比环短，
+    // 环下标 3（北边）若直接取 p.edges[3] 会错位到西边
+    const fp = [
+      { x: 0, z: 0 },
+      { x: 6, z: 0 },
+      { x: 6, z: 4 },
+      { x: 6, z: 4 }, // 退化边（零长度）
+      { x: 0, z: 4 },
+    ]
+    const r = {
+      ...room('a', '主卧', 0, 0, 3, 3),
+      footprint: fp,
+      windows: [{ edgeIndex: 3, from: 1, to: 2, width: 1 }], // 环下标 3 = 北边
+    }
+    const plan = computeWallPlan([r], { entrance: 'south', entranceRoomId: 'a' })
+    const north = edgeOf(plan.get('a')!, 'north')!
+    expect(north.segments.some((s) => s.kind === 'window')).toBe(true)
+    // 西边不得有窗（旧实现下标错位会落到这里）
+    const west = edgeOf(plan.get('a')!, 'west')!
+    expect(west.segments.some((s) => s.kind === 'window')).toBe(false)
+  })
 })
 
 describe('墙段坐标与渲染映射（坑 37/坑 41 回归）', () => {
@@ -682,6 +705,38 @@ describe('墙段坐标与渲染映射（坑 37/坑 41 回归）', () => {
       }
       const p3 = computeAllWallPlansCached(s3, 'south', 'living')
       expect(p3).not.toBe(p1)
+    })
+
+    it('房间重命名后缓存必须失效（名字参与门/墙推导，陈旧方案会显示旧门洞）', () => {
+      const s = scene()
+      const p1 = computeAllWallPlansCached(s, 'south', 'living')
+      // 把「主卧」（私密）重命名为「客厅」（开放）：两开放空间相邻 → 共享墙应变为 open
+      const s2: SceneModel = {
+        ...s,
+        root: {
+          ...s.root,
+          levels: [
+            {
+              ...s.root.levels[0]!,
+              rooms: [room('living', '客厅', -3, 0, 6, 4), room('master', '客厅', 3, 0, 6, 4)],
+            },
+          ],
+        },
+      }
+      const p2 = computeAllWallPlansCached(s2, 'south', 'living')
+      expect(p2).not.toBe(p1)
+      // 与无缓存的新鲜计算结果一致
+      const fresh = computeAllWallPlans(s2.root.levels[0]!.rooms, {
+        entrance: 'south',
+        entranceRoomId: 'living',
+      })
+      expect(p2.get('master')).toEqual(fresh.get('master'))
+      // master 西墙（共享墙）应为 open 段（开放空间之间不设墙），且 master 无任何门洞
+      // （入户门在 living 南墙，属合法保留，不参与此断言）
+      const west = p2.get('master')!.edges.find((e) => e.dir === 'west')
+      expect(west?.segments.some((seg) => seg.kind === 'open')).toBe(true)
+      const masterSegs = p2.get('master')!.edges.flatMap((e) => e.segments)
+      expect(masterSegs.some((seg) => seg.kind === 'door')).toBe(false)
     })
   })
 })

@@ -225,7 +225,7 @@ describe('streamChatCompletion', () => {
     fetchMock.mockRestore()
   })
 
-  it('流读取中断（非中止）时报读取中断', async () => {
+  it('流读取中断（非中止）时报读取中断且不重试（避免重复计费）', async () => {
     const fakeBody = {
       getReader: () => ({
         read: vi
@@ -242,6 +242,29 @@ describe('streamChatCompletion', () => {
     await expect(streamChatCompletion(opts, [{ role: 'user', content: 'hi' }])).rejects.toThrow(
       '读取响应流中断（boom）',
     )
+    // 流已开始后中断属于"内容可能已计费"，禁止整请求重试（注释承诺的行为）
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    fetchMock.mockRestore()
+  })
+
+  it('流中途中断后不因第二次尝试成功而重复计费（先有内容再断流）', async () => {
+    const failingBody = {
+      getReader: () => ({
+        read: vi
+          .fn()
+          .mockResolvedValueOnce({ done: false, value: new TextEncoder().encode('data: {"c') })
+          .mockRejectedValueOnce(new Error('connection lost')),
+      }),
+    }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: failingBody,
+    } as unknown as Response)
+    await expect(streamChatCompletion(opts, [{ role: 'user', content: 'hi' }])).rejects.toThrow(
+      '读取响应流中断',
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     fetchMock.mockRestore()
   })
 

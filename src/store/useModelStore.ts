@@ -76,6 +76,29 @@ function pushPast(
 }
 
 /**
+ * 拖拽类提交的统一处理（commitDrag/commitPlanEdit 共用，2026-08-14 审查批次）：
+ * 预览场景先约束进墙（normalizeContainment）——**无论有无实际变化，场景都必须收敛为
+ * 约束后的版本**（预览可能停在越界位置，如床被拖出墙外、松开后被约束弹回原处）；
+ * 再与拖拽前场景做**内容 diff**（editDiffToOps）：无实际变化（拖回原位/约束弹回原处）
+ * 不压历史、不追加编辑日志，消除「内容完全相同的幽灵撤销条目」（旧实现只按引用比较，
+ * 引用必不同导致无条件压栈）；有变化才压入拖拽前快照（历史条目内同步快照编辑日志，
+ * 供 undo/redo 恢复）。无变化时只返回场景收敛（不动 past/future，不破坏 redo 栈）。
+ */
+function commitEdit(
+  state: Pick<ModelState, 'scene' | 'past'>,
+  baseScene: SceneModel,
+  currentScene: SceneModel,
+  id: string,
+): Pick<ModelState, 'scene'> {
+  const scene = normalizeContainment(currentScene)
+  const ops = editDiffToOps(baseScene, scene, id)
+  if (ops.length === 0) return { scene }
+  const editLog = useChatStore.getState().editOps.slice()
+  useChatStore.getState().pushEditOps(ops)
+  return { scene, ...pushPast({ scene: baseScene, past: state.past }, editLog) }
+}
+
+/**
  * 双向同步（design.md §5.1）：手动编辑提交后，把「编辑前 → 编辑后」diff 成一条
  * 与对话同构的 op 追加进 useChatStore 的编辑日志（供多轮对话上下文）；无实际变化不记录。
  */
@@ -219,6 +242,7 @@ export const useModelStore = create<ModelState>()(
           const editLog = useChatStore.getState().editOps.slice()
           const scene = withUpdatedPosition(state.scene, state.selectedId, next)
           recordEditOps(state.scene, scene, state.selectedId)
+          syncDirtyWithSaved(scene)
           return { scene, ...pushPast(state, editLog) }
         }),
 
@@ -230,6 +254,7 @@ export const useModelStore = create<ModelState>()(
           const editLog = useChatStore.getState().editOps.slice()
           const scene = withUpdatedPosition(state.scene, state.selectedId, original)
           recordEditOps(state.scene, scene, state.selectedId)
+          syncDirtyWithSaved(scene)
           return { scene, ...pushPast(state, editLog) }
         }),
 
@@ -246,6 +271,7 @@ export const useModelStore = create<ModelState>()(
           // 提交后重新约束进墙内，并把变化后的场景作为新状态
           const scene = normalizeContainment({ ...state.scene, root: nextRoot })
           recordEditOps(state.scene, scene, state.selectedId)
+          syncDirtyWithSaved(scene)
           return { scene, ...pushPast(state, editLog) }
         }),
 
@@ -282,12 +308,12 @@ export const useModelStore = create<ModelState>()(
       commitDrag: (baseScene) =>
         set((state) => {
           if (!state.scene || !baseScene || state.scene === baseScene) return state // 无场景 / 拖拽无变化
+          if (!state.selectedId) return state // 防御：预览路径必带选中，理论不可达
           const before: SceneModel = baseScene // 收窄非空（参数窄化不进入闭包）
-          // 拖拽前的场景作为历史快照；当前场景约束进墙内作为新状态
-          const editLog = useChatStore.getState().editOps.slice()
-          const scene = normalizeContainment(state.scene)
-          if (state.selectedId) recordEditOps(before, scene, state.selectedId)
-          return { scene, ...pushPast({ scene: before, past: state.past }, editLog) }
+          const next = commitEdit(state, before, state.scene, state.selectedId)
+          // 离散提交点做一次全量比对：拖回原位等「内容回到已保存状态」的情形清除脏标记
+          syncDirtyWithSaved(next.scene)
+          return next
         }),
 
       applyPlanOps: (ops) =>
@@ -298,6 +324,8 @@ export const useModelStore = create<ModelState>()(
           if (JSON.stringify(result.scene) === JSON.stringify(state.scene)) return state // 无实际变化
           const editLog = useChatStore.getState().editOps.slice()
           useChatStore.getState().pushEditOps(ops)
+          // 离散提交点全量比对（与撤销/重做同一机制）：回到已保存状态时清除脏标记
+          syncDirtyWithSaved(result.scene)
           return { scene: result.scene, ...pushPast(state, editLog) }
         }),
 
@@ -305,11 +333,10 @@ export const useModelStore = create<ModelState>()(
         set((state) => {
           if (!state.scene || !baseScene || state.scene === baseScene) return state
           const before: SceneModel = baseScene
-          // 拖拽前的场景作为历史快照；当前场景约束进墙内作为新状态（与 commitDrag 同行为）
-          const editLog = useChatStore.getState().editOps.slice()
-          const scene = normalizeContainment(state.scene)
-          recordEditOps(before, scene, id)
-          return { scene, ...pushPast({ scene: before, past: state.past }, editLog) }
+          // 无实际变化（拖回原位/顶点拖回）不压历史，但场景仍收敛为约束后版本（坑 B5）
+          const next = commitEdit(state, before, state.scene, id)
+          syncDirtyWithSaved(next.scene)
+          return next
         }),
 
       undo: () =>

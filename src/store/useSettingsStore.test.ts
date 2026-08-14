@@ -120,6 +120,52 @@ describe('useSettingsStore', () => {
     expect(useSettingsStore.getState().shadows).toBe(true)
   })
 
+  it('v2+ 存档迁移必须保留用户显式开启的线框偏好（不因版本升级静默重置）', async () => {
+    useSettingsStore.setState({ wireframe: { enabled: false, lineWidth: 1 } })
+    localStorage.setItem(
+      'wordcraft.settings',
+      JSON.stringify({
+        state: {
+          apiKeys: [],
+          activeKeyId: null,
+          defaultBaseUrl: '',
+          defaultModel: 'deepseek-v4-flash',
+          thinking: 'disabled',
+          colorMode: 'standard',
+          wireframe: { enabled: true, lineWidth: 3 },
+          debugMode: false,
+          language: 'zh',
+          shadows: true,
+        },
+        version: 4,
+      }),
+    )
+    await useSettingsStore.persist.rehydrate()
+    expect(useSettingsStore.getState().wireframe).toEqual({ enabled: true, lineWidth: 3 })
+  })
+
+  it('v1 存档（默认开线框的旧时代）迁移时强制关闭线框', async () => {
+    useSettingsStore.setState({ wireframe: { enabled: true, lineWidth: 2 } })
+    localStorage.setItem(
+      'wordcraft.settings',
+      JSON.stringify({
+        state: {
+          apiKeys: [],
+          activeKeyId: null,
+          defaultBaseUrl: '',
+          defaultModel: 'deepseek-v4-flash',
+          thinking: 'disabled',
+          colorMode: 'standard',
+          wireframe: { enabled: true, lineWidth: 2 },
+          debugMode: false,
+        },
+        version: 1,
+      }),
+    )
+    await useSettingsStore.persist.rehydrate()
+    expect(useSettingsStore.getState().wireframe).toEqual({ enabled: false, lineWidth: 1 })
+  })
+
   it('默认关闭线框（实体色块渲染）', () => {
     expect(useSettingsStore.getState().wireframe.enabled).toBe(false)
   })

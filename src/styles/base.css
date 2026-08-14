@@ -40,7 +40,11 @@ a:focus-visible {
 
 input:focus-visible,
 textarea:focus-visible {
+  /* 输入框焦点指示：border 变色只有 1px、对比度不足（尤其色弱用户）。
+     去掉 outline 后用边框变色 + 外发光环（box-shadow），不改变布局且清晰可见 */
   outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 /* ---------- 布局骨架 ---------- */

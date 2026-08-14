@@ -83,6 +83,7 @@ export function PlanToolbar({
           type="button"
           className={`segmented__btn ${openingKind === kind ? 'segmented__btn--active' : ''}`}
           onClick={() => onSetOpeningKind(kind)}
+          aria-pressed={openingKind === kind}
         >
           {kind === 'door' ? t('plan.kindDoor') : t('plan.kindWindow')}
         </button>
@@ -102,6 +103,7 @@ export function PlanToolbar({
         }
         onClick={() => pickTool(tool)}
         title={t(title)}
+        aria-pressed={planTool === tool}
       >
         {t(label)}
       </button>
@@ -116,6 +118,7 @@ export function PlanToolbar({
           className={`plan-toolbar__menu-btn ${toolsOpen ? 'plan-toolbar__menu-btn--active' : ''}`}
           onClick={() => setToolsOpen((o) => !o)}
           title={t('plan.toolsTitle')}
+          aria-expanded={toolsOpen}
         >
           {t('plan.tools')} {toolsOpen ? '▴' : '▾'}
         </button>

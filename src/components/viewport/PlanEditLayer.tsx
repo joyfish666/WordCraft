@@ -169,6 +169,9 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
 
   const onPlaneDown = (e: ThreeEvent<PointerEvent>): void => {
     e.stopPropagation()
+    // 只响应左键：右键/中键是 OrbitControls 的旋转/平移语义，不启动工具拖拽，
+    // 否则会同时拖房间与转视角
+    if (e.button !== 0) return
     // 指针捕获：拖拽期间 move/up 全部路由到本对象，指针悬停手柄/移出对象也不中断
     capturePointer(e)
     const p = localPoint()
@@ -329,6 +332,7 @@ export function PlanEditLayer({ groupRef }: PlanEditLayerProps) {
 
   const onVertexDown = (e: ThreeEvent<PointerEvent>, roomId: string, index: number): void => {
     e.stopPropagation()
+    if (e.button !== 0) return // 只响应左键（右键/中键是视角控制）
     capturePointer(e)
     const store = useModelStore.getState()
     const sceneNow = store.scene

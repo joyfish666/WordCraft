@@ -210,7 +210,7 @@ describe('useModelStore', () => {
     expect(useModelStore.getState().scene).toBe(scene)
   })
 
-  it('commitDrag 记录一次历史并把越墙预览约束回墙内', () => {
+  it('commitDrag 把越墙预览约束回墙内；约束弹回原位时不压幽灵历史', () => {
     useModelStore.getState().setScene(createSampleModel())
     const base = useModelStore.getState().scene
     useModelStore.getState().selectNode('bed-master')
@@ -228,6 +228,14 @@ describe('useModelStore', () => {
       bed.position.z + bed.dimensions.width / 2 > kb.minZ + 1e-6 &&
       bed.position.z - bed.dimensions.width / 2 < kb.maxZ - 1e-6
     expect(overlapsBath).toBe(false)
+    // 越墙拖拽被约束后恰好弹回原位（内容与拖拽前一致）→ 不压历史（消除幽灵撤销条目）
+    expect(useModelStore.getState().past.length).toBe(0)
+    // 床回到拖拽前位置（约束计算会引入 ~1e-16 浮点噪声，按容差断言）
+    const original = (findNodeById(base!.root, 'bed-master') as FurnitureNode).position.x
+    expect(Math.abs(bed.position.x - original)).toBeLessThan(1e-6)
+    // 把床拖到墙内另一位置 → 有实际变化才记历史（x=1 在墙内且不在嵌套卫生间占地）
+    useModelStore.getState().previewSelected({ position: { x: 1 } })
+    useModelStore.getState().commitDrag(base)
     expect(useModelStore.getState().past.length).toBe(1)
     // 撤销回到拖拽前
     useModelStore.getState().undo()

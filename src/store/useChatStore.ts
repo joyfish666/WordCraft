@@ -53,6 +53,14 @@ const GENERATION_HISTORY_LIMIT = 20
 /** 手动编辑操作日志上限（P3 §5.1）：防止无界增长 */
 const EDIT_OPS_LIMIT = 50
 
+/** 对话消息上限：长会话下无界增长会逼近 localStorage 5MB 配额（partialize 每次全量重序列化），
+ *  且会话内每轮消息还各带一份场景快照（供撤销生成）。超出的旧消息丢弃——多轮上下文由
+ *  场景摘要 + 编辑日志 + 最近消息表达（toChatHistory 再截断），丢头部旧消息无信息损失。 */
+const MESSAGES_LIMIT = 100
+
+/** 发送给 LLM 的历史消息上限：只送最近 N 条（场景摘要/编辑日志已表达当前状态，全量历史冗余） */
+const CHAT_HISTORY_LIMIT = 30
+
 export const useChatStore = create<ChatState>()(
   persist(
     (set) => ({
@@ -64,7 +72,7 @@ export const useChatStore = create<ChatState>()(
       addMessage: (input) => {
         const id = createId()
         const item: ChatMessageItem = { ...input, id, createdAt: Date.now() }
-        set((state) => ({ messages: [...state.messages, item] }))
+        set((state) => ({ messages: [...state.messages, item].slice(-MESSAGES_LIMIT) }))
         return id
       },
 
@@ -147,6 +155,7 @@ export const useChatStore = create<ChatState>()(
  * P3 对话上下文改造（design.md §5.2）：助手消息中**纯 JSON 的 ops 原文**（整段状态快照）
  * 不再回传——当前状态由「场景摘要 + 手动编辑日志」完整表达，省 token（80%+）且手动编辑不丢失；
  * 用户消息与带文本的助手消息（如解释性回复）保留，多轮意图不断裂。
+ * 只送最近 CHAT_HISTORY_LIMIT 条：旧轮次由摘要/日志替代，token 开销有界。
  */
 export function toChatHistory(messages: ChatMessageItem[]): ChatMessage[] {
   return messages
@@ -158,4 +167,5 @@ export function toChatHistory(messages: ChatMessageItem[]): ChatMessage[] {
       return true
     })
     .map((m) => ({ role: m.role, content: m.content }))
+    .slice(-CHAT_HISTORY_LIMIT)
 }

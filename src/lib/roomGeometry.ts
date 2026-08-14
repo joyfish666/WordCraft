@@ -302,6 +302,35 @@ interface NeighborAlongEdge {
 // ---------------------------------------------------------------------------
 
 /**
+ * 按 footprint 顶点环边下标取墙边（坑 39 约定：Opening.edgeIndex 引用顶点环边序号）。
+ * ⚠️ 不能直接 `p.edges[ringIndex]`：`footprintEdges` 会过滤退化边（length < EPSILON），
+ * 过滤后数组比顶点环短，下标会错位/越界（开洞静默落到错误的墙上）——必须沿顶点环
+ * 按几何匹配（与 planEdit.ringIndexOf 互逆）。退化边/越界下标/非轴对齐边返回 undefined。
+ */
+function edgeByRingIndex(room: RoomNode, plan: WallPlan, ringIndex: number): WallEdge | undefined {
+  const fp = room.footprint
+  const n = fp.length
+  if (n === 0) return undefined
+  const idx = ((ringIndex % n) + n) % n
+  const a = fp[idx]!
+  const b = fp[(idx + 1) % n]!
+  const axis: 'x' | 'z' | null =
+    Math.abs(a.z - b.z) < EPSILON ? 'x' : Math.abs(a.x - b.x) < EPSILON ? 'z' : null
+  if (axis === null) return undefined
+  const line = axis === 'x' ? a.z : a.x
+  const start = axis === 'x' ? Math.min(a.x, b.x) : Math.min(a.z, b.z)
+  const length = axis === 'x' ? Math.abs(b.x - a.x) : Math.abs(b.z - a.z)
+  if (length < EPSILON) return undefined
+  return plan.edges.find(
+    (e) =>
+      e.axis === axis &&
+      Math.abs(e.line - line) < 1e-9 &&
+      Math.abs(e.start - start) < 1e-9 &&
+      Math.abs(e.length - length) < 1e-9,
+  )
+}
+
+/**
  * 应用显式开洞：只覆盖实心墙段（open 开放连通处不重复开洞）。
  * from/to 为开洞在边上的局部区间，超出边范围自动截断；无效开洞静默跳过。
  */
@@ -311,7 +340,8 @@ export function applyOpenings(plan: Map<string, WallPlan>, rooms: RoomNode[]): v
     if (!p) continue
     for (const kind of ['doors', 'windows'] as const) {
       for (const op of room[kind]) {
-        const edge = p.edges[op.edgeIndex]
+        // 按顶点环几何取边（退化边过滤后数组下标会错位，见 edgeByRingIndex）
+        const edge = edgeByRingIndex(room, p, op.edgeIndex)
         if (!edge) continue
         const from = Math.min(Math.max(op.from, 0), edge.length)
         const to = Math.min(Math.max(op.to, from), edge.length)
@@ -699,8 +729,11 @@ export function computeAllWallPlans(
  */
 const allWallPlanCache = new WeakMap<SceneModel, Map<string, WallPlan>>()
 
-/** 墙体方案内容签名（单条目缓存）：遍历所有房间足迹 + 显式开洞 + 入口参数，
- * 只保留 computeWallPlan 实际消费的字段（几何/开洞决定分段，与渲染一致）。 */
+/** 墙体方案内容签名（单条目缓存）：遍历所有房间足迹 + 显式开洞 + 入口参数 + **房间名**，
+ * 只保留 computeWallPlan 实际消费的字段。房间名必须进签名——门/墙推导依赖名字
+ * （isCorridorName/isOpenRoom/isPrivateRoom/isBathroomName/sharedWallOwner/bathroomOwner、
+ * hasCorridor 预扫描、入口候选房间筛选），漏掉名字会让"重命名房间"命中陈旧方案
+ * （如把主卧改成客厅后，缓存仍返回旧门洞，而新计算应为 open 段）。 */
 function wallPlanContentKey(
   rooms: RoomNode[],
   entrance: DoorDirection,
@@ -708,7 +741,7 @@ function wallPlanContentKey(
 ): string {
   const parts: string[] = [`${entrance}@${entranceRoomId ?? ''}`]
   const walk = (r: RoomNode): void => {
-    parts.push(`${r.id}:`)
+    parts.push(`${r.id}:${r.name}`)
     for (const p of r.footprint) parts.push(`${p.x.toFixed(3)},${p.z.toFixed(3)}`)
     for (const op of r.doors) parts.push(`d${op.edgeIndex}:${op.from}:${op.to}`)
     for (const op of r.windows) parts.push(`w${op.edgeIndex}:${op.from}:${op.to}`)

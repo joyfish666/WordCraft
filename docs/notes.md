@@ -32,7 +32,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 2. **用户明确要求优先**：一切以用户明确要求为主，未明确才按常理；除入户门外不要擅自固定其他内容。
 3. **兜底链永远保留**：JSON 提取容错 → Zod 结构校验 → 模板/常理兜底。LLM 输出是"不信任输入"，每层都做防御。
 4. **确定性**：同一输入必须同一输出。所有布局/常理算法必须是纯函数或确定性流程，禁止依赖随机/时间/对象遍历顺序（对象遍历顺序尤其危险，见坑 12）。
-5. **i18n 边界**：只翻译 UI 层；生成数据与房间/家具分类器是中文词表（见坑 27/28）。
+5. **i18n 边界**：只翻译 UI 层；生成数据由大模型按界面语言产出——**分类词表必须中英双语同步维护**（roomGeometry/furniturePresets/furniturePlacement 已双语，坑 107 补全了独立/靠墙词表；改词表时两套语言一起改，见坑 30）。
 6. **编辑操作与对话操作同构（v3）**：手动编辑产出与对话 op 相同的操作，共享执行器/撤销栈/对话上下文。
 7. **修 bug 必须挖根因（2026-08-12 起强制执行）**：禁止为单次复现打临时补丁（如改提示词绕开、特判某个房间名/坐标、只修表象不修规则）。每次修复先回答"为什么这次会错"——绝大多数 bug 是"通用规则在特定前提（布局模式 / 开洞组合 / 引用形式）下失效"，修复应落在规则层：把失效前提纳入规则本身，并补回归测试（复现场景 + 相邻场景），防止"修 A 破 B"。教训案例：入户门与窗的两次同根 bug——「窗先开、门后加」门被挤成小门，「门先开、窗后加」大窗被劈成两段，根因都是"门与窗在同一面墙上互不相让"，最终修法是把"门必须落在 ≥0.9m 实心段、放不下就换外墙"写进规则（坑 26 的 ③ 之后见 §3.14）。
 
@@ -104,7 +104,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 ### 3.6 i18n
 
-30. **i18n 范围边界（重要）**：`src/i18n/translations.ts` 只翻译 **UI 界面层**。**生成数据不翻译**——LLM 系统提示词保持中文，`roomGeometry`/`furniturePlacement` 的分类器是中文词表（`ROOM_TYPE_RE`、`FREE_STANDING_RE` 等），英文房间名会破坏走廊/开放/私密房/家具贴墙分类。改分类器/提示词做多语言前，别期望英文房间名能正确分类。
+30. **i18n 范围边界（重要）**：`src/i18n/translations.ts` 只翻译 **UI 界面层**。**生成数据不翻译**——LLM 系统提示词与分类词表已双语化（2026-08-13 起）：英文 UI 下发英文提示词、LLM 产出英文房间/家具名，`roomGeometry`（走廊/开放/私密/卫生间归属）与 `furniturePresets`（20 类）与 `furniturePlacement`（独立/靠墙判定，坑 107 补）的分类词表均为中英双语，配套补全件名称随界面语言。**真实边界**：分类依赖词表与模型输出语言匹配——词表外的复合命名（如 "Master En-suite"）可能漏判；`roomFloorMaterial` 的英文房名匹配只覆盖常见词（bathroom/kitchen/balcony）。改分类器/提示词做多语言时，中文英文两套词表必须同步维护，并补双语用例（isWallAnchored 的英文断言就是坑 107 的回归防线）。
 31. **i18n 实现要点**：组件用 `useT()`（响应式）、lib 抛错用 `t()`（非响应式读 store，无循环依赖）；`t()` 的 `{}` 插值用 `split/join`（目标 ES2020，无 `replaceAll`）。`translations.ts` 的 zh 为 key 真源、en 为 `Record<TKey,string>`，`translations.test.ts` 断言两语言 key 集合一致。
 
 ### 3.7 家具部件模型
@@ -289,6 +289,30 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 94. **模型收尾"错配闭合符"（`]` 写成 `}` / 多打 `}`）逃过全部既有容错**（用户反馈，2026-08-13）：`repairTruncatedJson` 遇错配闭合符（栈顶 `[` 却收到 `}`）返回 null；`tryParseModelJson` 的尾部修剪只找"合法前缀"，而错配发生在结构内部、`[`(ops 数组) 一直未闭合——不存在任何合法前缀。三路全灭 → 报错。修复（chat.ts）：新增 **`repairLenientJson`（宽松括号修复）**——字符串感知扫描，**跳过错配/多余的闭合符**（栈空或与栈顶不匹配的 `}`/`]` 直接丢弃），结尾再按括号栈补全缺失闭合符（含尾部逗号/空白剔除）；结果仍须通过 `JSON.parse` 才算数（修复后可能是语义截断的 JSON——比报错强，执行器逐条容错兜底）。接入容错链第 ③ 步（原样 → 截断补全 → **宽松修复** → 双编码还原 → 双编码+修复 → 尾部修剪），命中记「模型回复 JSON 含错配/多余闭合符，已宽松修复」。回归测试 7 例（单元：错配修复/多余闭合跳过/缺闭合补全/字符串未闭合拒绝/字符串内括号；链：错配形态 recovery=lenient；集成：`valid.slice(0,-2)+'}'` 复现用户日志形态成功生成）。
 
+### 3.25 2026-08-14 代码审查批次（坑 105-114：重试语义 / 缓存键 / 提交语义 / 契约透传）
+
+> 承接 3.24。坑 95-104（2026-08-13 晚：英文体验补齐、IndexedDB 容错门面、undo↔editOps 一致性、性能与 a11y、工程收尾）未单独入 notes，见 CHANGELOG「Unreleased」。
+
+105. **流中途中断被自动重试（与注释承诺矛盾，重复计费）**（审查发现，2026-08-13）：`streamChatCompletion` 注释写"流中途中断不重试（避免重复计费）"，但 `reader.read()` 抛错被包成普通 `Error`，而 `isRetryableStreamError` 对普通 Error 无条件返回 true——流已产出大半内容（token 已计费）后中断，仍重新发起整次 POST（重复计费 + 界面先看一段内容再被整段替换）。修复（api.ts）：新增 **`StreamInterruptedError` 专属类型**（与 `StreamAbortedError` 并列），`isRetryableStreamError` 对其实返回 false；可重试仅限「连接建立前失败（fetch 抛错）」与 429/5xx（响应头未收到内容）。回归测试断言 fetch 只调用一次。**约定：可重试性必须按「服务端是否可能已产出内容」划分，普通 Error 不能一律可重试**。
+
+106. **墙体内容签名缓存缺房间名 → 重命名房间后陈旧墙体方案**（审查发现，2026-08-13）：`wallPlanContentKey`（roomGeometry.ts）只收录 房间id + 足迹 + 开洞 + 入口参数，但 `computeWallPlan` 的门/墙推导高度依赖房间名（`isCorridorName`/`isOpenRoom`/`isPrivateRoom`/`isBathroomName`/`sharedWallOwner`/`bathroomOwner`、`hasCorridor` 预扫描、入口候选房间筛选）。重命名房间（属性面板/updateRoom）产生新场景引用（WeakMap 必 miss），但内容签名不变 → 命中陈旧单条目缓存，3D 渲染/平面图/点墙放门窗命中三处全部显示旧门墙，直到下次足迹/开洞变化才自愈。修复：签名补 `r.name`（成本可忽略）+ 回归测试（把主卧改成客厅 → 共享墙应为 open、不再命中旧 door）。**教训：内容签名必须覆盖消费函数读取的**全部**字段，名字参与几何推导的模块（roomGeometry）签名里必须有名字**。
+
+107. **家具独立/靠墙词表未双语化**（审查发现，2026-08-13）：英文体验批次（坑 95-104）双语化了 `furniturePresets`/`roomGeometry` 与英文提示词，但 `furniturePlacement.FREE_STANDING_RE` 仍是纯中文——英文 UI 下 "Coffee Table"/"Dining Table"/"Chair"（含配套补全产出的英文名）全部被误当靠墙家具贴到墙上。修复：补英文等价词（coffee/dining/round/side/end/tea table、rug/carpet、chair/stool、bar、island，`\b` 边界防误伤 "armchair"），`isWallAnchored` 补英文用例。
+
+108. **settings migrate 无条件重置 wireframe，用户偏好随每次升级静默丢失**（审查发现，2026-08-13）：`useSettingsStore.migrate` 固定返回 `wireframe: {enabled:false, lineWidth:1}`——注释意图是"v2 起默认关闭"（仅针对 v1 旧数据），但 migrate 对**任何版本差**（v1→v5、v2→v5、v4→v5）都会执行，v2+ 存档里用户显式开启的线框被强制重置。修复：用 zustand 传入的 `version` 参数门控——仅 `version < 2` 强制关，v2+ 保留 `rest.wireframe ?? 默认`。回归测试：v4 存档 enabled:true/lineWidth:3 迁移后保留；v1 存档仍强制关。**教训：migrate 的"历史修正"必须按版本号作用域化，不能作用于所有旧版本**；既有迁移测试恰好都用 enabled:false 造数据掩盖了此问题。
+
+109. **拖拽提交的幽灵历史 + 脏标记单向卡死**（审查发现，2026-08-13）：① `commitDrag`/`commitPlanEdit` 只按**引用**比较 `scene === baseScene`——拖回原位时引用必不同，无条件压入一条"内容完全相同"的撤销条目（撤销一次无视觉变化）；且旧实现若直接保留预览场景，越墙拖拽被约束弹回原位时（内容与拖拽前一致）场景停在未约束位置。② `useDirtyTracking` 订阅只在「干净 → 变化」时置脏一次，拖走再精确拖回已保存位置后 `dirty` 永远卡 true（刷新前误判未保存）。修复（useModelStore）：抽 **`commitEdit`** 统一两个提交点——场景**必收敛为 `normalizeContainment` 后的版本**（预览可能停在越界位置），但 `editDiffToOps` 内容 diff 为空时**不压历史、不追加编辑日志**（返回仅含 scene，不动 past/future、不破坏 redo）；所有离散提交点（commitDrag/commitPlanEdit/applyPlanOps/translateSelected/resetSelectedPosition/updateSelected）调 `syncDirtyWithSaved` 做一次全量比对（与撤销/重做同一机制，高频预览路径不参与）。**约定：拖拽提交的"有无变化"判定必须走内容 diff（editDiffToOps 有 EPSILON 容差），不能靠引用比较；脏标记清除只在离散提交点做全量比对**。
+
+110. **模态对话框打开时全局快捷键仍作用于背后场景**（审查发现，2026-08-13）：`useKeyboardShortcuts` 只排除 INPUT/TEXTAREA 聚焦，未检测 `[role="dialog"]`——确认框弹出时 Ctrl+Z/Ctrl+Y/R/方向键仍撤销模型/复位视角，与对话框按钮语义脱节（键盘用户尤其危险）。修复：`onKey` 开头 `document.querySelector('[role="dialog"]')` 即 return（应用内全部对话框经通用 Dialog 渲染，均带 role="dialog"）。**约定：新增全局快捷键/全局点击处理器时，先问"模态打开时是否应该失效"**。
+
+111. **v2 快照容错路径丢 rotationY/relativeTo（与手写 ops 不等价）**（审查发现，2026-08-13）：`diffFurniture` 不比对 `rotationY`（快照里家具旋转修改静默丢弃，addFurniture 却透传）；`roomSpecFromV2` 与 addRoom diff 不透传 `relativeTo`（仅靠贴靠定位的新房间在 custom 模式下落到原点重叠/东侧兜底——注释明确写"全量透传（历史坑）"唯独漏了它）。修复（executor/diff.ts）：两处补透传 + 回归测试（新房间 relativeTo 贴靠 + 已有家具 rotationY 变化产出 updateFurniture 补丁）。**约定：快照适配器与 ops 契约必须逐字段核对（提示词/类型/op 三层同步），"补 position 时顺带核对同层可选字段"**。
+
+112. **applyOpenings 按过滤后数组下标取边，退化边足迹下开洞落错墙**（审查发现，2026-08-13）：`footprintEdges` 过滤 `length < EPSILON` 的退化边，`applyOpenings` 却 `p.edges[op.edgeIndex]` 直接按下标取值——顶点环含退化边（如重复点）时过滤后数组比环短，`edgeIndex` 错位（环下标 3=北边会取到西边）或越界静默跳过。修复（roomGeometry.ts）：新增 **`edgeByRingIndex`**——沿顶点环按几何匹配（axis/line/start/length 逐一比对，与 `planEdit.ringIndexOf` 互逆），退化边/越界返回 undefined；回归测试构造含退化边的 5 点环。**约定：`Opening.edgeIndex` 的消费方必须从顶点环解析（坑 39），不能直接索引渲染侧过滤后的数组**。
+
+113. **ConfirmProvider 重入悬挂**（审查发现，2026-08-13）：`confirm()`/`alertMessage()` 直接 `setState` 覆盖当前对话框——异步处理链连续触发时前一个 Promise 永不 resolve，调用方 `await` 永久挂起。修复（ConfirmDialog.tsx）：**请求队列化**——`queueRef` + 当前框 ref，关闭后按序弹下一个（setState 只是渲染镜像，出队逻辑放 ref 避免严格模式双调）；Provider 卸载时兜底 resolve(false)。回归测试：同一异步链 confirm→alert→confirm 全部按序拿到结果。
+
+114. **截图竞态：2 rAF 无提交保障 + 重叠调用互相复位**（审查发现，2026-08-13）：`captureScreenshot` 置 `screenshotMode` 后只等 2 个 rAF 就 `toDataURL`——React 18 并发调度不保证两帧内提交（主线程忙时截到带网格/选中框的画面）；连续两次截图时先发请求的 rAF 链会把 mode 复位，后发请求截到已恢复的脏画面。修复（SceneViewer）：`flushSync` 同步提交状态（rAF 留给 WebGL 帧循环绘制）+ **请求序号**（`screenshotSeqRef`，只有最新请求有权复位 mode）。
+
 ## 6. 快速文件地图
 
 | 需求 | 改哪里 |
@@ -309,7 +333,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | v3 模型类型 | `types/model.ts` |
 | 渲染（含 2026-08-12 浅色主题换肤：背景/网格/选中高亮/中性色） | `components/viewport/*`（核心 `ModelNodeView.tsx`：Shape 足迹地板 + 沿边墙段 + window 窗洞；`Viewport3D.tsx` 背景与网格色） |
 | 属性面板 UI（**头部可拖动【2026-08-12】**） | `components/viewport/PropertyPanel.tsx`（房间尺寸/坐标经 `nodeDims`/`nodePosition` 派生） |
-| 编辑提交/撤销重做 | `store/useModelStore.ts`（persist migrate）、`lib/modelTree.ts`（normalizeContainment 约束进墙 + 推出嵌套占地**与门口通道**、updateNodeFootprint/removeNode、translateRoomContents 移动带动家具） |
+| 编辑提交/撤销重做（**commitEdit 统一拖拽提交：内容 diff 为空不压历史【2026-08-14 坑 109】**） | `store/useModelStore.ts`（persist migrate）、`lib/modelTree.ts`（normalizeContainment 约束进墙 + 推出嵌套占地**与门口通道**、updateNodeFootprint/removeNode、translateRoomContents 移动带动家具） |
 | 状态 | `store/*` |
 | 家具部件模型（分类/拼装/包围盒） | `lib/furniturePresets.ts` + `ModelNodeView.tsx`（`FurnitureMesh`） |
 | 项目库 UI/保存/守卫 | `ProjectLibraryDialog.tsx` + `HomePage.tsx` + `db/database.ts` + `store/useProjectStore.ts` |
@@ -327,7 +351,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | 生成竞态防护（场景引用快照 + 冲突确认，坑 70）【2026-08-13】 | `HomePage.tsx`（`send`：`generationBaseRef` + `window.confirm` + 无 key 不清草稿） |
 | 平面图工具栏（桌面工具行 + 移动端弹出面板）【2026-08-13 从 HomePage 拆出】 | `components/ui/PlanToolbar.tsx`（工具清单 `TOOLS` 单一定义，移动/桌面两分支共用；选择工具即关闭弹出面板） |
 | 调试日志面板 / 键盘快捷键 / 紧凑视口判定【2026-08-13 从 HomePage 拆出】 | `components/ui/DebugPanel.tsx`（含 `debugLog.formatDebugText` 复制/下载）+ `hooks/useKeyboardShortcuts.ts`（方向键/R/撤销重做）+ `hooks/useMobileCompact.ts` + `lib/viewport.ts`（与 OrientationGuard 共享阈值） |
-| HTTP 请求（fetch 统一 + 连通性检测降级）【2026-08-13 移除 axios】 | `lib/api.ts`（`streamChatCompletion`/`testConnection`/`describeHttpError`；`testConnection` 400 时 `max_tokens` → `max_completion_tokens` 重试一次） |
+| HTTP 请求（fetch 统一 + 连通性检测降级 + **流中途中断不重试 StreamInterruptedError【2026-08-14 坑 105】**）【2026-08-13 移除 axios】 | `lib/api.ts`（`streamChatCompletion`/`testConnection`/`describeHttpError`；`testConnection` 400 时 `max_tokens` → `max_completion_tokens` 重试一次） |
 | 样式（按域拆分，@import 顺序 = 层叠顺序）【2026-08-13】 | `styles/*.css`（variables/base/home/toolbar/chat/property/compass/debug/dialog/settings/project/share/plan/mobile/error-boundary；`global.css` 仅 @import 链） |
 | 平面几何共享纯函数（重叠判定/房间平移/足迹相等/嵌套落点符号/名称回退查找）【2026-08-13 审查批次】 | `lib/geometry.ts`（`rectsOverlap`/`halfRectOverlaps`/`translateRoom`/`sameFootprint`/`NEST_CORNER`/`NEST_CORNER_ORDER`/`findRoomInList`）【新增】 |
 | 跨模块几何/布局常量（单一来源）【2026-08-13 审查批次】 | `lib/constants.ts`（`EPSILON`/`WALL_THICKNESS`/`ADJACENCY_GAP`/`DOOR_CLEARANCE`/`DOOR_WIDTH`/`DEFAULT_HEIGHT`/`ROOM_SPACING`/`DEFAULT_CORRIDOR_WIDTH`；roomGeometry 同名常量改自此再导出）【新增】 |
@@ -335,7 +359,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | 对话生成链路 / 项目库脏标记【2026-08-13 审查批次从 HomePage 拆出】 | `hooks/useGeneration.ts`（send/撤销生成/生成计时/竞态防护）+ `hooks/useDirtyTracking.ts`（savedJson 快照比对订阅）+ `store/useProjectStore.ts`（`savedJson`/`commitSavedScene`/`syncDirtyWithSaved`） |
 | v3 数据入口结构校验【2026-08-13 审查批次，坑 74】 | `schemas/model.schema.ts`（`sceneModelV3Schema`）+ `lib/migration.ts`（v3 分支校验通过才放行） |
 | 应用版本号（状态栏展示）【2026-08-13】 | `vite.config.ts`（define `__APP_VERSION__` ← package.json）+ `src/vite-env.d.ts` 声明 + `HomePage.tsx` 状态栏 |
-| 墙体方案共享缓存（坑 72）【2026-08-13】 | `lib/roomGeometry.ts`（`computeAllWallPlansCached`，WeakMap 按场景引用）+ `Viewport3D`/`PlanEnhancements`/`lib/planEdit.ts`（`collectWallHitEdges`） |
+| 墙体方案共享缓存（坑 72/坑 106：内容签名含**房间名**，重命名房间即失效）【2026-08-13】 | `lib/roomGeometry.ts`（`computeAllWallPlansCached`，WeakMap 按场景引用 + 单条目内容签名）+ `Viewport3D`/`PlanEnhancements`/`lib/planEdit.ts`（`collectWallHitEdges`） |
 | 平面图取景依赖包围盒数值（坑 73）【2026-08-13】 | `PlanRig.tsx`（取景 spec 按包围盒数值 memo，effect 依赖 spec 引用） |
 | 顶层错误边界【2026-08-13】 | `components/ui/ErrorBoundary.tsx` + `main.tsx`（包裹路由）+ `styles/error-boundary.css`（兜底页）+ i18n `error.boundary*` |
 | CI 质量门（lint/format:check/typecheck/test）【2026-08-13】 | `.github/workflows/ci.yml`（PR + main 推送）+ `package.json`（`typecheck` 脚本；format:check 于 2026-08-13 全仓格式收敛后正式入门） |

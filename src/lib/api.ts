@@ -106,10 +106,22 @@ class StreamAbortedError extends Error {
   }
 }
 
-/** 判断是否值得重试：非用户中止 + （连接建立前失败 或 429/5xx） */
+/**
+ * 流读取中途中断（响应头已收到、body 读取失败）：**不可重试**——
+ * 服务端可能已生成大部分内容（token 已计费），重试等于把同一请求再计一次费，
+ * 且用户会先看到一段流式内容、随后被整段替换。与"连接建立前失败"必须区分开。
+ */
+class StreamInterruptedError extends Error {
+  constructor(message: string) {
+    super(message)
+  }
+}
+
+/** 判断是否值得重试：仅「连接建立前失败」与 429/5xx；流已开始后的中断一律不重试 */
 function isRetryableStreamError(error: unknown, signal?: AbortSignal): boolean {
   if (signal?.aborted) return false
   if (error instanceof StreamAbortedError) return false
+  if (error instanceof StreamInterruptedError) return false
   if (error instanceof StreamHttpError) return error.status === 429 || error.status >= 500
   return true
 }
@@ -231,7 +243,10 @@ async function streamChatAttempt(
     try {
       chunk = await reader.read()
     } catch (error) {
-      throw new Error(t('error.streamInterrupted', { detail: describeNetworkError(error) }))
+      // 流中途中断：内容可能已计费，绝不自动重试（isRetryableStreamError 拒绝 StreamInterruptedError）
+      throw new StreamInterruptedError(
+        t('error.streamInterrupted', { detail: describeNetworkError(error) }),
+      )
     }
     if (chunk.done) break
     buffer += decoder.decode(chunk.value, { stream: true })

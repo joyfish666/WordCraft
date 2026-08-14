@@ -30,7 +30,7 @@ export class ChatGenerationError extends Error {
  * 从"输出整屋 JSON 快照"改为"输出增量操作"——局部修改不重写整屋；
  * 没有固定模板，macro 仅在用户不关心布局时使用。
  * 按界面语言选择中/英文提示词：英文 UI 下 LLM 产出英文房间/家具名，
- * 与房型/家具分类词表（roomGeometry/furniturePresets 双语）配套。
+ * 与房型/家具分类词表（roomGeometry/furniturePresets/furniturePlacement 三处均中英双语）配套。
  */
 export function buildSystemPrompt(lang: Language = 'zh'): string {
   if (lang === 'en') return ENGLISH_SYSTEM_PROMPT

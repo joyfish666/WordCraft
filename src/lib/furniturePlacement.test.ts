@@ -88,6 +88,19 @@ describe('isWallAnchored', () => {
     expect(isWallAnchored('餐桌')).toBe(false)
     expect(isWallAnchored('圆桌')).toBe(false)
   })
+
+  it('英文名同样区分独立/靠墙（英文 UI 下配套补全产出英文名）', () => {
+    expect(isWallAnchored('Bed')).toBe(true)
+    expect(isWallAnchored('Wardrobe')).toBe(true)
+    expect(isWallAnchored('Sofa')).toBe(true)
+    expect(isWallAnchored('Coffee Table')).toBe(false)
+    expect(isWallAnchored('Dining Table')).toBe(false)
+    expect(isWallAnchored('Dining Chair')).toBe(false)
+    expect(isWallAnchored('Chair')).toBe(false)
+    expect(isWallAnchored('Round Table')).toBe(false)
+    expect(isWallAnchored('Rug')).toBe(false)
+    expect(isWallAnchored('Kitchen Island')).toBe(false)
+  })
 })
 
 describe('applyFurnitureConventions', () => {

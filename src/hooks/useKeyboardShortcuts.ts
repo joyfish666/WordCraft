@@ -7,11 +7,15 @@ const PAN_STEP = 15
 
 /**
  * 全局键盘快捷键：方向键/WASD 平移视角；R 复位视角；Ctrl+Z 撤销、Ctrl+Shift+Z / Ctrl+Y 重做。
- * 输入框/文本框聚焦时不拦截，让位给原生文本编辑（含原生撤销）。
+ * 输入框/文本框聚焦时不拦截，让位给原生文本编辑（含原生撤销）；
+ * 模态对话框（ConfirmDialog/ShareDialog/项目库/帮助，均带 role="dialog"）打开时全部让位——
+ * 否则对话框聚焦陷阱外的 Ctrl+Z/R 等仍会作用于背后的场景（撤销模型/复位视角），
+ * 破坏性操作与对话框按钮语义脱节，对键盘用户尤其危险。
  */
 export function useKeyboardShortcuts(viewportRef: RefObject<SceneViewerHandle | null>): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (document.querySelector('[role="dialog"]')) return
       const active = document.activeElement
       if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return
 

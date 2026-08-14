@@ -220,6 +220,10 @@ export function HomePage() {
   const restoreFromShare = async (model: SceneModel) => {
     if (!(await confirmDiscardUnsaved(true))) return
     setScene(model)
+    // 清空旧场景的分享口令/截图：对话框继续展示「已还原」提示，但不得再显示
+    // 已不属于当前场景的口令与水印截图（否则用户误以为展示的码属于新场景）
+    setShareCode(null)
+    setShareShot(null)
     useProjectStore.getState().clearProject()
     useChatStore.getState().clearGenerationHistory()
   }

@@ -1,5 +1,6 @@
 import { OrbitControls, OrthographicCamera, Sky } from '@react-three/drei'
 import { Canvas, useThree } from '@react-three/fiber'
+import { flushSync } from 'react-dom'
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react'
 import type { MutableRefObject } from 'react'
 import { ACESFilmicToneMapping, PMREMGenerator, PerspectiveCamera, Vector3 } from 'three'
@@ -81,6 +82,7 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
   const compassRef = useRef<HTMLDivElement>(null)
   const glRef = useRef<THREE.WebGLRenderer | null>(null)
   const planGroupRef = useRef<THREE.Group>(null)
+  const screenshotSeqRef = useRef(0)
   const shadows = useSettingsStore((s) => s.shadows)
   const sceneModel = useModelStore((s) => s.scene)
 
@@ -102,8 +104,13 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
           resolve(null)
           return
         }
-        // 场景净化：隐藏网格/选中框/手柄/标注，等两帧让 React 应用隐藏后再读取绘制缓冲
-        useModelStore.getState().setScreenshotMode(true)
+        const seq = ++screenshotSeqRef.current
+        // 场景净化：隐藏网格/选中框/手柄/标注。用 flushSync 保证状态在读取绘制缓冲前
+        // 已提交到 DOM——React 18 并发调度不保证「等两帧」内提交（主线程忙时可能延迟），
+        // 只等 rAF 会截到带辅助元素的画面；两帧 rAF 留给 WebGL 帧循环绘制纯净画面。
+        flushSync(() => {
+          useModelStore.getState().setScreenshotMode(true)
+        })
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             let url: string | null = null
@@ -112,7 +119,13 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
             } catch {
               url = null
             }
-            useModelStore.getState().setScreenshotMode(false)
+            // 竞态防护：快速连续触发两次截图时，先发请求的 rAF 链不得把后发请求的隐藏态
+            // 复位（否则后发截图会截到已恢复的网格/选中框）；只有最新请求有权复位
+            if (screenshotSeqRef.current === seq) {
+              flushSync(() => {
+                useModelStore.getState().setScreenshotMode(false)
+              })
+            }
             resolve(url)
           })
         })

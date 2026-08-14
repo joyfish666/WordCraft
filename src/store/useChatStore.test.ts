@@ -131,4 +131,24 @@ describe('toChatHistory（P3 上下文精简：整段 ops JSON 不再回传）',
       { role: 'user', content: 'hi' },
     ])
   })
+
+  it('超长会话只送最近 30 条（旧轮次由场景摘要/编辑日志替代）', () => {
+    for (let i = 0; i < 40; i++) {
+      useChatStore.getState().addMessage({ role: 'user', content: `消息${i}` })
+    }
+    const history = toChatHistory(useChatStore.getState().messages)
+    expect(history).toHaveLength(30)
+    expect(history[0]).toEqual({ role: 'user', content: '消息10' })
+    expect(history[29]).toEqual({ role: 'user', content: '消息39' })
+  })
+
+  it('messages 有上限：超 100 条丢弃最旧消息（防 5MB 配额逼近）', () => {
+    for (let i = 0; i < 120; i++) {
+      useChatStore.getState().addMessage({ role: 'user', content: `消息${i}` })
+    }
+    const messages = useChatStore.getState().messages
+    expect(messages).toHaveLength(100)
+    expect(messages[0]!.content).toBe('消息20')
+    expect(messages[99]!.content).toBe('消息119')
+  })
 })

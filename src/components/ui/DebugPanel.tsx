@@ -11,8 +11,12 @@ function downloadDebug(entries: DebugEntry[]): void {
   const a = document.createElement('a')
   a.href = url
   a.download = `wordcraft-debug-${new Date().toISOString().replace(/[:.]/g, '-')}.log`
+  // 挂进 DOM 再点击（部分浏览器要求），并延迟 revoke——立即 revoke 在 Safari 等浏览器上
+  // 会在下载真正开始前失效，导致下载失败
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 /** 将调试日志复制到剪贴板 */
