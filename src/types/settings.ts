@@ -37,6 +37,11 @@ export interface AppSettings {
   shadows: boolean
   /** 调试模式：开启后记录生成过程日志（设置页开关） */
   debugMode: boolean
-  /** 界面语言：zh / en（侧边栏按钮快速切换） */
+  /** 界面语言：zh / en（顶栏按钮快速切换） */
   language: Language
+  /**
+   * 语言是否跟随系统（未手动切换时 true）：系统语言变化（languagechange）时
+   * 自动更新 language；用户手动切换后置 false 并持久化，尊重用户选择。
+   */
+  languageFollowsSystem: boolean
 }

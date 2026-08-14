@@ -2176,6 +2176,22 @@ describe('executeOps - 端点行为', () => {
     expect(findRoom(base, 'bath')?.id).toBe('bath')
     expect(findRoom(base, 'ghost')).toBeNull()
   })
+
+  it('executeOps 对 null / 非对象条目逐条容错（不在 catch 内二次解引用崩溃）', () => {
+    const base = run([
+      { op: 'macro', name: 'custom', params: { rooms: [{ id: 'a', name: '房A' }] } },
+    ])
+    // 外部输入（分享口令/迁移脏数据）可能混入 null 与未知 op：整批不应崩溃，坏条目被跳过
+    const result = executeOps(base, [
+      null as unknown as Op,
+      { op: 'unknownOp', id: 'a' } as unknown as Op,
+      { op: 'setHouse', name: '新名' },
+    ] as Op[])
+    expect(result.applied).toBe(1)
+    expect(result.skipped).toHaveLength(2)
+    expect(result.scene.root.name).toBe('新名')
+    expect(findNodeById(result.scene.root, 'a')).not.toBeNull()
+  })
 })
 
 describe('executeOps - 按名称引用（坑 71：findRoom 名称回退与 id-only 变更函数统一）', () => {

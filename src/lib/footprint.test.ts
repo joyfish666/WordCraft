@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  collectLevelRooms,
   footprintBounds,
   footprintCenter,
   footprintDims,
@@ -107,11 +106,11 @@ describe('房间/整屋访问器', () => {
     expect(houseDims(house)).toEqual({ length: 4, width: 3.05, height: 2.8 })
   })
 
-  it('levelHeight / collectLevelRooms', () => {
+  it('levelHeight 取房间最大层高', () => {
     const r1 = room('a', 0, 0, 2, 2, 3.2)
     const r2 = { ...room('b', 0, 0, 2, 2, 2.8), nestedRooms: [room('c', 0, 0, 1, 1, 2.5)] }
     const level: LevelNode = { id: 'l1', height: 2.8, rooms: [r1, r2] }
     expect(levelHeight(level.rooms)).toBe(3.2)
-    expect(collectLevelRooms(level).map((r) => r.id)).toEqual(['a', 'b', 'c'])
+    expect(levelHeight(level.rooms)).toBe(3.2)
   })
 })

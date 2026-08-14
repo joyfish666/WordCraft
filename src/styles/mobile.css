@@ -20,7 +20,7 @@
   width: 52px;
   height: 96px;
   border: 3px solid var(--text);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   animation: orientation-swing 1.6s ease-in-out infinite;
 }
 
@@ -130,63 +130,5 @@
   height: 6px;
 }
 
-/* ---------- 桌面窄窗口降级（纯装饰，不影响移动端判定） ---------- */
-
-@media (max-width: 768px) {
-  .toolbar__brand-sub {
-    display: none;
-  }
-
-  .toolbar__btn span {
-    font-size: 0;
-  }
-
-  .toolbar__btn {
-    padding: 5px;
-    gap: 0;
-  }
-
-  .toolbar__btn svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .toolbar__sep {
-    margin: 0 2px;
-  }
-
-  .toolbar {
-    padding: 0 8px;
-    gap: 2px;
-  }
-
-  .toolbar__btn {
-    height: 32px;
-  }
-
-  .prop-panel {
-    width: 220px;
-    padding: 12px;
-    right: 8px;
-  }
-
-  .view-toggle {
-    top: 8px;
-    left: 8px;
-  }
-
-  .view-toggle__btn {
-    padding: 4px 10px;
-    font-size: 11px;
-  }
-
-  .statusbar {
-    padding: 0 10px;
-    gap: 6px;
-    font-size: 11px;
-  }
-
-  .breadcrumb__link {
-    font-size: 11px;
-  }
-}
+/* 说明：不再使用 @media 门控（曾与 wc-compact JS 门控并存，760~768px 区间规则冲突）。
+   窄窗口/移动端样式统一由 OrientationGuard 的 .wc-compact 类驱动，单一门控源。 */

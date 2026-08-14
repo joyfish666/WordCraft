@@ -8,9 +8,11 @@ import {
   computeWallPlan,
   doorDirection,
   edgeOf,
+  bathroomOwner,
   footprintEdges,
   isCorridorName,
   isOpenRoom,
+  isPrivateRoom,
   segmentWorldRange,
   wallGroupPosition,
   wallPlanWithDoor,
@@ -67,6 +69,28 @@ describe('isCorridorName / isOpenRoom', () => {
     expect(isCorridorName('走廊卫生间')).toBe(false)
     expect(isOpenRoom('走廊卫生间')).toBe(false)
     expect(isCorridorName('主卧卫生间')).toBe(false)
+  })
+
+  it('英文房间名正确分类（英文 UI 下 LLM 按英文提示词产出英文名）', () => {
+    expect(isCorridorName('Hallway')).toBe(true)
+    expect(isCorridorName('corridor')).toBe(true)
+    expect(isCorridorName('Master Bedroom')).toBe(false)
+    expect(isOpenRoom('Living Room')).toBe(true)
+    expect(isOpenRoom('Dining Room')).toBe(true)
+    expect(isOpenRoom('Kitchen')).toBe(true)
+    expect(isOpenRoom('Master Bedroom')).toBe(false)
+    expect(isOpenRoom('Bathroom Hallway')).toBe(false)
+    expect(isPrivateRoom('Bedroom')).toBe(true)
+    expect(isPrivateRoom('Study')).toBe(true)
+    expect(isPrivateRoom('Guest Room')).toBe(true)
+    expect(isPrivateRoom('Living Room')).toBe(false)
+  })
+
+  it('英文卫生间归属：Master Bathroom → Master（朝向所属房间开门）', () => {
+    expect(bathroomOwner('Master Bathroom')).toBe('Master')
+    expect(bathroomOwner('Guest Toilet')).toBe('Guest')
+    expect(bathroomOwner('Bathroom')).toBeNull()
+    expect(bathroomOwner('主卧卫生间')).toBe('主卧')
   })
 })
 
@@ -635,6 +659,29 @@ describe('墙段坐标与渲染映射（坑 37/坑 41 回归）', () => {
       const changed: SceneModel = { ...s, root: { ...s.root, entranceRoomId: 'master' } }
       const cached2 = computeAllWallPlansCached(changed, 'south', 'master')
       expect(cached2).not.toBe(cached)
+    })
+
+    it('内容签名缓存：新引用但内容相同（拖拽预览）时复用共享方案', () => {
+      const s = scene()
+      const p1 = computeAllWallPlansCached(s, 'south', 'living')
+      // 模拟拖拽预览：同内容的新场景引用（仅根引用变化，足迹/开洞/入口不变）
+      const s2: SceneModel = { ...s, root: { ...s.root, name: '同内容' } }
+      const p2 = computeAllWallPlansCached(s2, 'south', 'living')
+      expect(p2).toBe(p1)
+      // 显式开洞变化 → 签名变化 → 重算
+      const living = room('living', '客厅', 0, 0, 6, 4)
+      living.windows = [{ edgeIndex: 1, from: 1, to: 2, width: 1 }]
+      const s3: SceneModel = {
+        ...s,
+        root: {
+          ...s.root,
+          levels: [
+            { ...s.root.levels[0]!, rooms: [living, room('master', '主卧', 3.25, 0, 3, 4)] },
+          ],
+        },
+      }
+      const p3 = computeAllWallPlansCached(s3, 'south', 'living')
+      expect(p3).not.toBe(p1)
     })
   })
 })

@@ -6,7 +6,6 @@ import {
   furnitureMaterial,
   getTexture,
   getWorldUvTexture,
-  interiorWallMaterial,
   planeGeometryWithUvs,
   roomFloorKind,
   roomFloorMaterial,
@@ -84,7 +83,6 @@ describe('materials（程序化材质层）', () => {
 
   describe('墙体材质', () => {
     it('内墙纯色抹灰、外墙抹灰纹理', () => {
-      expect(interiorWallMaterial().map).toBeUndefined()
       expect(exteriorWallMaterial().map).toBe('plasterWall')
     })
 

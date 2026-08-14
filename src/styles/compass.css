@@ -4,7 +4,7 @@
   display: block;
   padding: 2px 6px;
   border-radius: 4px;
-  background: rgba(237, 232, 221, 0.9);
+  background: var(--bg-panel-90);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
   font-size: 12px;
@@ -28,7 +28,7 @@
   width: 108px;
   height: 108px;
   border-radius: 50%;
-  background: rgba(237, 232, 221, 0.9);
+  background: var(--bg-panel-90);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
   pointer-events: none;

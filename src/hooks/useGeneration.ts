@@ -6,7 +6,6 @@ import { toChatHistory, useChatStore } from '../store/useChatStore'
 import { useModelStore } from '../store/useModelStore'
 import { useProjectStore } from '../store/useProjectStore'
 import { getActiveApiConfig, useSettingsStore } from '../store/useSettingsStore'
-import type { SceneModel } from '../types/model'
 
 interface UseGenerationOptions {
   draft: string
@@ -29,9 +28,13 @@ export function useGeneration({ draft, setDraft, setChatCollapsed }: UseGenerati
   const addMessage = useChatStore((s) => s.addMessage)
   const setIsGenerating = useChatStore((s) => s.setIsGenerating)
   const setScene = useModelStore((s) => s.setScene)
-  // 生成基线场景引用：发送时快照，返回时若 scene 已变（生成期间手动编辑/打开项目/加载示例）
-  // 说明生成结果是基于旧版本的——提示用户确认覆盖，避免静默丢弃手动编辑（P0-1）
-  const generationBaseRef = useRef<SceneModel | null>(null)
+  // 进行中请求的中止控制器：组件卸载/重新生成时中止，防止完成后静默替换场景
+  const abortRef = useRef<AbortController | null>(null)
+
+  // 卸载时中止进行中的生成请求（路由切换/组件卸载后不再 setScene 污染当前场景）
+  useEffect(() => {
+    return () => abortRef.current?.abort()
+  }, [])
 
   // 生成计时：避免长时间等待时误以为界面卡死
   useEffect(() => {
@@ -45,7 +48,8 @@ export function useGeneration({ draft, setDraft, setChatCollapsed }: UseGenerati
 
   const send = async () => {
     const input = draft.trim()
-    if (!input || isGenerating) return
+    // 用 getState() 而非渲染闭包守卫：闭包里的 isGenerating 可能过期，双发窗口内两个请求都会执行
+    if (!input || useChatStore.getState().isGenerating) return
     // 发送时展开抽屉，让用户看到请求与回复（含生成中状态与错误消息）
     setChatCollapsed(false)
     const config = getActiveApiConfig(useSettingsStore.getState())
@@ -59,9 +63,10 @@ export function useGeneration({ draft, setDraft, setChatCollapsed }: UseGenerati
     const history = toChatHistory(useChatStore.getState().messages)
     addMessage({ role: 'user', content: input })
     setIsGenerating(true)
+    const controller = new AbortController()
+    abortRef.current = controller
     // 快照生成基线：生成期间场景被编辑/替换时据此检测冲突
     const baseScene = useModelStore.getState().scene
-    generationBaseRef.current = baseScene
     try {
       const { reply, model } = await generateModelFromChat({
         apiKey: config.key,
@@ -73,7 +78,12 @@ export function useGeneration({ draft, setDraft, setChatCollapsed }: UseGenerati
         currentScene: baseScene,
         // P3 双向同步：手动编辑日志随上下文喂给 LLM，让 AI 基于用户改过的版本继续
         editOps: useChatStore.getState().editOps,
+        signal: controller.signal,
       })
+      if (controller.signal.aborted) {
+        addMessage({ role: 'error', content: t('home.genCancelled') })
+        return
+      }
       // 生成期间场景已变化（手动编辑/打开项目/加载示例/撤销等）→ 提示冲突，避免静默覆盖
       const latestScene = useModelStore.getState().scene
       if (latestScene !== baseScene) {
@@ -94,11 +104,16 @@ export function useGeneration({ draft, setDraft, setChatCollapsed }: UseGenerati
       // 生成的是全新的未保存场景：解绑项目（含已保存快照），避免误标脏
       useProjectStore.getState().clearProject()
     } catch (error) {
-      addMessage({
-        role: 'error',
-        content: error instanceof ChatGenerationError ? error.message : t('home.genFailed'),
-      })
+      if (controller.signal.aborted) {
+        addMessage({ role: 'error', content: t('home.genCancelled') })
+      } else {
+        addMessage({
+          role: 'error',
+          content: error instanceof ChatGenerationError ? error.message : t('home.genFailed'),
+        })
+      }
     } finally {
+      abortRef.current = null
       setIsGenerating(false)
     }
   }

@@ -14,7 +14,7 @@ import { useDirtyTracking } from '../hooks/useDirtyTracking'
 import { useGeneration } from '../hooks/useGeneration'
 import { useMobileCompact } from '../hooks/useMobileCompact'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
-import { getProject, updateProject } from '../db/database'
+import { safeProjectDb } from '../db/database'
 import { useT } from '../i18n'
 import { encodeShareCode } from '../lib/compression'
 import { useDebugEntries } from '../lib/debugLog'
@@ -136,8 +136,18 @@ export function HomePage() {
     if (!s) return
     const { currentId } = useProjectStore.getState()
     if (currentId !== null) {
-      await updateProject(currentId, { data: JSON.stringify(s) })
-      useProjectStore.getState().commitSavedScene(JSON.stringify(useModelStore.getState().scene))
+      // 落盘数据与脏标记快照同源：先序列化一次，避免 await 期间场景变化导致
+      // 落盘旧数据、快照基线却是新场景（刷新后丢编辑且脏标记误显示为干净）
+      const json = JSON.stringify(s)
+      const ok = await safeProjectDb.update(currentId, { data: json })
+      if (!ok) {
+        await alertMessage({
+          title: t('project.dbUnavailableTitle'),
+          message: t('project.dbUnavailable'),
+        })
+        return
+      }
+      useProjectStore.getState().commitSavedScene(json)
     } else {
       // 无当前项目：打开项目库对话框，聚焦「新建项目」名称输入
       setProjectDialogOpen(true)
@@ -146,7 +156,7 @@ export function HomePage() {
 
   const handleOpenProject = async (id: number, name: string) => {
     if (!(await confirmDiscardUnsaved(true))) return
-    const rec = await getProject(id)
+    const rec = await safeProjectDb.get(id)
     if (!rec) return
     let parsed: unknown
     try {
@@ -267,6 +277,7 @@ export function HomePage() {
               type="button"
               className={`view-toggle__btn ${!planMode ? 'view-toggle__btn--active' : ''}`}
               onClick={() => setViewMode('3d')}
+              aria-pressed={!planMode}
             >
               3D
             </button>
@@ -275,6 +286,7 @@ export function HomePage() {
               className={`view-toggle__btn ${planMode ? 'view-toggle__btn--active' : ''}`}
               onClick={() => setViewMode('plan')}
               title={t('home.viewPlanTitle')}
+              aria-pressed={planMode}
             >
               {t('home.viewPlan')}
             </button>

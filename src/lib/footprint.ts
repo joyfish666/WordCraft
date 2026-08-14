@@ -2,7 +2,6 @@ import type {
   Dimensions,
   FurnitureNode,
   HouseNode,
-  LevelNode,
   Point2D,
   Position,
   RoomNode,
@@ -143,15 +142,4 @@ export function nodeDims(node: HouseNode | RoomNode | FurnitureNode): Dimensions
 /** 楼层高度：取该层房间最大层高 */
 export function levelHeight(rooms: RoomNode[]): number {
   return Math.max(...rooms.map((r) => r.height), DEFAULT_HEIGHT)
-}
-
-/** 便捷：某层所有房间（含嵌套） */
-export function collectLevelRooms(level: LevelNode): RoomNode[] {
-  const out: RoomNode[] = []
-  const visit = (r: RoomNode): void => {
-    out.push(r)
-    for (const n of r.nestedRooms) visit(n)
-  }
-  for (const r of level.rooms) visit(r)
-  return out
 }

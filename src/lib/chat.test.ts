@@ -10,6 +10,7 @@ import {
   tryParseModelJson,
 } from './chat'
 import { emptyScene } from './executor'
+import { useSettingsStore } from '../store/useSettingsStore'
 import type { SceneModel } from '../types/model'
 
 const mockFetch = vi.fn()
@@ -127,6 +128,8 @@ function validV2SnapshotJson(): string {
 beforeEach(() => {
   vi.stubGlobal('fetch', mockFetch)
   mockFetch.mockReset()
+  // 语言显式设为中文：默认跟随系统（jsdom 为 en-US），测试断言基于中文提示词/摘要产出
+  useSettingsStore.setState({ language: 'zh', languageFollowsSystem: false })
 })
 
 afterEach(() => {

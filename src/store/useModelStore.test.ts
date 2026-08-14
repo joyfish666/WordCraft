@@ -399,7 +399,7 @@ describe('useModelStore 平面图编辑（P4）', () => {
     expect(room.windows).toHaveLength(1)
     expect(room.windows[0]!.edgeIndex).toBe(2)
     expect(useModelStore.getState().past).toHaveLength(1)
-    expect(useModelStore.getState().past[0]).toBe(before)
+    expect(useModelStore.getState().past[0]!.scene).toBe(before)
     expect(useChatStore.getState().editOps).toHaveLength(1)
     expect(useChatStore.getState().editOps[0]).toMatchObject({
       op: 'setOpenings',
@@ -455,8 +455,12 @@ describe('useModelStore 平面图编辑（P4）', () => {
     const rooms = useModelStore.getState().scene!.root.levels[0]!.rooms
     expect(rooms).toHaveLength(beforeCount + 1)
     expect(rooms.some((r) => r.id === 'room-master')).toBe(true)
+    // 撤销后编辑日志与场景同步裁剪：不再向 LLM 注入「已不存在的手动修改」（undo↔editOps 一致性）
     useModelStore.getState().undo()
     expect(useModelStore.getState().scene).toBe(before)
+    expect(useChatStore.getState().editOps).toHaveLength(0)
+    // redo 后编辑日志恢复
+    useModelStore.getState().redo()
     expect(useChatStore.getState().editOps).toHaveLength(1)
     expect(useChatStore.getState().editOps[0]).toMatchObject({ op: 'splitRoom' })
   })

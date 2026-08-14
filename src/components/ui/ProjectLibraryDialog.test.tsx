@@ -6,7 +6,7 @@ import { useProjectStore } from '../../store/useProjectStore'
 import { ConfirmProvider } from './ConfirmDialog'
 import { ProjectLibraryDialog } from './ProjectLibraryDialog'
 
-// mock 数据层：对话框只调用这些函数，行为由测试控制
+// mock 数据层：对话框只通过 safeProjectDb 门面访问数据库，行为由测试控制
 const mocks = vi.hoisted(() => ({
   listProjects: vi.fn(),
   saveProject: vi.fn(),
@@ -16,11 +16,13 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../../db/database', () => ({
-  listProjects: mocks.listProjects,
-  saveProject: mocks.saveProject,
-  updateProject: mocks.updateProject,
-  deleteProject: mocks.deleteProject,
-  getProject: mocks.getProject,
+  safeProjectDb: {
+    list: mocks.listProjects,
+    get: mocks.getProject,
+    save: mocks.saveProject,
+    update: mocks.updateProject,
+    remove: mocks.deleteProject,
+  },
 }))
 
 function renderDialog(overrides: Partial<{ open: boolean }> = {}) {

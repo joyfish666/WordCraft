@@ -1,11 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  deleteProject,
-  listProjects,
-  saveProject,
-  updateProject,
-  type ProjectRecord,
-} from '../../db/database'
+import { safeProjectDb, type ProjectRecord } from '../../db/database'
 import { useT } from '../../i18n'
 import { useModelStore } from '../../store/useModelStore'
 import { useProjectStore } from '../../store/useProjectStore'
@@ -43,7 +37,7 @@ export function ProjectLibraryDialog({
   const currentId = useProjectStore((s) => s.currentId)
   const setCurrentName = useProjectStore((s) => s.setCurrentName)
   const t = useT()
-  const { confirm } = useConfirm()
+  const { confirm, alertMessage } = useConfirm()
 
   const [projects, setProjects] = useState<ProjectRecord[]>([])
   const [name, setName] = useState('')
@@ -54,14 +48,14 @@ export function ProjectLibraryDialog({
   const aliveRef = useRef(true)
 
   const reload = async () => {
-    const list = await listProjects()
+    const list = await safeProjectDb.list()
     if (aliveRef.current) setProjects(list)
   }
 
   useEffect(() => {
     aliveRef.current = true
     if (open) {
-      void listProjects().then((list) => {
+      void safeProjectDb.list().then((list) => {
         if (aliveRef.current) setProjects(list)
       })
     }
@@ -75,8 +69,15 @@ export function ProjectLibraryDialog({
   const handleCreate = async () => {
     const trimmed = name.trim()
     if (!trimmed || !scene) return
-    const id = await saveProject({ name: trimmed, data: JSON.stringify(scene) })
+    const id = await safeProjectDb.save({ name: trimmed, data: JSON.stringify(scene) })
     if (!aliveRef.current) return
+    if (id === undefined) {
+      void alertMessage({
+        title: t('project.dbUnavailableTitle'),
+        message: t('project.dbUnavailable'),
+      })
+      return
+    }
     onProjectCreated(id, trimmed)
     setName('')
     await reload()
@@ -90,8 +91,15 @@ export function ProjectLibraryDialog({
       danger: true,
     })
     if (!ok) return
-    await deleteProject(rec.id)
+    const removed = await safeProjectDb.remove(rec.id)
     if (!aliveRef.current) return
+    if (!removed) {
+      void alertMessage({
+        title: t('project.dbUnavailableTitle'),
+        message: t('project.dbUnavailable'),
+      })
+      return
+    }
     if (rec.id === currentId) useProjectStore.getState().clearProject()
     await reload()
   }
@@ -99,8 +107,15 @@ export function ProjectLibraryDialog({
   const commitRename = async (rec: ProjectRecord) => {
     const trimmed = renameDraft.trim()
     if (rec.id && trimmed && trimmed !== rec.name) {
-      await updateProject(rec.id, { name: trimmed })
+      const updated = await safeProjectDb.update(rec.id, { name: trimmed })
       if (!aliveRef.current) return
+      if (!updated) {
+        void alertMessage({
+          title: t('project.dbUnavailableTitle'),
+          message: t('project.dbUnavailable'),
+        })
+        return
+      }
       if (rec.id === currentId) setCurrentName(trimmed)
       await reload()
     }

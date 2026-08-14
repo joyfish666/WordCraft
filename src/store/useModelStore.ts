@@ -5,7 +5,7 @@ import { editDiffToOps } from '../lib/editOps'
 import { executeOps } from '../lib/executor'
 import { nodePosition } from '../lib/footprint'
 import { migrateModel } from '../lib/migration'
-import { safeLocalStorage } from '../lib/safeStorage'
+import { createDedupeStorage, safeLocalStorage } from '../lib/safeStorage'
 import {
   findNodeById,
   normalizeContainment,
@@ -29,13 +29,14 @@ import { syncDirtyWithSaved } from './useProjectStore'
  * zustand v4 对 undefined 仍会写 `{"state":...}`，会清掉已持久化的场景。
  */
 const persistEnabled = { current: true }
-const previewAwareStorage: StateStorage = {
+// 预览抑制（跳过写入）+ 内容去重（纯 UI 状态变更的 partialize 结果相同，跳过序列化/写盘）
+const previewAwareStorage: StateStorage = createDedupeStorage({
   getItem: (name) => safeLocalStorage.getItem(name),
   setItem: (name, value) => {
     if (persistEnabled.current) safeLocalStorage.setItem(name, value)
   },
   removeItem: (name) => safeLocalStorage.removeItem(name),
-}
+})
 /** 预览期间调用：set 更新场景但不触发 localStorage 写入；支持嵌套调用（配对使用） */
 function withoutPersist(fn: () => void): void {
   persistEnabled.current = false
@@ -54,9 +55,23 @@ function withUpdatedPosition(scene: SceneModel, id: string, position: Position):
 /** 撤销/重做历史栈上限：防止无界内存占用 */
 const HISTORY_LIMIT = 50
 
+/** 撤销/重做历史条目：场景快照 + 该快照对应的手动编辑日志（含内容，redo 可完整恢复）。
+ * 撤销/重做时用条目内的日志整体替换 useChatStore.editOps（见 undo/redo），
+ * 保证「下次生成时注入 LLM 的手动编辑历史」与恢复后的场景一致——
+ * 否则撤销后日志仍描述「已不存在的手动修改」，上下文自相矛盾。 */
+export interface HistoryEntry {
+  scene: SceneModel
+  editOps: Op[]
+}
+
 /** 将旧场景压入历史（清空 future，新操作使 redo 失效）；无场景时不动 */
-function pushPast(state: Pick<ModelState, 'scene' | 'past'>): Pick<ModelState, 'past' | 'future'> {
-  const past = state.scene ? [...state.past, state.scene].slice(-HISTORY_LIMIT) : state.past
+function pushPast(
+  state: Pick<ModelState, 'scene' | 'past'>,
+  editOps: Op[],
+): Pick<ModelState, 'past' | 'future'> {
+  const past = state.scene
+    ? [...state.past, { scene: state.scene, editOps }].slice(-HISTORY_LIMIT)
+    : state.past
   return { past, future: [] }
 }
 
@@ -94,9 +109,9 @@ interface ModelState {
   /** 场景加载时的各节点初始位置，用于「复位」 */
   initialPositions: Record<string, Position>
   /** 撤销历史栈（较旧的场景快照，不含当前 scene），不持久化 */
-  past: SceneModel[]
+  past: HistoryEntry[]
   /** 重做历史栈，不持久化 */
-  future: SceneModel[]
+  future: HistoryEntry[]
 
   setScene: (scene: SceneModel) => void
   resetScene: () => void
@@ -200,9 +215,11 @@ export const useModelStore = create<ModelState>()(
             y: cur.y + dy,
             z: cur.z + dz,
           }
+          // 入栈前快照编辑日志（不含本次提交的新日志）：撤销时据此恢复（见 undo）
+          const editLog = useChatStore.getState().editOps.slice()
           const scene = withUpdatedPosition(state.scene, state.selectedId, next)
           recordEditOps(state.scene, scene, state.selectedId)
-          return { scene, ...pushPast(state) }
+          return { scene, ...pushPast(state, editLog) }
         }),
 
       resetSelectedPosition: () =>
@@ -210,9 +227,10 @@ export const useModelStore = create<ModelState>()(
           if (!state.scene || !state.selectedId) return state
           const original = state.initialPositions[state.selectedId]
           if (!original) return state
+          const editLog = useChatStore.getState().editOps.slice()
           const scene = withUpdatedPosition(state.scene, state.selectedId, original)
           recordEditOps(state.scene, scene, state.selectedId)
-          return { scene, ...pushPast(state) }
+          return { scene, ...pushPast(state, editLog) }
         }),
 
       updateSelected: (patch) =>
@@ -224,10 +242,11 @@ export const useModelStore = create<ModelState>()(
             patch,
           ) as SceneModel['root']
           if (nextRoot === state.scene.root) return state // 无实际变化（空补丁/未命中），不记历史
+          const editLog = useChatStore.getState().editOps.slice()
           // 提交后重新约束进墙内，并把变化后的场景作为新状态
           const scene = normalizeContainment({ ...state.scene, root: nextRoot })
           recordEditOps(state.scene, scene, state.selectedId)
-          return { scene, ...pushPast(state) }
+          return { scene, ...pushPast(state, editLog) }
         }),
 
       previewSelected: (patch) =>
@@ -265,9 +284,10 @@ export const useModelStore = create<ModelState>()(
           if (!state.scene || !baseScene || state.scene === baseScene) return state // 无场景 / 拖拽无变化
           const before: SceneModel = baseScene // 收窄非空（参数窄化不进入闭包）
           // 拖拽前的场景作为历史快照；当前场景约束进墙内作为新状态
+          const editLog = useChatStore.getState().editOps.slice()
           const scene = normalizeContainment(state.scene)
           if (state.selectedId) recordEditOps(before, scene, state.selectedId)
-          return { scene, ...pushPast({ scene: before, past: state.past }) }
+          return { scene, ...pushPast({ scene: before, past: state.past }, editLog) }
         }),
 
       applyPlanOps: (ops) =>
@@ -276,8 +296,9 @@ export const useModelStore = create<ModelState>()(
           const result = executeOps(state.scene, ops)
           if (result.applied === 0) return state
           if (JSON.stringify(result.scene) === JSON.stringify(state.scene)) return state // 无实际变化
+          const editLog = useChatStore.getState().editOps.slice()
           useChatStore.getState().pushEditOps(ops)
-          return { scene: result.scene, ...pushPast(state) }
+          return { scene: result.scene, ...pushPast(state, editLog) }
         }),
 
       commitPlanEdit: (baseScene, id) =>
@@ -285,30 +306,42 @@ export const useModelStore = create<ModelState>()(
           if (!state.scene || !baseScene || state.scene === baseScene) return state
           const before: SceneModel = baseScene
           // 拖拽前的场景作为历史快照；当前场景约束进墙内作为新状态（与 commitDrag 同行为）
+          const editLog = useChatStore.getState().editOps.slice()
           const scene = normalizeContainment(state.scene)
           recordEditOps(before, scene, id)
-          return { scene, ...pushPast({ scene: before, past: state.past }) }
+          return { scene, ...pushPast({ scene: before, past: state.past }, editLog) }
         }),
 
       undo: () =>
         set((state) => {
           if (state.past.length === 0) return state
-          const previous = state.past[state.past.length - 1]!
+          const entry = state.past[state.past.length - 1]!
           const future = state.scene
-            ? [...state.future, state.scene].slice(-HISTORY_LIMIT)
+            ? [
+                ...state.future,
+                { scene: state.scene, editOps: useChatStore.getState().editOps.slice() },
+              ].slice(-HISTORY_LIMIT)
             : state.future
           // 撤销可能回到「已保存」状态：离散操作做一次全量比对清除脏标记（坑 B7）
-          syncDirtyWithSaved(previous)
-          return { scene: previous, past: state.past.slice(0, -1), future }
+          syncDirtyWithSaved(entry.scene)
+          // 同步恢复编辑日志：撤销后注入 LLM 的编辑历史必须与恢复后的场景一致
+          useChatStore.getState().replaceEditOps(entry.editOps)
+          return { scene: entry.scene, past: state.past.slice(0, -1), future }
         }),
 
       redo: () =>
         set((state) => {
           if (state.future.length === 0) return state
-          const next = state.future[state.future.length - 1]!
-          const past = state.scene ? [...state.past, state.scene].slice(-HISTORY_LIMIT) : state.past
-          syncDirtyWithSaved(next)
-          return { scene: next, past, future: state.future.slice(0, -1) }
+          const entry = state.future[state.future.length - 1]!
+          const past = state.scene
+            ? [
+                ...state.past,
+                { scene: state.scene, editOps: useChatStore.getState().editOps.slice() },
+              ].slice(-HISTORY_LIMIT)
+            : state.past
+          syncDirtyWithSaved(entry.scene)
+          useChatStore.getState().replaceEditOps(entry.editOps)
+          return { scene: entry.scene, past, future: state.future.slice(0, -1) }
         }),
     }),
     {

@@ -147,37 +147,6 @@ export function computePlanCamera(
   }
 }
 
-/** 便捷：整屋包围盒（含墙厚外扩），供渲染层（房屋线框盒）使用 */
-export function houseBoundsFromRooms(rooms: RoomNode[]): Bounds2D {
-  const union = (() => {
-    if (rooms.length === 0) return null
-    const list = rooms.map((r) => footprintBounds(r.footprint))
-    return {
-      minX: Math.min(...list.map((b) => b.minX)),
-      maxX: Math.max(...list.map((b) => b.maxX)),
-      minZ: Math.min(...list.map((b) => b.minZ)),
-      maxZ: Math.max(...list.map((b) => b.maxZ)),
-    }
-  })()
-  if (!union) {
-    return { minX: -2, maxX: 2, minZ: -1.5, maxZ: 1.5, centerX: 0, centerZ: 0, width: 4, height: 3 }
-  }
-  const minX = union.minX - WALL_THICKNESS
-  const maxX = union.maxX + WALL_THICKNESS
-  const minZ = union.minZ - WALL_THICKNESS
-  const maxZ = union.maxZ + WALL_THICKNESS
-  return {
-    minX,
-    maxX,
-    minZ,
-    maxZ,
-    centerX: (minX + maxX) / 2,
-    centerZ: (minZ + maxZ) / 2,
-    width: maxX - minX,
-    height: maxZ - minZ,
-  }
-}
-
 // ---------------------------------------------------------------------------
 // 2D 平面图门窗符号与房间尺寸标注（平面图增强，纯函数供 PlanEnhancements 消费）
 // ---------------------------------------------------------------------------

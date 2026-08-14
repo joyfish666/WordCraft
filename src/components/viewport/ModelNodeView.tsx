@@ -1,5 +1,5 @@
 import { Edges } from '@react-three/drei'
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import * as THREE from 'three'
 import {
   BACK_AXIS,
@@ -187,7 +187,6 @@ function WallSegmentBox({
               PLINTH_H / 2 + PLINTH_CLEAR,
               (outwardIsPlusZ ? 1 : -1) * (PLINTH_PROTRUDE / 2 + PLINTH_INNER_CLEAR / 2),
             ]}
-            castShadow
           >
             <boxGeometry
               args={[
@@ -236,7 +235,6 @@ function WallSegmentBox({
               PLINTH_H / 2 + PLINTH_CLEAR,
               (outwardIsPlusZ ? 1 : -1) * (PLINTH_PROTRUDE / 2 + PLINTH_INNER_CLEAR / 2),
             ]}
-            castShadow
           >
             <boxGeometry
               args={[
@@ -310,11 +308,11 @@ function WallSegmentBox({
   const casingZ = inward * (thickness / 2 - 0.025 - POST_CLEAR)
   const casing = (
     <>
-      <mesh position={[from + 0.03, leafH / 2 + POST_CLEAR, casingZ]} castShadow>
+      <mesh position={[from + 0.03, leafH / 2 + POST_CLEAR, casingZ]}>
         <boxGeometry args={[0.06, leafH, 0.05]} />
         <meshStandardMaterial color={TRIM_COLOR} roughness={0.6} {...trim} />
       </mesh>
-      <mesh position={[to - 0.03, leafH / 2 + POST_CLEAR, casingZ]} castShadow>
+      <mesh position={[to - 0.03, leafH / 2 + POST_CLEAR, casingZ]}>
         <boxGeometry args={[0.06, leafH, 0.05]} />
         <meshStandardMaterial color={TRIM_COLOR} roughness={0.6} {...trim} />
       </mesh>
@@ -538,11 +536,104 @@ interface ModelNodeViewProps {
   wallPlan?: Map<string, WallPlan>
   /** 父房间中心（嵌套房间据此决定门朝向父房间内部） */
   parentCenter?: Position
-  /** 直接父房间（家具据此计算贴靠的墙来决定朝向） */
-  parentRoom?: RoomNode
   /** 2D 平面图模式：家具改由 PlanEnhancements 的 2D 足迹呈现，跳过 3D 网格 */
   planMode?: boolean
 }
+
+/**
+ * 家具 3D 视图（memo 化，坑 75 性能热路径）：
+ * 拖拽预览每帧产生新 scene 引用 → 整棵树重新 render。家具是本树叶子与数量大头，
+ * 未变家具的 node/parentRoom 引用在不可变更新中保持稳定（updateNodePosition 只重建命中路径），
+ * memo 短路后拖拽期间未变家具不再逐帧执行 buildFurnitureParts/partsBounds 与 React 协调。
+ * 选择/虚化等派生状态全部直接订阅 store（原子 selector，不随父组件重渲染变化）。
+ */
+const FurnitureView = memo(function FurnitureView({
+  node,
+  parentRoom,
+  roomGhosted,
+  planMode,
+}: {
+  node: FurnitureNode
+  parentRoom: RoomNode
+  /** 父房间是否虚化（聚焦其他房间）：家具虚化状态与父房间一致 */
+  roomGhosted: boolean
+  planMode: boolean
+}) {
+  const selectedId = useModelStore((s) => s.selectedId)
+  const screenshotMode = useModelStore((s) => s.screenshotMode)
+  const colorMode = useSettingsStore((s) => s.colorMode)
+  const wireframeEnabled = useSettingsStore((s) => s.wireframe.enabled)
+  const selectNode = useModelStore((s) => s.selectNode)
+
+  // 平面图模式：3D 家具网格不渲染（由 PlanEnhancements 以 2D 足迹呈现）
+  if (planMode) return null
+  const kind = furnitureKind(node.name)
+  const facing = facingFromRoom(
+    node,
+    { position: roomCenter(parentRoom), dimensions: roomDims(parentRoom) },
+    BACK_AXIS[kind],
+  )
+  const parts = buildFurnitureParts(
+    kind,
+    node.dimensions.length,
+    node.dimensions.height,
+    node.dimensions.width,
+    facing,
+  )
+  const bounds = partsBounds(parts)
+  const outlineSize: [number, number, number] = [
+    bounds.max[0] - bounds.min[0],
+    bounds.max[1] - bounds.min[1],
+    bounds.max[2] - bounds.min[2],
+  ]
+  const outlineCenter: [number, number, number] = [
+    (bounds.max[0] + bounds.min[0]) / 2,
+    (bounds.max[1] + bounds.min[1]) / 2,
+    (bounds.max[2] + bounds.min[2]) / 2,
+  ]
+  const isSelected = selectedId === node.id
+  const showOutline = !screenshotMode && (isSelected || !roomGhosted)
+  return (
+    <group
+      position={[node.position.x, node.position.y + FLOOR_TOP_Y, node.position.z]}
+      onClick={(e) => {
+        // 停止冒泡：选中部件而非冒泡到父房间
+        e.stopPropagation()
+        selectNode(node.id)
+      }}
+    >
+      {parts.map((part, i) => {
+        const mat = furnitureMaterial(kind, part.shade, colorMode)
+        return (
+          <mesh key={i} position={part.center} castShadow>
+            {part.shape === 'cylinder' ? (
+              <cylinderGeometry args={[part.size[0], part.size[0], part.size[1], 24]} />
+            ) : (
+              <boxGeometry args={part.size} />
+            )}
+            <meshStandardMaterial
+              map={mat.map ? getTexture(mat.map) : undefined}
+              color={mat.color}
+              roughness={mat.roughness}
+              metalness={mat.metalness}
+              transparent={roomGhosted}
+              opacity={roomGhosted ? 0.2 : 1}
+              wireframe={wireframeEnabled}
+            />
+          </mesh>
+        )
+      })}
+      {/* 并集包围盒轮廓（不参与射线检测：否则会挡在部件上，使部件点不到） */}
+      {showOutline && (
+        <mesh position={outlineCenter} raycast={() => null}>
+          <boxGeometry args={outlineSize} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          <Edges color={isSelected ? '#3d7a48' : '#8f8877'} />
+        </mesh>
+      )}
+    </group>
+  )
+})
 
 /**
  * 递归渲染层级模型。
@@ -556,7 +647,6 @@ export function ModelNodeView({
   ancestors = [],
   wallPlan,
   parentCenter,
-  parentRoom,
   planMode = false,
 }: ModelNodeViewProps) {
   const selectNode = useModelStore((s) => s.selectNode)
@@ -670,11 +760,11 @@ export function ModelNodeView({
           colorMode={colorMode}
         />
         {node.furniture.map((child) => (
-          <ModelNodeView
+          <FurnitureView
             key={child.id}
             node={child}
-            ancestors={childAncestors}
             parentRoom={node}
+            roomGhosted={ghosted}
             planMode={planMode}
           />
         ))}
@@ -686,91 +776,12 @@ export function ModelNodeView({
             ancestors={childAncestors}
             wallPlan={wallPlan}
             parentCenter={roomCenterPos}
-            parentRoom={node}
             planMode={planMode}
           />
         ))}
       </group>
     )
   }
-
-  // 家具：实体 vs 虚化两种状态（y 抬升一个地板厚度，使其立在地板顶面）
-  // 按名称识别家具种类并拼装部件（床/衣柜/沙发…），未识别回退为单个整盒；
-  // 朝向由家具在父房间内贴靠（或最近）的墙决定——床头板朝墙、柜门朝房间内
-  // 平面图模式：3D 家具网格不渲染（由 PlanEnhancements 以 2D 足迹呈现）
-  if (planMode) return null
-  const kind = furnitureKind(node.name)
-  const facing = parentRoom
-    ? facingFromRoom(
-        node,
-        { position: roomCenter(parentRoom), dimensions: roomDims(parentRoom) },
-        BACK_AXIS[kind],
-      )
-    : 'north'
-  const parts = buildFurnitureParts(
-    kind,
-    node.dimensions.length,
-    node.dimensions.height,
-    node.dimensions.width,
-    facing,
-  )
-  const bounds = partsBounds(parts)
-  const outlineSize: [number, number, number] = [
-    bounds.max[0] - bounds.min[0],
-    bounds.max[1] - bounds.min[1],
-    bounds.max[2] - bounds.min[2],
-  ]
-  const outlineCenter: [number, number, number] = [
-    (bounds.max[0] + bounds.min[0]) / 2,
-    (bounds.max[1] + bounds.min[1]) / 2,
-    (bounds.max[2] + bounds.min[2]) / 2,
-  ]
-  const showOutline = !screenshotMode && (isSelected || !ghosted)
-  const furnitureNode = node as FurnitureNode
-  return (
-    <group
-      position={[
-        furnitureNode.position.x,
-        furnitureNode.position.y + FLOOR_TOP_Y,
-        furnitureNode.position.z,
-      ]}
-      onClick={(e) => {
-        // 停止冒泡：选中部件而非冒泡到父房间
-        e.stopPropagation()
-        handleClick()
-      }}
-    >
-      {parts.map((part, i) => {
-        const mat = furnitureMaterial(kind, part.shade, colorMode)
-        return (
-          <mesh key={i} position={part.center} castShadow>
-            {part.shape === 'cylinder' ? (
-              <cylinderGeometry args={[part.size[0], part.size[0], part.size[1], 24]} />
-            ) : (
-              <boxGeometry args={part.size} />
-            )}
-            <meshStandardMaterial
-              map={mat.map ? getTexture(mat.map) : undefined}
-              color={mat.color}
-              roughness={mat.roughness}
-              metalness={mat.metalness}
-              transparent={ghosted}
-              opacity={ghosted ? 0.2 : 1}
-              wireframe={wireframeEnabled}
-            />
-          </mesh>
-        )
-      })}
-      {/* 并集包围盒轮廓（不参与射线检测：否则会挡在部件上，使部件点不到） */}
-      {showOutline && (
-        <mesh position={outlineCenter} raycast={() => null}>
-          <boxGeometry args={outlineSize} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-          <Edges color={isSelected ? '#3d7a48' : '#8f8877'} />
-        </mesh>
-      )}
-    </group>
-  )
 }
 
 /** 房屋线框盒：所有房间足迹并集 + 最高层高 */

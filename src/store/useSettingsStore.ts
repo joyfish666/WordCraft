@@ -18,9 +18,21 @@ interface SettingsState extends AppSettings {
   setShadows: (value: boolean) => void
   setDebugMode: (value: boolean) => void
   setLanguage: (lang: Language) => void
+  /** 跟随系统语言更新：设置语言但不改变 languageFollowsSystem（系统语言变化事件用） */
+  syncSystemLanguage: (lang: Language) => void
 }
 
 const STORAGE_KEY = 'wordcraft.settings'
+
+/**
+ * 系统语言检测：首选项以 zh 开头（zh-CN/zh-TW/zh-Hans…）→ 中文，其余 → 英文。
+ * 仅用于「未手动切换语言」时的默认值/跟随系统更新。
+ */
+export function detectSystemLanguage(): Language {
+  if (typeof navigator === 'undefined') return 'zh'
+  const lang = (navigator.language || navigator.languages?.[0] || '').toLowerCase()
+  return lang.startsWith('zh') ? 'zh' : 'en'
+}
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
@@ -36,7 +48,9 @@ export const useSettingsStore = create<SettingsState>()(
       // 实时阴影默认开启（低端设备可关）
       shadows: true,
       debugMode: false,
-      language: 'zh',
+      // 默认跟随系统语言（用户手动切换后 languageFollowsSystem 置 false）
+      language: detectSystemLanguage(),
+      languageFollowsSystem: true,
 
       addApiKey: (entry) => {
         const id = createId()
@@ -72,24 +86,29 @@ export const useSettingsStore = create<SettingsState>()(
       setShadows: (value) => set({ shadows: value }),
 
       setDebugMode: (value) => set({ debugMode: value }),
-      setLanguage: (lang) => set({ language: lang }),
+      setLanguage: (lang) => set({ language: lang, languageFollowsSystem: false }),
+      syncSystemLanguage: (lang) => set({ language: lang }),
     }),
     {
       name: STORAGE_KEY,
       // 写入失败（配额/隐私模式）降级为静默跳过，不打断编辑（safeStorage.ts）
       storage: createJSONStorage(() => safeLocalStorage),
       version: 5,
-      // v2 起默认关闭线框；v3 起新增语言字段（旧数据缺省为中文）；
+      // v2 起默认关闭线框；v3 起新增语言字段（旧数据缺省跟随系统语言）；
       // v4 起新增屋顶/阴影开关；v5 起移除屋顶渲染（一层户型被檐口遮挡内部），
       // 旧存档里的 roof 字段一并剔除，避免残留进状态
       migrate: (persistedState) => {
         const persisted = persistedState as AppSettings & { roof?: boolean }
         const { roof, ...rest } = persisted
         void roof
+        // 旧存档显式写过 language（本功能之前的版本都会持久化 language）→ 视为用户手动选择，
+        // 不再跟随系统；从未写过 language 的存档 → 跟随系统语言
+        const hasManualLanguage = Object.prototype.hasOwnProperty.call(persistedState, 'language')
         return {
           ...rest,
           wireframe: { enabled: false, lineWidth: 1 },
-          language: rest.language ?? 'zh',
+          language: rest.language ?? detectSystemLanguage(),
+          languageFollowsSystem: rest.languageFollowsSystem ?? !hasManualLanguage,
           shadows: rest.shadows ?? true,
         }
       },

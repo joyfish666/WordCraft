@@ -1,6 +1,6 @@
 import { Html } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
-import { forwardRef, type RefObject } from 'react'
+import { forwardRef, useRef, type RefObject } from 'react'
 import { Vector3 } from 'three'
 import { useT } from '../../i18n'
 import { houseBounds } from '../../lib/planGeometry'
@@ -24,6 +24,8 @@ const DIR_VECTORS: Record<string, [number, number, number]> = {
  * 的 CSS 变换（标签沿罗盘圆周独立定位，不再用刚性玫瑰——刚性玫瑰在斜视角下 E/W 会
  * 与内容错位，坑 26）。渲染内容整体沿 X 镜像（左手系补偿成标准地图方向），
  * 世界方向同步镜像（x 取反）后投影，标签与镜像后的内容方位一致。
+ * 性能：标签列表首帧查询后缓存（罗盘 DOM 元素替换时自动重查）；相机未转动时
+ * 变换字符串相同，直接跳过 style 写入。
  */
 export function CornerCompassSensor({
   compassRef,
@@ -31,6 +33,7 @@ export function CornerCompassSensor({
   compassRef: RefObject<HTMLDivElement | null>
 }) {
   const camera = useThree((s) => s.camera)
+  const labelsCache = useRef<{ owner: HTMLElement; labels: HTMLElement[] } | null>(null)
 
   useFrame(() => {
     const el = compassRef.current
@@ -42,8 +45,14 @@ export function CornerCompassSensor({
     // 因此下限取 20 并删除提前 return：算得过小只会把标签叠回圆心（曾因此叠成一团）
     const size = el.clientWidth || el.offsetWidth
     const radius = Math.max(size / 2 - 10, 20)
-    const labels = el.querySelectorAll<HTMLElement>('[data-dir]')
-    for (const label of labels) {
+    if (!labelsCache.current || labelsCache.current.owner !== el) {
+      // 罗盘 DOM 被重建（如语言切换）时重查一次；否则每帧 querySelectorAll 属纯浪费
+      labelsCache.current = {
+        owner: el,
+        labels: Array.from(el.querySelectorAll<HTMLElement>('[data-dir]')),
+      }
+    }
+    for (const label of labelsCache.current.labels) {
       const d = DIR_VECTORS[label.dataset.dir ?? '']
       if (!d) continue
       dirVec.set(d[0], d[1], d[2])
@@ -51,7 +60,9 @@ export function CornerCompassSensor({
       const rx = dirVec.dot(rightVec)
       const ry = dirVec.dot(upVec)
       const angle = (Math.atan2(rx, ry) * 180) / Math.PI
-      label.style.transform = `translate(-50%, -50%) rotate(${angle}deg) translateY(${-radius}px) rotate(${-angle}deg)`
+      const transform = `translate(-50%, -50%) rotate(${angle}deg) translateY(${-radius}px) rotate(${-angle}deg)`
+      // 相机未转动时角度不变：跳过写入，避免每帧触发样式计算
+      if (label.style.transform !== transform) label.style.transform = transform
     }
   })
 

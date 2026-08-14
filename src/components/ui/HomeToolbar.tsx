@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useT } from '../../i18n'
-import { useSettingsStore } from '../../store/useSettingsStore'
+import { LanguageToggle } from './LanguageToggle'
 import {
   IconCamera,
   IconChat,
@@ -61,9 +61,6 @@ export function HomeToolbar({
   onToggleChat,
 }: HomeToolbarProps) {
   const t = useT()
-  const language = useSettingsStore((s) => s.language)
-  const setLanguage = useSettingsStore((s) => s.setLanguage)
-  const next = language === 'zh' ? 'en' : 'zh'
 
   return (
     <header className="toolbar">
@@ -77,8 +74,8 @@ export function HomeToolbar({
           <path d="M12 3L4 9v12h5v-7h6v7h5V9l-8-6z" />
         </svg>
         <span className="toolbar__brand-text">
-          <span className="toolbar__brand-name">言筑</span>
-          <span className="toolbar__brand-sub">WordCraft</span>
+          <span className="toolbar__brand-name">{t('app.brandName')}</span>
+          <span className="toolbar__brand-sub">{t('app.brandSub')}</span>
         </span>
       </div>
 
@@ -215,15 +212,7 @@ export function HomeToolbar({
             <IconGear />
           </NavLink>
         </nav>
-        <button
-          type="button"
-          className="lang-btn"
-          onClick={() => setLanguage(next)}
-          title={next === 'zh' ? t('lang.switchToZh') : t('lang.switchToEn')}
-          aria-label={next === 'zh' ? t('lang.switchToZh') : t('lang.switchToEn')}
-        >
-          {next === 'en' ? 'EN' : '中文'}
-        </button>
+        <LanguageToggle className="lang-btn" />
         {hasApiKey ? (
           <span className="badge badge--ok">{t('home.apiOk')}</span>
         ) : (

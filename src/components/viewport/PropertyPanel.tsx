@@ -64,7 +64,7 @@ interface NameFieldProps {
 }
 
 /** 名称输入：Enter/blur 提交，空白忽略并回显原值 */
-function NameField({ value, onCommit }: NameFieldProps) {
+function NameField({ value, onCommit, label }: NameFieldProps & { label: string }) {
   const [text, setText] = useState(value)
   useEffect(() => setText(value), [value])
 
@@ -75,15 +75,18 @@ function NameField({ value, onCommit }: NameFieldProps) {
   }
 
   return (
-    <input
-      className="input"
-      value={text}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') commit()
-      }}
-    />
+    <label className="prop-field">
+      <span className="prop-field__label">{label}</span>
+      <input
+        className="input"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit()
+        }}
+      />
+    </label>
   )
 }
 
@@ -207,8 +210,11 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
       )}
 
       <div className="prop-field">
-        <span className="prop-field__label">{t('property.name')}</span>
-        <NameField value={node.name} onCommit={(name) => updateSelected({ name })} />
+        <NameField
+          value={node.name}
+          onCommit={(name) => updateSelected({ name })}
+          label={t('property.name')}
+        />
       </div>
 
       <div className="prop-panel__section">

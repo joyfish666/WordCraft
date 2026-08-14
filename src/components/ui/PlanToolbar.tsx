@@ -69,6 +69,7 @@ export function PlanToolbar({
       className={`plan-toolbar__dims segmented__btn ${showPlanDims ? 'segmented__btn--active' : ''}`}
       onClick={onToggleDims}
       title={t('plan.toggleDimsTitle')}
+      aria-pressed={showPlanDims}
     >
       {t('plan.toggleDims')}
     </button>

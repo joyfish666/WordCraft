@@ -254,4 +254,43 @@ describe('streamChatCompletion', () => {
     )
     fetchMock.mockRestore()
   })
+
+  it('429 限流自动重试一次（退避后成功返回）', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        status: 429,
+        ok: false,
+        body: null,
+        text: () => Promise.resolve(JSON.stringify({ error: { message: 'rate limited' } })),
+      } as unknown as Response)
+      .mockResolvedValueOnce(
+        streamingResponse([
+          'data: {"choices":[{"delta":{"content":"重试成功"}}]}\n',
+          'data: [DONE]\n',
+        ]),
+      )
+    const full = await streamChatCompletion(opts, [{ role: 'user', content: 'hi' }])
+    expect(full).toBe('重试成功')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    fetchMock.mockRestore()
+  })
+
+  it('用户中止（AbortError）不重试', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new DOMException('aborted', 'AbortError'))
+    await expect(streamChatCompletion(opts, [{ role: 'user', content: 'hi' }])).rejects.toThrow()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    fetchMock.mockRestore()
+  })
+
+  it('流结束未换行的尾部残留被冲刷（不丢最后字符）', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(streamingResponse(['data: {"choices":[{"delta":{"content":"尾"}}]}']))
+    const full = await streamChatCompletion(opts, [{ role: 'user', content: 'hi' }])
+    expect(full).toBe('尾')
+    fetchMock.mockRestore()
+  })
 })

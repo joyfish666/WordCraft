@@ -6,7 +6,6 @@ import {
   mixHex,
   roomColor,
   roomFaceColor,
-  skirtingColor,
   softenTint,
 } from './palette'
 
@@ -43,9 +42,5 @@ describe('palette 颜色工具（材质层）', () => {
   it('softenTint 向白色淡化', () => {
     expect(softenTint('#4f7cff', 0.5)).toBe('#a7beff')
     expect(softenTint('#ffffff', 1)).toBe('#ffffff')
-  })
-
-  it('skirtingColor 保留色相变暗', () => {
-    expect(skirtingColor('#4f7cff')).toBe('#2b448c')
   })
 })

@@ -13,6 +13,8 @@ export const zh = {
   // ---------- 应用外壳 ----------
   'app.title': '言筑 WordCraft',
   'app.desc': '言筑 WordCraft —— 通过自然语言对话快速生成 3D 空间结构模型的纯前端 Web 应用',
+  'app.brandName': '言筑',
+  'app.brandSub': 'WordCraft',
   'nav.home': '首页',
   'nav.settings': '设置',
   'nav.label': '页面导航',
@@ -50,7 +52,6 @@ export const zh = {
   'home.apiMissing': '未配置 API Key · 前往设置',
 
   // ---------- 对话面板 ----------
-  'chat.title': '对话生成',
   'chat.undoGen': '撤销生成',
   'chat.undoGenTitle': '撤销最近一次生成，回到生成前的场景（并移除对应对话）',
   'chat.clear': '清空对话',
@@ -112,6 +113,7 @@ export const zh = {
   'home.screenshotFailedTitle': '截图失败',
   'home.noApiKey': '尚未配置 API Key，请先前往设置页配置后再试。',
   'home.genFailed': '生成失败，请重试',
+  'home.genCancelled': '已取消生成',
   'home.genConflictTitle': '生成结果与当前编辑冲突',
   'home.genConflictApply':
     '生成期间你手动编辑了场景。仍要应用生成结果覆盖当前编辑吗？（建议选「取消」以保留你的修改）',
@@ -204,6 +206,9 @@ export const zh = {
   'project.rename': '重命名',
   'project.delete': '删除',
   'project.close': '关闭',
+  'project.dbUnavailableTitle': '项目库不可用',
+  'project.dbUnavailable':
+    '浏览器本地存储不可用（可能是隐私模式或存储空间已满），项目库功能暂时不可用。',
   'project.deleteConfirm': '确定删除项目「{name}」吗？删除后无法恢复。',
   'project.deleteTitle': '删除项目',
 
@@ -239,7 +244,6 @@ export const zh = {
   'property.typeHouse': '整屋',
   'property.typeRoom': '房间',
   'property.typeFurniture': '家具',
-  'property.typeWall': '墙体',
   'property.gizmoMode': 'Gizmo 手柄',
   'property.gizmoTranslate': '移动',
   'property.gizmoScale': '缩放',
@@ -274,7 +278,6 @@ export const zh = {
   'plan.mergeFail': '两房间并集不是矩形，无法合并',
   'plan.splitFail': '只能拆分矩形房间，且切线两侧需各 ≥ 1m',
   'plan.failTitle': '无法完成该操作',
-  'plan.openingFail': '该处无法开洞（不是实心墙）',
 
   // ---------- 分享与口令 ----------
   'share.title': '分享与口令',
@@ -333,7 +336,9 @@ export const en: Record<TKey, string> = {
   // ---------- App shell ----------
   'app.title': 'WordCraft 言筑',
   'app.desc':
-    'WordCraft 言筑 — a pure front-end web app that generates 3D spatial models from natural-language conversation',
+    'WordCraft 言筑 — a pure-frontend web app that generates 3D spatial models from natural-language descriptions',
+  'app.brandName': 'WordCraft',
+  'app.brandSub': '言筑',
   'nav.home': 'Home',
   'nav.settings': 'Settings',
   'nav.label': 'Page navigation',
@@ -371,7 +376,6 @@ export const en: Record<TKey, string> = {
   'home.apiMissing': 'No API Key · Go to Settings',
 
   // ---------- Chat panel ----------
-  'chat.title': 'Chat',
   'chat.undoGen': 'Undo generation',
   'chat.undoGenTitle':
     'Undo the last generation, reverting to the scene before it (and removing that exchange)',
@@ -438,6 +442,7 @@ export const en: Record<TKey, string> = {
   'home.screenshotFailedTitle': 'Screenshot failed',
   'home.noApiKey': 'No API Key configured yet. Configure one on the Settings page first.',
   'home.genFailed': 'Generation failed, please try again',
+  'home.genCancelled': 'Generation cancelled',
   'home.genConflictTitle': 'Generation conflicts with your current edits',
   'home.genConflictApply':
     'The scene was edited while generating. Apply the generated result anyway and overwrite your edits? (Choose "Cancel" to keep your edits)',
@@ -537,6 +542,9 @@ export const en: Record<TKey, string> = {
   'project.rename': 'Rename',
   'project.delete': 'Delete',
   'project.close': 'Close',
+  'project.dbUnavailableTitle': 'Project library unavailable',
+  'project.dbUnavailable':
+    'Browser local storage is unavailable (private mode or storage full). The project library is temporarily unavailable.',
   'project.deleteConfirm': 'Delete project "{name}"? This can\'t be undone.',
   'project.deleteTitle': 'Delete project',
 
@@ -572,7 +580,6 @@ export const en: Record<TKey, string> = {
   'property.typeHouse': 'House',
   'property.typeRoom': 'Room',
   'property.typeFurniture': 'Furniture',
-  'property.typeWall': 'Wall',
   'property.gizmoMode': 'Gizmo',
   'property.gizmoTranslate': 'Move',
   'property.gizmoScale': 'Scale',
@@ -609,7 +616,6 @@ export const en: Record<TKey, string> = {
   'plan.mergeFail': 'The two rooms cannot merge: their union is not a rectangle',
   'plan.splitFail': 'Only rectangular rooms can be split, and each side must be ≥ 1m',
   'plan.failTitle': 'Cannot perform this operation',
-  'plan.openingFail': 'Cannot place an opening here (not a solid wall)',
 
   // ---------- Share & code ----------
   'share.title': 'Share & Code',

@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useId, useState, type ReactNode } from 'react'
 import { useT } from '../../i18n'
 import { Button } from './Button'
 import { Dialog } from './Dialog'
@@ -17,6 +17,7 @@ interface ConfirmDialogState extends ConfirmOptions {
  */
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const t = useT()
+  const messageId = useId()
   const [state, setState] = useState<ConfirmDialogState | null>(null)
 
   const confirm = useCallback(
@@ -51,8 +52,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         onClose={() => close(false)}
         title={state?.title ?? ''}
         className="dialog--confirm"
+        descriptionId={messageId}
       >
-        <p className="dialog__message">{state?.message}</p>
+        <p id={messageId} className="dialog__message">
+          {state?.message}
+        </p>
         <div className="dialog__actions">
           {state?.showCancel && (
             <Button variant="ghost" onClick={() => close(false)}>

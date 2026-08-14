@@ -108,7 +108,7 @@
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--bg);
 }
 
@@ -160,7 +160,7 @@
 .segmented {
   display: inline-flex;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
@@ -176,17 +176,4 @@
 .segmented__btn--active {
   background: var(--accent-soft);
   color: var(--accent);
-}
-
-/* ---------- 语言切换 ---------- */
-
-/* 工具栏语言切换按钮：加粗一点更醒目 */
-.lang-toggle-btn {
-  font-weight: 600;
-  color: var(--accent);
-  border-color: var(--accent-soft);
-}
-
-.lang-toggle-btn:hover {
-  border-color: var(--accent);
 }

@@ -1,6 +1,8 @@
 :root {
   --bg: #e2dccb;
   --bg-panel: #ede8dd;
+  --bg-panel-90: rgba(237, 232, 221, 0.9);
+  --bg-panel-92: rgba(237, 232, 221, 0.92);
   --bg-elevated: #f5f1e8;
   --bg-viewport: #d6cfbf;
   --border: #d2cbba;
@@ -23,6 +25,7 @@
   --radius: 10px;
   --radius-sm: 8px;
   --radius-xs: 6px;
+  --radius-lg: 12px;
   --radius-pill: 999px;
   --toolbar-h: 44px;
   --statusbar-h: 32px;

@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { completeRoomFurniture, hasExcludedCompleteness } from './furnitureCompleteness'
 import { furnitureKind } from './furniturePresets'
+import { useSettingsStore } from '../store/useSettingsStore'
 import type { FurnitureNode, RoomNode } from '../types/model'
 
 /** 构造房间（家具 position 为绝对坐标，v3 语义） */
@@ -43,6 +44,11 @@ function f(id: string, name: string, x: number, z: number, description?: string)
 }
 
 describe('completeRoomFurniture 常配套件补全（坑 87）', () => {
+  beforeEach(() => {
+    // 语言显式设为中文：补全件名称随界面语言（jsdom 默认跟随系统为英文）
+    useSettingsStore.setState({ language: 'zh' })
+  })
+
   it('书桌 → 补 1 把椅子（使用者侧，书桌 -z 侧 0.6m）', () => {
     const desk = f('desk', '书桌', 0, 0)
     const out = completeRoomFurniture(room([desk]))
