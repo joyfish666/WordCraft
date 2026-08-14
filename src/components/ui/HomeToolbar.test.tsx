@@ -28,7 +28,7 @@ function renderToolbar(overrides: Partial<HomeToolbarProps> = {}) {
     ...overrides,
   }
   render(
-    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <MemoryRouter>
       <HomeToolbar {...props} />
     </MemoryRouter>,
   )

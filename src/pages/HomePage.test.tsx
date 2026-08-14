@@ -36,7 +36,7 @@ const mockGenerate = vi.mocked(generateModelFromChat)
 function renderHome() {
   return render(
     <ConfirmProvider>
-      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter>
         <HomePage />
       </MemoryRouter>
     </ConfirmProvider>,
