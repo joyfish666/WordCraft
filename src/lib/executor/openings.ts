@@ -1,4 +1,5 @@
-import { footprintCenter } from '../footprint'
+import { edgeMetaOf } from '../geometry'
+import { EPSILON } from '../constants'
 import { DOOR_WIDTH } from '../roomGeometry'
 import { DEFAULT_WINDOW_WIDTH, findRoom, mapRoom } from './shared'
 import type { Dir, Op } from '../../types/ops'
@@ -11,41 +12,24 @@ import type { RoomNode, SceneModel } from '../../types/model'
 /** 按外向方向找足迹边：返回顶点环下标 + 局部区间（段局部坐标以边起点为 0，坑 37 约定） */
 function findEdgeBySide(room: RoomNode, dir: Dir): { edgeIndex: number; length: number } | null {
   const fp = room.footprint
-  const center = footprintCenter(fp)
-  const n = fp.length
-  const EPS = 1e-6
   let best: { edgeIndex: number; length: number } | null = null
-  for (let i = 0; i < n; i++) {
-    const a = fp[i]!
-    const b = fp[(i + 1) % n]!
-    const horizontal = Math.abs(a.z - b.z) < EPS
-    const length = horizontal ? Math.abs(b.x - a.x) : Math.abs(b.z - a.z)
-    if (length < EPS) continue
-    const edgeDir: Dir = horizontal
-      ? a.z > center.z + EPS
-        ? 'north'
-        : 'south'
-      : a.x > center.x + EPS
-        ? 'east'
-        : 'west'
-    if (edgeDir !== dir) continue
+  for (let i = 0; i < fp.length; i++) {
+    const meta = edgeMetaOf(fp, i)
+    if (!meta || meta.dir !== dir) continue
     // 同方向可能有多个边（非矩形足迹）：取最长者（确定性）
-    if (!best || length > best.length) best = { edgeIndex: i, length }
+    if (!best || meta.length > best.length) best = { edgeIndex: i, length: meta.length }
   }
   return best
 }
 
 /** 按足迹边下标取边（坑 39 约定：Opening.edgeIndex 引用 footprint 顶点环边序号；退化边返回 null） */
 function edgeByIndex(room: RoomNode, index: number): { edgeIndex: number; length: number } | null {
-  const fp = room.footprint
-  const n = fp.length
-  if (n === 0) return null
+  const meta = edgeMetaOf(room.footprint, index)
+  if (!meta) return null
+  // 归一化下标（负下标/越界回绕，与 edgeMetaOf 的环取模一致）
+  const n = room.footprint.length
   const idx = ((index % n) + n) % n
-  const a = fp[idx]!
-  const b = fp[(idx + 1) % n]!
-  if (Math.abs(a.z - b.z) < 1e-6) return { edgeIndex: idx, length: Math.abs(b.x - a.x) }
-  if (Math.abs(a.x - b.x) < 1e-6) return { edgeIndex: idx, length: Math.abs(b.z - a.z) }
-  return null
+  return { edgeIndex: idx, length: meta.length }
 }
 
 export function applySetOpenings(
@@ -72,7 +56,7 @@ export function applySetOpenings(
       const rest = r[key].filter((o) => {
         if (o.edgeIndex !== edge.edgeIndex) return true
         if (op.from === undefined || op.to === undefined) return false
-        return o.to <= op.from + 1e-6 || o.from >= op.to - 1e-6
+        return o.to <= op.from + EPSILON || o.from >= op.to - EPSILON
       })
       return { ...r, [key]: rest }
     })
@@ -83,7 +67,7 @@ export function applySetOpenings(
   let to = op.to ?? (edge.length + width) / 2
   from = Math.max(0, Math.min(from, edge.length))
   to = Math.max(0, Math.min(to, edge.length))
-  if (to - from < 1e-6) throw new Error('开洞区间无效（from ≥ to）')
+  if (to - from < EPSILON) throw new Error('开洞区间无效（from ≥ to）')
   const opening = { edgeIndex: edge.edgeIndex, from, to, width: to - from }
   return mapRoom(scene, op.roomId, (r) => {
     const key = op.kind === 'door' ? 'doors' : 'windows'

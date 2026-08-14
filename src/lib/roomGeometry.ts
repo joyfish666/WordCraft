@@ -1,6 +1,6 @@
 import type { RoomNode, SceneModel } from '../types/model'
 import { ADJACENCY_GAP, DOOR_CLEARANCE, DOOR_WIDTH, EPSILON, WALL_THICKNESS } from './constants'
-import { findRoomInList } from './geometry'
+import { edgeMetaOf, findRoomInList } from './geometry'
 import { footprintCenter } from './footprint'
 
 export type DoorDirection = 'north' | 'south' | 'east' | 'west'
@@ -83,10 +83,14 @@ export function doorDirection(room: RoomNode): DoorDirection {
   const vz = -c.z
   const absX = Math.abs(vx)
   const absZ = Math.abs(vz)
-  if (absX < 0.5 && absZ < 0.5) return 'north'
+  // 房间中心几乎落在整屋原点（无主导方向）时的确定性兜底朝向
+  if (absX < DOOR_DIRECTION_CENTER_TOL && absZ < DOOR_DIRECTION_CENTER_TOL) return 'north'
   if (absX >= absZ) return vx > 0 ? 'east' : 'west'
   return vz > 0 ? 'north' : 'south'
 }
+
+/** 门朝向兜底判定的「中心邻域」半径（米）：房间中心距原点两轴都小于该值视为无主导方向 */
+const DOOR_DIRECTION_CENTER_TOL = 0.5
 
 // ---------------------------------------------------------------------------
 // 墙段模型：沿足迹边切分墙段，段类型决定渲染方式
@@ -154,41 +158,18 @@ export function segmentWorldRange(edge: WallEdge, seg: WallSegment): { from: num
 /** 由房间足迹构造各边墙段（基座：整段实心墙，暂不开洞；段局部坐标以边起点为 0） */
 export function footprintEdges(room: RoomNode): WallEdge[] {
   const fp = room.footprint
-  const center = footprintCenter(fp)
   const edges: WallEdge[] = []
-  const n = fp.length
-  for (let i = 0; i < n; i++) {
-    const a = fp[i]!
-    const b = fp[(i + 1) % n]!
-    let axis: 'x' | 'z'
-    let line: number
-    let start: number
-    let length: number
-    let dir: DoorDirection
-    if (Math.abs(a.z - b.z) < EPSILON) {
-      // 水平边（沿 x）
-      axis = 'x'
-      line = a.z
-      start = Math.min(a.x, b.x)
-      length = Math.abs(b.x - a.x)
-      dir = line > center.z + EPSILON ? 'north' : 'south'
-    } else {
-      // 垂直边（沿 z）
-      axis = 'z'
-      line = a.x
-      start = Math.min(a.z, b.z)
-      length = Math.abs(b.z - a.z)
-      dir = line > center.x + EPSILON ? 'east' : 'west'
-    }
-    if (length < EPSILON) continue
+  for (let i = 0; i < fp.length; i++) {
+    const meta = edgeMetaOf(fp, i)
+    if (!meta) continue // 非轴对齐/退化边：不产生墙段
     edges.push({
-      axis,
-      line,
-      start,
-      length,
-      dir,
+      axis: meta.axis,
+      line: meta.line,
+      start: meta.start,
+      length: meta.length,
+      dir: meta.dir,
       shared: false,
-      segments: [{ from: 0, to: length, kind: 'wall' }],
+      segments: [{ from: 0, to: meta.length, kind: 'wall' }],
     })
   }
   return edges
@@ -203,7 +184,7 @@ function addDoorOnFace(edge: WallEdge, from: number, to: number, markEntrance = 
     if (s.kind !== 'wall') continue
     const a = Math.max(s.from, from)
     const b = Math.min(s.to, to)
-    if (b - a < 1e-6) continue
+    if (b - a < EPSILON) continue
     const d = Math.abs((a + b) / 2 - center)
     if (d < bestDist) {
       bestDist = d
@@ -220,7 +201,7 @@ function addDoorOnFace(edge: WallEdge, from: number, to: number, markEntrance = 
   if (markEntrance) {
     // 标记刚创建的入户门段
     edge.segments = edge.segments.map((s) =>
-      s.kind === 'door' && Math.abs(s.from - d0) < 1e-6 && Math.abs(s.to - d1) < 1e-6
+      s.kind === 'door' && Math.abs(s.from - d0) < EPSILON && Math.abs(s.to - d1) < EPSILON
         ? { ...s, entrance: true }
         : s,
     )
@@ -308,25 +289,16 @@ interface NeighborAlongEdge {
  * 按几何匹配（与 planEdit.ringIndexOf 互逆）。退化边/越界下标/非轴对齐边返回 undefined。
  */
 function edgeByRingIndex(room: RoomNode, plan: WallPlan, ringIndex: number): WallEdge | undefined {
-  const fp = room.footprint
-  const n = fp.length
-  if (n === 0) return undefined
-  const idx = ((ringIndex % n) + n) % n
-  const a = fp[idx]!
-  const b = fp[(idx + 1) % n]!
-  const axis: 'x' | 'z' | null =
-    Math.abs(a.z - b.z) < EPSILON ? 'x' : Math.abs(a.x - b.x) < EPSILON ? 'z' : null
-  if (axis === null) return undefined
-  const line = axis === 'x' ? a.z : a.x
-  const start = axis === 'x' ? Math.min(a.x, b.x) : Math.min(a.z, b.z)
-  const length = axis === 'x' ? Math.abs(b.x - a.x) : Math.abs(b.z - a.z)
-  if (length < EPSILON) return undefined
+  const meta = edgeMetaOf(room.footprint, ringIndex)
+  if (!meta) return undefined
+  // 与 planEdit.ringIndexOf 互逆，同一容差（两值由同一足迹推导，正常场景精确相等；
+  // 迁移/约束后的足迹用 EPSILON 容忍浮点噪声）
   return plan.edges.find(
     (e) =>
-      e.axis === axis &&
-      Math.abs(e.line - line) < 1e-9 &&
-      Math.abs(e.start - start) < 1e-9 &&
-      Math.abs(e.length - length) < 1e-9,
+      e.axis === meta.axis &&
+      Math.abs(e.line - meta.line) < EPSILON &&
+      Math.abs(e.start - meta.start) < EPSILON &&
+      Math.abs(e.length - meta.length) < EPSILON,
   )
 }
 
@@ -345,22 +317,13 @@ export function applyOpenings(plan: Map<string, WallPlan>, rooms: RoomNode[]): v
         if (!edge) continue
         const from = Math.min(Math.max(op.from, 0), edge.length)
         const to = Math.min(Math.max(op.to, from), edge.length)
-        if (to - from < 1e-6) continue
-        const out: WallSegment[] = []
-        for (const s of edge.segments) {
-          if (s.kind !== 'wall' || to <= s.from || from >= s.to) {
-            out.push(s)
-            continue
-          }
-          if (s.from < from) out.push({ ...s, to: from })
-          out.push({
-            from: Math.max(s.from, from),
-            to: Math.min(s.to, to),
-            kind: kind === 'doors' ? 'door' : 'window',
-          })
-          if (s.to > to) out.push({ ...s, from: to })
-        }
-        edge.segments = out
+        if (to - from < EPSILON) continue
+        // 只切实心墙段（open/door/window 段原样保留），切分逻辑复用 splitSegments
+        // （此前内联循环与 splitSegments 逐行重复，2026-08-14 审查收拢）
+        const targetKind = kind === 'doors' ? 'door' : 'window'
+        edge.segments = edge.segments.flatMap((s) =>
+          s.kind === 'wall' ? splitSegments([s], from, to, targetKind) : [s],
+        )
       }
     }
   }
@@ -527,7 +490,7 @@ function placeEntranceDoorOnEdge(edge: WallEdge): boolean {
   let bestDist = Infinity
   for (const s of edge.segments) {
     if (s.kind !== 'wall') continue
-    if (s.to - s.from < DOOR_WIDTH - 1e-6) continue
+    if (s.to - s.from < DOOR_WIDTH - EPSILON) continue
     const d = Math.abs((s.from + s.to) / 2 - center)
     if (d < bestDist) {
       bestDist = d
@@ -577,7 +540,7 @@ function addEntranceDoor(
       entrance === 'south' || entrance === 'west' ? Math.min(...lines) : Math.max(...lines)
     const candidates = rooms.filter((r) => {
       const l = lineOf(r)
-      return l !== null && Math.abs(l - boundary) < 1e-6
+      return l !== null && Math.abs(l - boundary) < EPSILON
     })
     target =
       candidates.find((r) => isCorridorName(r.name)) ??
@@ -645,12 +608,12 @@ export function nestedWallPlan(
       for (const rEdge of rPlan.edges) {
         if (rEdge.axis !== edge.axis) continue
         // 用 WALL_THICKNESS + ε 容忍浮点贴边（平铺/平移会引入 ~1e-13 噪声）
-        if (Math.abs(rEdge.line - edge.line) > WALL_THICKNESS + 1e-6) continue
+        if (Math.abs(rEdge.line - edge.line) > WALL_THICKNESS + EPSILON) continue
         for (const seg of rEdge.segments) {
           if (seg.kind === 'open') continue
           const overFrom = Math.max(rEdge.start + seg.from, edge.start)
           const overTo = Math.min(rEdge.start + seg.to, edge.start + edge.length)
-          if (overTo - overFrom >= 1e-6) covered.push({ from: overFrom, to: overTo })
+          if (overTo - overFrom >= EPSILON) covered.push({ from: overFrom, to: overTo })
         }
       }
     }
@@ -825,7 +788,7 @@ function neighborsAlongEdge(
       if (Math.abs(edge.line - nEdge.line) > ADJACENCY_GAP) continue
       const worldFrom = Math.max(edge.start, nEdge.start)
       const worldTo = Math.min(edge.start + edge.length, nEdge.start + nEdge.length)
-      if (worldTo - worldFrom < 1e-6) continue
+      if (worldTo - worldFrom < EPSILON) continue
       result.push({ room: N, from: worldFrom - edge.start, to: worldTo - edge.start })
     }
   }

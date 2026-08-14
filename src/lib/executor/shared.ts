@@ -1,7 +1,6 @@
-import { footprintCenter } from '../footprint'
-import { findRoomInList } from '../geometry'
+import { edgeMetaOf, findRoomInList } from '../geometry'
 import { removeNode } from '../modelTree'
-import { DEFAULT_HEIGHT, EPSILON } from '../constants'
+import { DEFAULT_HEIGHT } from '../constants'
 import type { Dimensions, LevelNode, Point2D, RoomNode, SceneModel } from '../../types/model'
 
 /** 房间规格缺省尺寸（米）：单一来源（原 executor.ts 顶层导出） */
@@ -39,18 +38,8 @@ export function replaceRoom(scene: SceneModel, id: string, rooms: RoomNode[]): S
 
 /** 按方向找矩形足迹边下标（坑 39 约定：0=南 1=东 2=北 3=西；按几何方向解析） */
 export function edgeDirIndex(fp: Point2D[], dir: 'north' | 'south' | 'east' | 'west'): number {
-  const n = fp.length
-  const c = footprintCenter(fp)
-  for (let i = 0; i < n; i++) {
-    const a = fp[i]!
-    const b = fp[(i + 1) % n]!
-    if (Math.abs(a.z - b.z) < EPSILON) {
-      if (dir === 'north' && a.z > c.z + EPSILON) return i
-      if (dir === 'south' && a.z < c.z - EPSILON) return i
-    } else {
-      if (dir === 'east' && a.x > c.x + EPSILON) return i
-      if (dir === 'west' && a.x < c.x - EPSILON) return i
-    }
+  for (let i = 0; i < fp.length; i++) {
+    if (edgeMetaOf(fp, i)?.dir === dir) return i
   }
   throw new Error(`足迹没有 ${dir} 向边`)
 }
