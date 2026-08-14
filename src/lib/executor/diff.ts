@@ -1,4 +1,5 @@
 import { sameFootprint } from '../geometry'
+import { EPSILON } from '../constants'
 import { footprintBounds, footprintCenter } from '../footprint'
 import type { Op, RoomSpec } from '../../types/ops'
 import type {
@@ -45,14 +46,16 @@ function roomSpecFromV2(room: RoomNodeV2): RoomSpec {
 
 function dimsDiffer(a: Dimensions, b: Dimensions): boolean {
   return (
-    Math.abs(a.length - b.length) > 1e-6 ||
-    Math.abs(a.width - b.width) > 1e-6 ||
-    Math.abs(a.height - b.height) > 1e-6
+    Math.abs(a.length - b.length) > EPSILON ||
+    Math.abs(a.width - b.width) > EPSILON ||
+    Math.abs(a.height - b.height) > EPSILON
   )
 }
 
 function posDiffer(a: Position, b: Position): boolean {
-  return Math.abs(a.x - b.x) > 1e-6 || Math.abs(a.y - b.y) > 1e-6 || Math.abs(a.z - b.z) > 1e-6
+  return (
+    Math.abs(a.x - b.x) > EPSILON || Math.abs(a.y - b.y) > EPSILON || Math.abs(a.z - b.z) > EPSILON
+  )
 }
 
 /** 把当前场景与 v2 快照 diff 成操作序列（确定性，按数组顺序）。
@@ -96,18 +99,20 @@ function diffRooms(currentRooms: RoomNode[], targetRooms: RoomNodeV2[]): Op[] {
     const patch: { name?: string; dimensions?: Partial<Dimensions>; footprint?: Point2D[] } = {}
     if (cur.name !== t.name) patch.name = t.name
     const b = footprintBounds(cur.footprint)
-    const targetDims = {
-      length: t.dimensions.length,
-      width: t.dimensions.width,
-      height: t.dimensions.height,
+    // 逐维比较、只下发有差的维度（2026-08-14 审查）：仅层高变化时不再下发
+    // length/width —— updateNodeFields 收到 length/width 会触发 resizeFootprint
+    // （保持包围盒中心重设尺寸），浮点噪声下可能产生不必要的足迹缩放
+    const dimPatch: Partial<Dimensions> = {}
+    if (Math.abs(b.maxX - b.minX - t.dimensions.length) > EPSILON) {
+      dimPatch.length = t.dimensions.length
     }
-    if (
-      Math.abs(b.maxX - b.minX - targetDims.length) > 1e-6 ||
-      Math.abs(b.maxZ - b.minZ - targetDims.width) > 1e-6 ||
-      Math.abs(cur.height - targetDims.height) > 1e-6
-    ) {
-      patch.dimensions = targetDims
+    if (Math.abs(b.maxZ - b.minZ - t.dimensions.width) > EPSILON) {
+      dimPatch.width = t.dimensions.width
     }
+    if (Math.abs(cur.height - t.dimensions.height) > EPSILON) {
+      dimPatch.height = t.dimensions.height
+    }
+    if (Object.keys(dimPatch).length > 0) patch.dimensions = dimPatch
     if (t.footprint && !sameFootprint(cur.footprint, t.footprint)) {
       patch.footprint = t.footprint
     }

@@ -132,17 +132,24 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
     null,
   )
   const [dragging, setDragging] = useState(false)
+  const panelRef = useRef<HTMLElement>(null)
 
-  /** 把偏移钳制到视口容器内：面板头部（含标题/关闭按钮）必须保持可交互，不能被拖出视口 */
+  /**
+   * 把偏移钳制到视口容器内：面板头部（含标题/关闭按钮）必须保持可交互，不能被拖出视口。
+   * 右边界按面板**实际渲染宽度**计算（读 DOM，而非硬编码 270px）——紧凑布局
+   * （`.wc-compact .prop-panel`）下面板宽度为 240px，硬编码会把右边界算宽 30px，
+   * 面板可被拖出视口或被复位回拉（拖拽偏移钳制，2026-08-14 审查发现）。
+   */
   const clampOffset = (offset: { x: number; y: number }): { x: number; y: number } => {
     const host = document.querySelector('.home__viewport') as HTMLElement | null
-    if (!host) return offset
+    const panelW = panelRef.current?.offsetWidth ?? 0
+    if (!host || panelW <= 0) return offset
     const hostW = host.clientWidth
     const hostH = host.clientHeight
     const margin = 8
-    // 宽度固定 270px；y 方向至少露出头部 40px 供再次拖回
+    // y 方向至少露出头部 40px 供再次拖回
     return {
-      x: Math.min(Math.max(offset.x, margin), Math.max(margin, hostW - 270 - margin)),
+      x: Math.min(Math.max(offset.x, margin), Math.max(margin, hostW - panelW - margin)),
       y: Math.min(Math.max(offset.y, margin), Math.max(margin, hostH - 40 - margin)),
     }
   }
@@ -190,6 +197,7 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
 
   return (
     <aside
+      ref={panelRef}
       className={`prop-panel ${dragging ? 'prop-panel--dragging' : ''}`}
       style={panelOffset ? { left: panelOffset.x, top: panelOffset.y, right: 'auto' } : undefined}
     >

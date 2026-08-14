@@ -323,7 +323,9 @@ export const useModelStore = create<ModelState>()(
           if (result.applied === 0) return state
           if (JSON.stringify(result.scene) === JSON.stringify(state.scene)) return state // 无实际变化
           const editLog = useChatStore.getState().editOps.slice()
-          useChatStore.getState().pushEditOps(ops)
+          // 只把实际执行的 op 记入编辑日志（result.appliedOps）：executor 逐条容错跳过失败的
+          // 条目，把整批 ops 写入会让 LLM 上下文出现「并未生效的操作」
+          useChatStore.getState().pushEditOps(result.appliedOps)
           // 离散提交点全量比对（与撤销/重做同一机制）：回到已保存状态时清除脏标记
           syncDirtyWithSaved(result.scene)
           return { scene: result.scene, ...pushPast(state, editLog) }
