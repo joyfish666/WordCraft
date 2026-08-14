@@ -95,7 +95,7 @@ Preview the production build locally: `npm run build && npm run preview`.
 ## FAQ
 
 **Q: Where do I get an API Key?**
-A: The app is pure front-end; you configure an OpenAI-compatible API Key yourself on the Settings page (DeepSeek by default). Keys stay in browser local storage (IndexedDB/localStorage) and are never sent anywhere but the provider.
+A: The app is pure front-end; you configure an OpenAI-compatible API Key yourself on the Settings page (DeepSeek by default). Keys stay in browser local storage (localStorage) and are never sent anywhere but the provider.
 
 **Q: Room classification (corridor/bathroom) doesn't work in English UI?**
 A: Room/furniture classifiers now ship **bilingual word lists** (corridor/open/private/bathroom detection, 20 furniture kinds, wall-anchored vs free-standing). In English UI the LLM receives an English system prompt and produces English names, which are matched by the English half of each word list. Boundary: classification depends on the name matching the word lists — unconventional compound names (e.g. "Master En-suite") or words outside the lists may miss. Chinese and English word lists are maintained in sync (`roomGeometry.ts` / `furniturePresets.ts` / `furniturePlacement.ts`).

@@ -95,7 +95,7 @@ npm run build    # 类型检查 + 构建
 ## FAQ
 
 **Q：API Key 从哪里获取？**
-A：应用是纯前端，API Key 由你自己在设置页配置（支持 OpenAI 兼容接口，默认 DeepSeek）。Key 只存在浏览器本地（IndexedDB/localStorage），不会上传到任何服务器。
+A：应用是纯前端，API Key 由你自己在设置页配置（支持 OpenAI 兼容接口，默认 DeepSeek）。Key 只存在浏览器本地（localStorage），不会上传到任何服务器。
 
 **Q：英文界面下房间分类（走廊/卫生间等）不生效？**
 A：分类词表已**中英双语化**（走廊/开放/私密/卫生间归属、20 类家具、独立/靠墙判定）：英文界面下 LLM 收到英文系统提示词并产出英文名，由各词表的英文半区匹配。真实边界：分类依赖名称命中词表——词表外的复合命名（如 "Master En-suite"）可能漏判。中文英文两套词表同步维护（`roomGeometry.ts` / `furniturePresets.ts` / `furniturePlacement.ts`）。
