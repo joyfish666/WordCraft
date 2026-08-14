@@ -73,7 +73,7 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 12. **公共卫生间没门**：`公共卫生间` 归属名"公共"在房屋中不存在，曾导致密封无门。规则：**归属房间不存在时，公共/公用卫生间允许与走廊开门**。
 13. **多轮修改 LLM 原样输出**：大模型经常不应用修改、原样重复上一次 JSON。提示词明确要求"基于上一个模型输出修改后的完整 JSON、不得原样重复"。即便如此仍可能不稳定（LLM 行为），必要时让用户换个说法。
 14. **入口房间保留**：`resolveCorridor` 里入口房间即使名字含「走廊」（如 LLM 为"大门开在走廊"创建的「入口走廊」）也保留为真实房间，否则被 `isCorridorName` 过滤后 `entranceRoomId` 悬空、大门回退到南边界房间、改大门位置无反应。
-15. **家具常理摆放只对生成生效（auto 模式）**：`resolveLayout` 里 auto 模式跑 `applyFurnitureConventions`，custom 自由布局保留 LLM 显式坐标。常理规则：靠墙家具贴**最近墙**（保持平行坐标）、**大面积贴墙**（长边沿墙，必要时旋转）、再**沿墙滑动避开三类禁区**（嵌套子房间、**房间门口通道**、已放置的其他家具，按 children 顺序贪心）；独立家具（茶几/餐桌/椅子等）仅约束、不贴墙。~~**normalizeContainment 不避让嵌套房间/门口——属性面板手动把家具拖进卫生间或门口不会被弹开（已知限制）**~~（**已修复**：`normalizeContainment` 现把家具推出嵌套占地（坑 47）**与门口通道**——与渲染同源的 `computeDoorZones` + `doorZoneRect` 作为禁止进入区并入 `pushOutOfRects`，手动编辑（属性面板/Gizmo/平面图）把家具拖进门洞会被推开，与生成路径一致；`pushOutOfRects` 候选对**所有**禁区生成（只对当前重叠禁区取候选时，家具推出 A 恰好撞进 B 会被拒绝而原地不动）。已知边界：嵌套房间（如卫生间）内部的**门区不参与避让**（`computeDoorZones` 只遍历顶层房间，与 `furniturePlacement` 行为一致）；门区避让会让某些"唯一安全位"家具在越界拖拽后回弹原位（此时编辑日志 diff 为空，不记 op，属坑 18 语义）。
+15. **家具常理摆放的触发范围（坑 119 起）**：auto 模板批次由 `resolveLayout` 摆放一次；**批内引入新家具**（`addFurniture`/带家具的 `addRoom`/快照路径）在 `executeOps` 末尾再摆一次（core 守卫避免 auto macro 双重摆放）；**纯 updateFurniture/moveRoom 等「修改已有家具」的批次不触发**——尊重 LLM/用户显式位置（"未明确才按常理"）。custom 自由布局保留 LLM 显式坐标。常理规则：靠墙家具贴**最近墙**（保持平行坐标）、**大面积贴墙**（长边沿墙，必要时旋转）、再**沿墙滑动避开三类禁区**（嵌套子房间、**房间门口通道**、已放置的其他家具，按 children 顺序贪心）；独立家具（茶几/餐桌/椅子等）仅约束、不贴墙。~~**normalizeContainment 不避让嵌套房间/门口——属性面板手动把家具拖进卫生间或门口不会被弹开（已知限制）**~~（**已修复**：`normalizeContainment` 现把家具推出嵌套占地（坑 47）**与门口通道**——与渲染同源的 `computeDoorZones` + `doorZoneRect` 作为禁止进入区并入 `pushOutOfRects`，手动编辑（属性面板/Gizmo/平面图）把家具拖进门洞会被推开，与生成路径一致；`pushOutOfRects` 候选对**所有**禁区生成（只对当前重叠禁区取候选时，家具推出 A 恰好撞进 B 会被拒绝而原地不动）。已知边界：嵌套房间（如卫生间）内部的**门区不参与避让**（`computeDoorZones` 只遍历顶层房间，与 `furniturePlacement` 行为一致）；门区避让会让某些"唯一安全位"家具在越界拖拽后回弹原位（此时编辑日志 diff 为空，不记 op，属坑 18 语义）。
 16. **床放置要「短边/床头贴墙」**：大面积贴墙默认长边沿墙，床必须例外——交换条件取反，短边贴墙、长边垂直墙伸入室内。改测试注意：示例床落点会随示例模型/房间几何变，`modelTree`/`useModelStore`/`planGeometry` 的相关断言随之更新。
 17. **旋转 = 交换长宽**：大面积贴墙时若长边不在墙的平行轴，通过**交换 length/width** 实现 90° 旋转（`rotationY` 同步 +90°，但**渲染器暂不读 rotationY**，视觉靠交换后的尺寸生效）。副作用：旋转后属性面板显示的"长×宽"与家具语义相反。改渲染器支持 rotationY 前，别在面板里"修正"它的尺寸。
 
@@ -329,6 +329,28 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 
 118. **`docs/ui-preview.html` 删除（清理，2026-08-14）**：2026-08-12 全新 UI 改版用的静态视觉稿（已标注"仅供参考"），改版早已落地、文件与实际实现脱节，用户确认无用。删除文件；design.md/history.md 中"基于 ui-preview.html"的历史表述保留但标注文件已删除（仅历史参考）。
 
+### 3.28 契约与工程审查批次（2026-08-15，坑 119-127：执行器契约接线 / lib 纯函数化 / 解析性能 / 同源收拢 / i18n 与 UI 裁剪 / 文档防漂移）
+
+> 全面审查（框架/实现/UI/文档四视角）后按优先级落地的批次。核心动机：①「确定性执行器」的两处契约脱节（调用方传参语义与执行器实现不符、纯函数管线直读全局 store）；② 解析容错链最末一级存在 O(n²) 性能隐患；③ 摘要邻接表与墙体判定是两套独立实现；④ 文档中精确测试数多处漂移。
+
+119. **chat.ts 的 furnitureConventions 传参与执行器契约脱节——增量批次家具失去常理摆放兜底**（审查发现，2026-08-15）：`chat.ts` 的 `furnitureConventions = ops.some(o => o.op === 'macro' && o.name !== 'custom')` 是坑 105-114 批次**之前**的调用方语义（当时执行器没有内部守卫）；该批次把「避免 auto macro 双重摆放」的守卫做进了 `executeOps`（`!hasAutoMacro(ops) || ops.some(FURNITURE_AFFECTING_OPS)`），但 chat.ts 未同步——结果 `core.ts` 的 `!hasAutoMacro` 分支在 chat 路径**永远不可达**：纯增量批次（多轮「在主卧加一张床」→ 只有 `addFurniture`，或 custom macro + addFurniture）永远不触发常理摆放（不贴墙、不交换长宽、不补配套）。而 `executor.test.ts` 的契约测试（custom macro + addFurniture + `furnitureConventions: true` → 床贴墙）证明执行器侧语义是「批内有新家具来源就跑」。修复（chat.ts `resolveRawOutput`）：**触发条件 = 批内引入需要摆放的新家具**——`hasAutoMacro || addFurniture || addRoom（带 furniture）`；**配套补全与摆放拆分**（新增 `executeOps` 选项 `furnitureComplete`，默认跟随 `furnitureConventions` 保持兼容）：auto 模板/快照路径补全，增量批次 `furnitureComplete: false` 只摆放不补全——否则「用户删掉床头柜」后任意一次 addFurniture 批次都会把配套件重新补回（补全的幂等检查只看「已有同类」，不记删除）。⚠️ 不要改成无条件传 true：`updateFurniture`（LLM 按用户要求把沙发移到房间中央）会被重摆贴墙、违背显式要求。回归：chat 级「纯 addFurniture 批次贴墙 + 不补床头柜」「macro auto 批次仍补床头柜」+ executor 级 `furnitureComplete: false/缺省` 两条。
+
+120. **lib 纯函数管线直读全局 store——「确定性执行器」输出随界面语言变化**（审查发现，2026-08-15）：`furnitureCompleteness.ts` 为取补全件名称直读 `useSettingsStore.getState().language`（`companionName()`），而它被 `applyFurnitureConventions → executeOps` 调用——**同一批 ops + 同一场景，输出取决于调用时刻的 UI 语言**，违反 §2 原则 4（确定性）；测试也被迫在 `beforeEach` 里摆全局状态（注释自认「jsdom 默认跟随系统为英文」），存在测试顺序敏感。修复：**语言改为调用链参数**——`executeOps(scene, ops, { …, lang })` → `applyMacro(scene, op, lang)` → `resolveLayout(scene, lang)` / `applyFurnitureConventions(scene, lang, { complete })` → `completeRoomFurniture(room, lang)`；边界调用方（chat.ts 已有 lang、HomePage 加载示例时 `createSampleModel(useSettingsStore.getState().language)`）在入口读一次 store 传入；lib 全部恢复纯函数（默认 `lang='zh'`，既有调用零改动）。**边界判断**：`t()`/`debugLog` 读 store 只影响展示/日志，属既定边界；这一处改变**模型输出本身**，越界。回归：`furnitureCompleteness.test.ts` 移除 store 摆弄，新增「补全件名称随传入语言」用例。
+
+121. **`tryParseModelJson` 尾部修剪 O(n²)——超长垃圾回复冻结主线程**（审查发现，2026-08-15）：容错链最后一级「尾部垃圾修剪」从 `json.length-1` 到 1 **逐位** `slice + JSON.parse`——n≈200KB 的垃圾回复在最坏路径（前 5 级容错全失败）下是 ~4×10¹⁰ 字符运算，主线程卡死数十秒且无超时/中止。修复：**只尝试修剪末尾 `MAX_TRIM_WINDOW = 256` 个字符内的裁剪点**——真实尾部垃圾（多打的 `}`、截断残留）只有几个到几十个字符，超长窗口没有价值；窗口外直接放弃走报错路径。回归：窗口内 200 字符垃圾恢复 trim、300 字符垃圾返回 null、100KB 纯垃圾在 5s 内返回 null（旧实现此用例挂到超时）。
+
+122. **摘要邻接表是墙体判定的独立复制实现（文档自称「同源」实为两套）**（审查发现，2026-08-15）：`chat.ts` 的 `topLevelAdjacency` 自带 `edgesOf` 边提取 + 中心点方向比较，与 `roomGeometry` 的 `footprintEdges`/`neighborsAlongEdge`（`computeWallPlan` 共用）是两套独立代码——边解析已统一进 `edgeMetaOf`（2026-08-14 审查批次）但摘要这处没走，重叠容差写法也不一致，摘要与墙体渲染存在分歧风险。修复：**导出 `neighborsAlongEdge`/`NeighborAlongEdge`，摘要邻接表改为复用** `footprintEdges + neighborsAlongEdge`；方位 = 本房间共享边的**外向法线**（与墙体门向判定同源，替代中心点比较）；邻居按房间列表顺序排序保持输出稳定（与旧「房间对遍历」顺序一致，既有断言零改动）。今后改邻接判定只动 `roomGeometry` 一处。
+
+123. **中英双份系统提示词靠人工同步，无机器保证**（审查发现，2026-08-15）：`buildSystemPrompt` 中/英两份 ~3KB 规则文本一一对应，但零校验——未来加 op/改规则漏改一份就是中英文行为分叉（分类词表有双语用例锁，提示词没有）。修复：`chat.test.ts` 新增一致性测试——断言两份提示词的 `{"op":"..."}` 白名单集合相等（且 = 14 种）与规则序号集合相等。以后改提示词由测试强制双份同步。
+
+124. **空场景默认整屋名硬编码中文「未命名房屋」**（审查发现，2026-08-15）：`emptyScene()` 默认名是 UI 层概念却硬编码在语言无关的几何模块——英文界面首次生成且 LLM 未给整屋名时，模型名/聊天摘要/分享记录显示中文名（`executor.test.ts` 还锁死了该默认值）。修复：i18n 新增 `home.unnamedHouse`（zh 未命名房屋 / en Unnamed House），chat.ts 边界 `emptyScene(translate(lang, 'home.unnamedHouse'))` 注入；executor 保持语言无关。回归：英文界面 addRoom-only 批次 → 整屋名 Unnamed House。
+
+125. **属性面板未按节点类型裁剪语义无效的字段——编辑静默无效**（审查发现，2026-08-15）：`updateNodeFields` 对**整屋只接受 name**、对**房间忽略 position.y**（微调 ↑/↓ 同样无效），但属性面板对任何选中节点都渲染 长宽高/X·Y·Z/微调按钮——用户输入被静默丢弃（文档虽注明"位置 Y 对房间无效"，UI 未体现）。修复（PropertyPanel.tsx）：整屋选中只保留名称输入（尺寸/位置/微调区块整体隐藏）；房间选中禁用 Y 输入与 ↑/↓ 微调（title 说明「房间高度由层高决定」），X/Z 与尺寸输入不受影响。新增 i18n key `property.yRoomDisabled`/`property.nudgeUpRoomDisabled`/`property.nudgeDownRoomDisabled`。回归：PropertyPanel 新增整屋/房间两个用例。
+
+126. **首帧 html lang 硬编码中文**（审查发现，2026-08-15）：`index.html` 的 `lang="zh-CN"` 在 React 挂载前固定，英文系统用户首帧闪出中文 lang（影响读屏器与字体渲染选择，与 `wc-compact` 首帧预置同款问题）。修复：`index.html` 新增内联脚本按 `navigator.language` 首帧预置 `document.documentElement.lang`（App.tsx 挂载后接管，双写一致）。
+
+127. **文档精确测试数多处漂移（614/704/705 并存）**（审查发现，2026-08-15）：`architecture.md` 页脚「614 用例全绿」（坑 105-114 批次遗留）与 §9 标题「704 用例」矛盾、README 双语写 704、实际 705（本批次后 717）；design.md 进度块停在 614 且缺坑 115-118 批次块。根因：精确数在 5+ 处手工维护，每次加测试都要改多处，必然漂移。修复：**文档一律不再写死精确数字**（用「700+ 用例」），精确数以 `npm test` 输出为准；CHANGELOG 等历史记录保留当时数字（历史事实）；design.md 补坑 115-118 批次进度块。
+
 ## 6. 快速文件地图
 
 | 需求 | 改哪里 |
@@ -388,6 +410,12 @@ git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 pus
 | 工程化（format 门修复/CI build 门/deploy 测试门/three-stdlib/audit）【2026-08-13 审查批次后续】 | `.github/workflows/ci.yml`、`deploy.yml`、`package.json`（`three-stdlib`） |
 | 全屋唯一卫生间公共语义（坑 86）【2026-08-13 用户反馈】 | `lib/roomGeometry.ts`（`computeWallPlan` 的 `bathroomDoorTargets` 预扫描：顶层卫生间计数 + 走廊 > 开放空间 > 邻居 id 最小） |
 | 家具常配套件补全（坑 87）【2026-08-13 用户反馈】 | `lib/furnitureCompleteness.ts`（`completeRoomFurniture`/`hasExcludedCompleteness`，新模块）+ `furniturePlacement.ts`（visitRoom 接入）+ `chat.ts` 提示词第 6 条（自动补齐说明 + description 排除通道） |
+| 家具摆放触发范围与摆放/补全拆分（坑 119）【2026-08-15】 | `chat.ts`（`resolveRawOutput`：`furnitureConventions = hasAutoMacro || addFurniture || 带家具的 addRoom`；`furnitureComplete = hasAutoMacro`）+ `executor/core.ts`（`executeOps` 新增 `furnitureComplete` 选项，默认跟随 `furnitureConventions`）+ `furniturePlacement.ts`（`applyFurnitureConventions(scene, lang, { complete })`） |
+| lib 纯函数化：语言参数下传（坑 120）【2026-08-15】 | `furnitureCompleteness.ts`（`completeRoomFurniture(room, lang)`，移除 useSettingsStore 依赖）+ `furniturePlacement.ts` + `layout.ts`（`resolveLayout(scene, lang)`）+ `executor/rooms.ts`（`applyMacro(scene, op, lang)`）+ `executor/core.ts`（`executeOps(..., { lang })`/`applyOp(scene, op, lang)`）+ `sampleModel.ts`（`createSampleModel(lang)`）+ `pages/HomePage.tsx`（加载示例时注入界面语言） |
+| 摘要邻接表单源化（坑 122）【2026-08-15】 | `lib/roomGeometry.ts`（导出 `neighborsAlongEdge`/`NeighborAlongEdge`）+ `lib/chat.ts`（`topLevelAdjacency` 复用 `footprintEdges + neighborsAlongEdge`，方位 = 共享边外向法线，邻居按房间列表顺序排序） |
+| 解析容错链尾部修剪限窗（坑 121）【2026-08-15】 | `lib/chat.ts`（`tryParseModelJson` 的 `MAX_TRIM_WINDOW = 256`，消除 O(n²) 最坏路径） |
+| 属性面板按节点类型裁剪无效字段（坑 125）【2026-08-15】 | `components/viewport/PropertyPanel.tsx`（整屋只留名称；房间禁用 Y 输入与 ↑/↓ 微调）+ i18n `property.yRoomDisabled`/`property.nudgeUpRoomDisabled`/`property.nudgeDownRoomDisabled` |
+| 空场景默认名 i18n（坑 124）/ 首帧 lang（坑 126）【2026-08-15】 | `lib/executor/core.ts`（`emptyScene(name)` 保持语言无关）+ `lib/chat.ts`（`emptyScene(translate(lang, 'home.unnamedHouse'))`）+ i18n `home.unnamedHouse` + `index.html`（内联脚本按 navigator.language 预置 html lang） |
 | 渲染共面 z-fighting 审计（坑 88）【2026-08-13 用户反馈】 | `ModelNodeView.tsx`（踢脚线/勒脚端盖内收 `END_CLEAR` 2mm，墙转角不再互掐）+ `lib/furniturePresets.ts`（沙发扶手/靠背/灶台控制条与炉头/浴缸内胆/书架背板/梳妆镜/床头板/水箱/龙头/电视屏逐对错位）+ `furniturePresets.test.ts` 共面审计 61 用例 |
 | 深链接 404 回退（坑 89）【2026-08-13】 | `public/404.html`（路径编码进查询串重定向到首页）+ `index.html` 内联脚本（`?/` 前缀 → `history.replaceState` 还原路径）；改 `vite.config.ts` 的 `base`/仓库名时同步 `pathSegmentsToKeep` |
 | 应用内确认/提示对话框（坑 90）【2026-08-13】 | `components/ui/ConfirmDialog.tsx`（`ConfirmProvider`，挂 `main.tsx`）+ `components/ui/useConfirm.ts`（`useConfirm()`：`confirm`/`alertMessage`，独立文件避 fast-refresh 告警）+ `styles/dialog.css`（`.dialog__message`）；替换 HomePage/useGeneration/ProjectLibraryDialog/ShareDialog/PlanEditLayer 共 10 处 `window.confirm/alert` |

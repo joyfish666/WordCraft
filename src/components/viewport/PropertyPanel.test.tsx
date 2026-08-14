@@ -107,4 +107,34 @@ describe('PropertyPanel', () => {
     fireEvent.click(screen.getByTitle('关闭属性面板'))
     expect(useModelStore.getState().selectedId).toBeNull()
   })
+
+  it('整屋选中时只保留名称输入（尺寸/位置/微调对整屋无几何语义，坑 125）', () => {
+    const house = createSampleModel().root
+    render(<PropertyPanel node={house} />)
+    expect(screen.getByDisplayValue('示例小屋')).toBeInTheDocument()
+    // 长/宽/高/X/Y/Z 输入与微调按钮全部不渲染（此前可编辑但提交静默无效）
+    expect(screen.queryByLabelText('长')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('宽')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('高')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('X')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Y')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Z')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('向东移')).not.toBeInTheDocument()
+  })
+
+  it('房间选中时 Y 输入与上下微调禁用（房间高度由层高派生，坑 125）', () => {
+    const scene = createSampleModel()
+    const room = scene.root.levels[0]!.rooms.find((r) => r.name === '客厅')!
+    render(<PropertyPanel node={room} />)
+    // Y 输入禁用并给出说明
+    expect(screen.getByLabelText('Y')).toBeDisabled()
+    expect(screen.getByLabelText('Y')).toHaveAttribute('title', '房间高度由层高决定，不可单独调整')
+    // 上下微调禁用（↑↓ 两个按钮同标题），X/Z 方向正常
+    for (const btn of screen.getAllByTitle('房间不可上下移动（高度由层高决定）')) {
+      expect(btn).toBeDisabled()
+    }
+    expect(screen.getByTitle('向东移')).toBeEnabled()
+    // 尺寸输入仍可编辑（房间尺寸 = 足迹缩放）
+    expect(screen.getByLabelText('长')).toBeEnabled()
+  })
 })

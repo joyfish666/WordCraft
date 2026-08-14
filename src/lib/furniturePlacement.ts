@@ -11,6 +11,7 @@ import {
   type DoorZoneInfo,
 } from './roomGeometry'
 import type { FurnitureNode, RoomNode, SceneModel } from '../types/model'
+import type { Language } from '../types/settings'
 
 /**
  * 家具常理摆放：对生成模型做一次确定性兜底，让家具符合日常习惯。
@@ -256,20 +257,28 @@ function placeWallAnchored(
   return { pos, swapDims: false }
 }
 
-/** 递归处理一个房间：先处理嵌套房间，再约束本房间内的家具（按顺序逐个放置并互相避让） */
-function visitRoom(node: RoomNode, doorZones: Map<string, DoorZoneInfo[]>): RoomNode {
+/** 递归处理一个房间：先处理嵌套房间，再约束本房间内的家具（按顺序逐个放置并互相避让）。
+ *  @param lang 补全件名称语言（透传 completeRoomFurniture，见坑 120）
+ *  @param complete 是否执行常配套件补全（仅整屋生成语义：auto 模板/快照路径；增量批次不补全） */
+function visitRoom(
+  node: RoomNode,
+  doorZones: Map<string, DoorZoneInfo[]>,
+  lang: Language,
+  complete: boolean,
+): RoomNode {
   const keepOuts: InnerBounds[] = []
   const nestedRooms = node.nestedRooms.map((child) => {
     keepOuts.push(nestedKeepOutRect(child))
-    return visitRoom(child, doorZones)
+    return visitRoom(child, doorZones, lang, complete)
   })
 
   const bounds = roomInnerBounds(node)
   const roomDoors = (doorZones.get(node.id) ?? []).map((z) => doorZoneRect(node, z))
   const placedBoxes: InnerBounds[] = []
   // 常配套件补全（坑 87）：书桌→椅、餐桌→餐椅、床→床头柜、沙发→茶几；
-  // 用户明确排除（description 含"不要"等）或已有同类时跳过；幂等
-  const furniture = completeRoomFurniture(node).map((child) => {
+  // 用户明确排除（description 含"不要"等）或已有同类时跳过；幂等。
+  // complete=false（增量批次）时跳过补全——避免把用户已删除的配套件重新补回（坑 119）
+  const furniture = (complete ? completeRoomFurniture(node, lang) : node.furniture).map((child) => {
     const f = child
     const keep = [...placedBoxes, ...keepOuts, ...roomDoors]
     const { pos, swapDims } = isWallAnchored(f.name)
@@ -308,11 +317,21 @@ function visitRoom(node: RoomNode, doorZones: Map<string, DoorZoneInfo[]>): Room
   return { ...node, furniture, nestedRooms }
 }
 
-/** 对整个场景应用家具常理摆放（不可变，仅调整家具位置/朝向） */
-export function applyFurnitureConventions(scene: SceneModel): SceneModel {
+/**
+ * 对整个场景应用家具常理摆放（不可变，仅调整家具位置/朝向）。
+ * @param lang 补全件名称语言（纯函数参数，调用方在边界传入界面语言，见坑 120）
+ * @param options.complete 是否执行常配套件补全，默认 true（auto 模板/快照路径）；
+ *       增量批次传 false——只摆放新家具、不补全全屋（坑 119）
+ */
+export function applyFurnitureConventions(
+  scene: SceneModel,
+  lang: Language = 'zh',
+  options?: { complete?: boolean },
+): SceneModel {
   const level = scene.root.levels[0]
   if (!level) return scene
   const rooms = level.rooms
+  const complete = options?.complete ?? true
   // 与渲染同源的门口位置：避免家具堵住房间门（含入户门；方向随 entranceDir，默认南）
   const doorZones = computeDoorZones(rooms, {
     entrance: scene.root.entranceDir ?? 'south',
@@ -322,7 +341,7 @@ export function applyFurnitureConventions(scene: SceneModel): SceneModel {
     ...scene,
     root: {
       ...scene.root,
-      levels: [{ ...level, rooms: rooms.map((r) => visitRoom(r, doorZones)) }],
+      levels: [{ ...level, rooms: rooms.map((r) => visitRoom(r, doorZones, lang, complete)) }],
     },
   }
 }

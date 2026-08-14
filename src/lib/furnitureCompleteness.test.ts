@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { completeRoomFurniture, hasExcludedCompleteness } from './furnitureCompleteness'
 import { furnitureKind } from './furniturePresets'
-import { useSettingsStore } from '../store/useSettingsStore'
 import type { FurnitureNode, RoomNode } from '../types/model'
 
 /** 构造房间（家具 position 为绝对坐标，v3 语义） */
@@ -44,10 +43,8 @@ function f(id: string, name: string, x: number, z: number, description?: string)
 }
 
 describe('completeRoomFurniture 常配套件补全（坑 87）', () => {
-  beforeEach(() => {
-    // 语言显式设为中文：补全件名称随界面语言（jsdom 默认跟随系统为英文）
-    useSettingsStore.setState({ language: 'zh' })
-  })
+  // 语言由调用方显式传入（坑 120：lib 纯函数，不读全局 store）——默认 zh，
+  // 需要英文名时显式传 'en'（见「补全件名称随传入语言」用例）
 
   it('书桌 → 补 1 把椅子（使用者侧，书桌 -z 侧 0.6m）', () => {
     const desk = f('desk', '书桌', 0, 0)
@@ -140,5 +137,15 @@ describe('completeRoomFurniture 常配套件补全（坑 87）', () => {
     const out = completeRoomFurniture(room([f('desk', '书桌', -1, 0), f('bed', '双人床', 1, 0)]))
     expect(out.filter((x) => x.name === '椅子')).toHaveLength(1)
     expect(out.filter((x) => x.name === '床头柜')).toHaveLength(2)
+  })
+
+  it('补全件名称随传入语言（en → 英文名；不依赖全局 store 状态，坑 120）', () => {
+    const out = completeRoomFurniture(room([f('desk', 'Desk', 0, 0)]), 'en')
+    const chair = out.find((x) => x.name === 'Chair')!
+    expect(chair).toBeDefined()
+    expect(furnitureKind(chair.name)).toBe('chair')
+    // 中文默认参数互不影响：同一输入按语言各得各的名称
+    const zhOut = completeRoomFurniture(room([f('desk', '书桌', 0, 0)]), 'zh')
+    expect(zhOut.find((x) => x.name === '椅子')).toBeDefined()
   })
 })

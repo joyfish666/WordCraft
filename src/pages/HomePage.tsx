@@ -240,7 +240,8 @@ export function HomePage() {
     if (!(await confirmDiscardUnsaved(true))) return
     useProjectStore.getState().clearProject()
     useChatStore.getState().clearGenerationHistory()
-    setScene(createSampleModel())
+    // 配套补全件名称随界面语言（lib 纯函数化后由边界传入，见 notes 坑 120）
+    setScene(createSampleModel(useSettingsStore.getState().language))
   }
 
   return (

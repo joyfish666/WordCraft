@@ -24,6 +24,14 @@
       })()
     </script>
     <script>
+      // 首帧前预置 html lang（与 App.tsx 的 documentElement.lang 同步逻辑一致）：
+      // 英文系统用户首帧不再闪出中文 lang/标题环境（坑 126）；React 挂载后由应用接管
+      try {
+        var lang = (navigator.language || 'zh').toLowerCase()
+        if (lang.indexOf('zh') !== 0) document.documentElement.lang = 'en'
+      } catch (e) {}
+    </script>
+    <script>
       // 首帧前预判移动端紧凑布局（对应 OrientationGuard 的 wc-compact，避免横屏手机
       // 首帧闪出桌面布局；CSS 样式由 document.documentElement 上的 wc-compact 类门控）
       try {

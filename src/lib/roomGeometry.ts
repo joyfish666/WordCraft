@@ -271,7 +271,7 @@ export interface WallPlanOptions {
   entranceRoomId?: string
 }
 
-interface NeighborAlongEdge {
+export interface NeighborAlongEdge {
   room: RoomNode
   /** 墙局部坐标（边起点为 0） */
   from: number
@@ -775,7 +775,9 @@ export function computeDoorZones(
 }
 
 /** 沿某边与对侧房间求邻居（内部辅助：供 computeWallPlan 使用） */
-function neighborsAlongEdge(
+/** 沿一条边找相邻房间：与它共线（|线差| ≤ ADJACENCY_GAP）且区间重叠的所有邻居。
+ *  摘要邻接表（chat.ts buildSceneSummary）与墙体方案共用本判定——摘要与渲染必须同源（坑 122） */
+export function neighborsAlongEdge(
   edge: WallEdge,
   rooms: RoomNode[],
   edgesByRoom: Map<string, WallEdge[]>,

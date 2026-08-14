@@ -23,6 +23,7 @@ import type {
   SceneModel,
   SceneModelV2,
 } from '../types/model'
+import type { Language } from '../types/settings'
 
 const SIDES = ['north', 'south', 'east', 'west'] as const
 type LivingSide = (typeof SIDES)[number]
@@ -33,8 +34,9 @@ type LivingSide = (typeof SIDES)[number]
  * - custom 模式：使用 LLM 提供的房间绝对坐标
  * - 房间一律转为 4 点矩形足迹（v3 支持任意正交多边形，P1 平铺仍为矩形）
  * - 家具位置统一由「相对房间中心」偏移为绝对坐标，并经 normalizeContainment 约束进墙内
+ * @param lang 配套补全件名称语言（纯函数参数，调用方在边界传入界面语言，见坑 120）
  */
-export function resolveLayout(scene: SceneModelV2): SceneModel {
+export function resolveLayout(scene: SceneModelV2, lang: Language = 'zh'): SceneModel {
   const layout = scene.root.layout
   logDebug('布局引擎开始', {
     mode: layout.mode,
@@ -50,7 +52,7 @@ export function resolveLayout(scene: SceneModelV2): SceneModel {
     // 若先 normalize 再摆放：家具会被推到"零重叠但位置差"的角落（如床被推出门口
     // 禁区后悬在房间中部），后续"就近贴墙"会被带偏，把本该留给其他家具的墙面占掉
     // （复现：主卧床被推北上墙，衣柜无处可放、与床重叠）
-    model = applyFurnitureConventions(model)
+    model = applyFurnitureConventions(model, lang)
     model = normalizeContainment(model)
     return withLayoutLog(model)
   }

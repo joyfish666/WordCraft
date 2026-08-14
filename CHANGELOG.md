@@ -2,7 +2,26 @@
 
 本文件记录 WordCraft 的功能、修复与工程化变更。版本号沿用 package.json（单一来源）。
 
-## Unreleased（2026-08-14 全面审查批次，版本号未升）
+## Unreleased（2026-08-15 契约与工程审查批次，版本号未升）
+
+### 2026-08-15 契约与工程审查批次（坑 119-127，全面审查落地，705 → 717 用例）
+
+#### 修复与健壮性
+
+- **执行器契约接线修复（坑 119）**：`chat.ts` 的 `furnitureConventions` 传参与执行器内部守卫脱节——纯增量批次（多轮「在主卧加一张床」→ 只有 `addFurniture`，或 custom macro + addFurniture）此前从不触发常理摆放（不贴墙、不交换长宽），而执行器契约（`executor.test.ts`）明确支持该场景。修复：触发条件改为「批内引入需要摆放的新家具」（auto macro / `addFurniture` / 带家具的 `addRoom`）；新增 `executeOps` 选项 `furnitureComplete` 把「摆放」与「配套补全」拆开——**补全只属于整屋生成语义**（auto 模板/快照路径），增量批次只摆放不补全（避免用户删掉的配套件在任意 addFurniture 批次被重新补回）。纯 `updateFurniture`/`moveRoom` 批次仍不触发（尊重显式位置）。
+- **lib 纯函数化（坑 120）**：`executeOps`/`applyMacro`/`resolveLayout`/`applyFurnitureConventions`/`completeRoomFurniture` 全线增加 `lang` 参数——配套补全件名称不再直读 `useSettingsStore`，「确定性执行器」恢复「同一输入同一输出」；边界调用方（`chat.ts`、HomePage 加载示例）在入口注入界面语言。`furnitureCompleteness.test.ts` 移除全局 store 摆弄（此前测试依赖环境语言，存在顺序敏感）。
+- **解析性能（坑 121）**：`tryParseModelJson` 尾部垃圾修剪限窗 256 字符——消除 O(n²) 最坏路径（此前 200KB 垃圾回复在 5 级容错全失败后会逐位 slice+parse 冻结主线程数十秒）；新增 100KB 垃圾限时回归。
+- **摘要邻接表单源化（坑 122）**：`topLevelAdjacency` 复用 `roomGeometry` 的 `footprintEdges` + `neighborsAlongEdge`（导出），方位改用共享边外向法线——摘要与墙体判定真正同源（此前是两套独立实现，边解析未走统一收拢的 `edgeMetaOf`，存在分歧风险）；邻居排序保持既有输出顺序。
+- **提示词一致性测试（坑 123）**：中英双份系统提示词的 `{"op":"..."}` 白名单（=14 种）与规则序号集合断言相等——改提示词由测试强制双份同步。
+- **空场景默认名 i18n（坑 124）**：`emptyScene` 默认名不再硬编码中文——chat.ts 边界按语言注入 `home.unnamedHouse`（zh 未命名房屋 / en Unnamed House）。
+- **属性面板按节点类型裁剪（坑 125）**：整屋选中只保留名称输入（尺寸/位置/微调区块隐藏——此前可编辑但 `updateNodeFields` 静默忽略）；房间选中禁用 Y 输入与 ↑/↓ 微调（房间高度由层高派生，此前编辑静默无效），新增 i18n 说明 key。
+- **首帧 lang 跟随系统（坑 126）**：`index.html` 内联脚本按 `navigator.language` 预置 `document.documentElement.lang`（与 App.tsx 双写一致），英文系统用户首帧不再闪出中文 lang。
+
+#### 文档与工程
+
+- 测试数 705 → 717（新增 12 用例：chat 7 / executor 2 / furnitureCompleteness 1 / PropertyPanel 2）。
+- **文档测试数防漂移（坑 127）**：architecture/README 不再写死精确用例数（改「700+」，精确数以 `npm test` 为准）；design.md 补坑 115-118 进度块（此前缺）；architecture 页脚从「614 用例全绿」刷新并追加本批次；notes.md 新增 3.28 节（坑 119-127）与文件地图行。
+- 全门绿：lint / format:check / typecheck / test（717）/ build。
 
 ### 2026-08-14 灶台闪烁根因 + 地面材质 + 清理批次（坑 116-118）
 
