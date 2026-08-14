@@ -227,23 +227,32 @@ describe('包围盒约束（四朝向）', () => {
   )
 })
 
-describe('共面审计（坑 88：z-fighting 只发生在「同法向 + 共面 + 重叠」的面之间）', () => {
-  // 每类 × 全档尺寸 × 四朝向：任意两个部件的任意两个 box 面不得
+describe('共面审计（坑 88/116：z-fighting 只发生在「同法向 + 共面 + 重叠」的面之间）', () => {
+  // 每类 × 全档尺寸 × 四朝向：任意两个部件的任意两个面不得
   // 「同法向 + 同一平面 + 面内区间重叠」——否则渲染时互掐闪烁。
-  // 圆柱部件无平面，跳过。
+  // 圆柱部件的顶盖/底盖是平面圆面（坑 116：炉头/圆桌中柱此前因「圆柱跳过」漏审），
+  // 与 box 面一样纳入检测；圆柱侧面是曲面，无平面，跳过。
   interface Face {
     n: [number, number, number]
     plane: number
     a: [number, number]
     b: [number, number]
+    /** disc（圆柱顶/底盖）半径；box 面为 undefined */
+    r?: number
   }
   function facesOf(p: FurniturePart): Face[] {
-    if (p.shape === 'cylinder') return []
     const [sx, sy, sz] = p.size
     const [cx, cy, cz] = p.center
     const hx = sx / 2
     const hy = sy / 2
     const hz = sz / 2
+    if (p.shape === 'cylinder') {
+      // 顶盖（法线 +y）/底盖（法线 -y）：面内区间即圆心 ± 半径（a/b 轴均取 x/z）
+      return [
+        { n: [0, 1, 0], plane: cy + hy, a: [cx - hx, cx + hx], b: [cz - hz, cz + hz], r: hx },
+        { n: [0, -1, 0], plane: cy - hy, a: [cx - hx, cx + hx], b: [cz - hz, cz + hz], r: hx },
+      ]
+    }
     return [
       { n: [1, 0, 0], plane: cx + hx, a: [cy - hy, cy + hy], b: [cz - hz, cz + hz] },
       { n: [-1, 0, 0], plane: cx - hx, a: [cy - hy, cy + hy], b: [cz - hz, cz + hz] },
@@ -255,8 +264,37 @@ describe('共面审计（坑 88：z-fighting 只发生在「同法向 + 共面 +
   }
   const sameNormal = (x: Face, y: Face): boolean =>
     x.n[0] === y.n[0] && x.n[1] === y.n[1] && x.n[2] === y.n[2]
-  const overlap = (x: [number, number], y: [number, number]): boolean =>
+  const overlap1d = (x: [number, number], y: [number, number]): boolean =>
     Math.min(x[1], y[1]) - Math.max(x[0], y[0]) > 1e-6
+  /** 圆面（圆心 c、半径 r，沿 a 轴）与矩形面（a 轴区间 × b 轴区间）是否在面内重叠 */
+  const overlapRectDisc = (
+    ra: [number, number],
+    rb: [number, number],
+    c: number,
+    r: number,
+  ): boolean => {
+    const nearest = c < ra[0] ? ra[0] : c > ra[1] ? ra[1] : c
+    if (!overlap1d([nearest - r, nearest + r], rb)) return false
+    return Math.abs(nearest - c) < r - 1e-6
+  }
+  const facesOverlap = (x: Face, y: Face): boolean => {
+    if (x.r === undefined && y.r === undefined) {
+      return overlap1d(x.a, y.a) && overlap1d(x.b, y.b)
+    }
+    if (x.r !== undefined && y.r !== undefined) {
+      const du = (x.a[0] + x.a[1]) / 2 - (y.a[0] + y.a[1]) / 2
+      const dv = (x.b[0] + x.b[1]) / 2 - (y.b[0] + y.b[1]) / 2
+      return Math.sqrt(du * du + dv * dv) < x.r + y.r - 1e-6
+    }
+    const rect = x.r === undefined ? x : y
+    const disc = x.r === undefined ? y : x
+    // 圆面在 xz 平面（法线 ±y）：矩形 a/b 区间即 (x, z)，与圆心/半径同系
+    if (rect.n[1] !== 0)
+      return overlapRectDisc(rect.a, rect.b, (disc.a[0] + disc.a[1]) / 2, disc.r!)
+    // 圆面法线 ±y 不变（圆柱绕 Y 轴），故 box 的 ±x/±z 面与圆面法线必不同，
+    // 不会出现「圆面法线在 x/z」的情况；此处只处理 ±y 的矩形面。
+    return false
+  }
 
   const COMBOS: Array<[string, FurnitureKind, number, number, number]> = [
     ...SIZES,
@@ -282,7 +320,7 @@ describe('共面审计（坑 88：z-fighting 只发生在「同法向 + 共面 +
             const b = all[j]!
             if (!sameNormal(a.face, b.face)) continue
             if (Math.abs(a.face.plane - b.face.plane) > 1e-7) continue
-            if (overlap(a.face.a, b.face.a) && overlap(a.face.b, b.face.b)) {
+            if (facesOverlap(a.face, b.face)) {
               throw new Error(
                 `facing=${facing} ${kind} 部件 ${a.part} 与 ${b.part} 的面共面重叠（法向 ${a.face.n}、平面 ${a.face.plane}）——z-fighting`,
               )

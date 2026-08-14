@@ -515,7 +515,11 @@ function roundTableParts(L: number, H: number, W: number): FurniturePart[] {
   const topY = yFromFloor(H - topTh / 2, H)
   const legR = clamp(r * 0.12, 0.03, 0.06)
   const legH = H - topTh
-  const legY = yFromFloor(legH / 2, H)
+  // 中柱底面抬离地板 1mm（坑 116）：原实现中柱底盖与底座底盖同在地板平面（y=0），
+  // 同法向（朝下）同平面且圆面重叠——从正下方看两片元深度相同互掐闪烁。
+  // 抬 1mm 后底盖平面离开底座底盖平面；底盖仍在底座内部（y=0.001 < baseH），
+  // 任何视角被底座实体遮挡、永远不可见，不再与任何面竞争。
+  const legY = yFromFloor(legH / 2 + 0.001, H)
   const baseR = clamp(r * 0.35, 0.1, 0.2)
   const baseH = clamp(H * 0.06, 0.03, 0.05)
   const baseY = yFromFloor(baseH / 2, H)
@@ -685,9 +689,12 @@ function stoveParts(L: number, H: number, W: number): FurniturePart[] {
   const topTh = clamp(H * 0.07, 0.03, 0.05)
   const topY = yFromFloor(H - topTh / 2, H)
   const burnerR = clamp(Math.min(L, W) * 0.12, 0.04, 0.08)
-  // 炉头顶面高出台面 1.9cm、底面嵌入 1mm（坑 88）：旧实现整个炉头埋进台面内部
-  // （topTh 厚 3~5cm，炉头 2cm 高永远被埋）——不可见且无意义
-  const burnerY = yFromFloor(H + 0.009, H)
+  // 炉头整体悬浮台面上方（底面 +3mm、顶面 +2.3cm，坑 116）：坑 88 的「底面嵌入台面 1mm」
+  // 在接近水平的视角下（相机高度 ≈ 台面高度），嵌入台面内的 1mm 环带与台面顶面投影重叠
+  // 在同一像素带（<1px）且深度几乎相同（垂直差几乎不投影到视线深度）——深度缓冲无法
+  // 区分，移动相机时片元胜负随机抖动（闪烁），停止后视角固定才稳定。悬浮 3mm 使投影
+  // 偏移 >1px、无像素重叠带，任何视角都无深度竞争。
+  const burnerY = yFromFloor(H + 0.013, H)
   const qx = L / 4
   const qz = W / 4
   const burners: FurniturePart[] = (
