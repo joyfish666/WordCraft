@@ -4,6 +4,28 @@
 
 ## Unreleased（2026-08-14 全面审查批次，版本号未升）
 
+### 2026-08-14 灶台闪烁根因 + 地面材质 + 清理批次（坑 116-118）
+
+#### 修复与健壮性
+
+- **灶台炉头平视闪烁（z-fighting 复现，坑 116）**：坑 88 让炉头「底面嵌入台面 1mm」——近水平视角下嵌入环带与台面顶面投影重叠在同一像素带（<1px）且深度几乎相同，深度缓冲无法区分 → 移动摄像头时片元胜负抖动闪烁，停止后视角固定才稳定。修复：炉头**整体悬浮台面上方**（底面 +3mm、顶面 +2.3cm），投影偏移 >1px、无像素重叠带；**共面审计纳入圆柱顶盖/底盖圆面**（此前"圆柱跳过"是漏网根因），顺带修复**圆桌中柱底盖与底座底盖同地板平面共面**（中柱底面抬 1mm，底盖留在底座内部永远不可见）。
+- **室外草地材质重写（坑 117，两轮）**：一轮——旧纹理 1×2px 大颗粒短划 + 纯灰噪声（近看块状粗糙、远看平灰光秃），重写为低频大尺度色差 + 高密度细长草叶 + 色相微偏 + 草丛斑块；二轮（用户反馈"像冬天地面，要春天感"）——根因是 tint 乘算体系下色相由 GROUND_COLOR 主导：**GROUND_COLOR 灰绿 `#a8b795`（饱和度 0.19）→ 春草嫩绿 `#8ec96e`（饱和度 0.45）**、纹理去枯草 + 阳光冷暖色差 + 淡黄小花点缀（R 通道 255 上限，乘算后最亮）、地平线雾色米黄 → 淡绿白（远景不再冬日感）；新增草地回归防线测试（mock canvas 渲染 × tint，断言饱和度/绿感/花色，防回退）。
+
+#### 清理
+
+- **删除 `docs/ui-preview.html`**（坑 118）：2026-08-12 UI 改版的历史静态视觉稿，实现已落地、文件脱节，用户确认无用；design.md/history.md 中相关表述保留并标注文件已删除。
+
+#### 文档与工程
+
+- 文档同步：notes 新增 3.27 节坑 116-118；design.md/history.md 的 ui-preview.html 引用更新；测试数不变（704，家具审计 117 用例含新增圆柱圆面检测路径）。
+
+### 2026-08-14 react-router v7 升级（review-followup.md C1，npm audit 清零）
+
+- **react-router-dom ^6.28 → ^7.18**（v7 起为 `react-router` 的再导出包）：BrowserRouter/Routes/Route/Navigate/NavLink/Link/Outlet/MemoryRouter 声明式模式全兼容，应用代码零 import 改动。
+- **删除全部 `future={{ v7_startTransition: true, v7_relativeSplatPath: true }}`**：`main.tsx` 的 BrowserRouter 与 `HomePage.test.tsx`/`HomeToolbar.test.tsx` 两处 MemoryRouter——v7 已默认开启且不再接受该 prop（保留即报错）。
+- 全门绿（lint/format/typecheck/test 704/build）；生产构建深链接回归：`/WordCraft/settings`、`/WordCraft/?/settings` 均正常回退 index.html（404.html + `?/` 还原脚本不受路由版本影响，坑 89 约定）。
+- `npm audit --omit=dev` **0 vulnerabilities**（v6 线 2 个 moderate——CVE-2025-68470、GHSA-337j——随升级消失）。
+
 ### 2026-08-14 遗留任务批次（A/B 组测试补缺，704 用例全绿）
 
 #### 测试补缺（654 → 704，新增 50 用例）
