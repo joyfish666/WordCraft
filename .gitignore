@@ -6,6 +6,9 @@ dist
 dist-ssr
 *.local
 
+# 环境变量（防御性：当前未使用 import.meta.env）
+.env*
+
 # 日志
 logs
 *.log
