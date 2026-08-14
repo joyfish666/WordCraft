@@ -148,9 +148,9 @@ README 路线图「移动端基础适配」以**横屏限定**方式落地（验
 - **`pushOutOfRects` 候选扩展**：候选对**所有**禁区生成（此前只对当前重叠禁区取候选——家具推出嵌套卫生间时恰好撞进门区，重叠数不变被"无改进"拒绝而原地不动，几何有解却找不到）；选择全局重叠最少的落点，确定性不变；
 - **已知边界**（已记入坑 15）：嵌套房间（如卫生间）内部的门区不参与避让（`computeDoorZones` 只遍历顶层，与 `furniturePlacement` 一致）；被门区/嵌套夹到只剩唯一安全位的家具，越界拖拽会回弹原位（编辑日志 diff 为空不记 op，坑 18 语义）。
 
-### 全新 UI 改版（2026-08-12，基于 ui-preview.html 落地）
+### 全新 UI 改版（2026-08-12，基于 ui-preview.html 视觉稿落地）
 
-以 `docs/ui-preview.html` 视觉稿为基准的**全面换肤与布局重构**（验收：388 用例全绿，HomePage 新增空态卡 3 用例）：
+以静态 UI 视觉稿 `docs/ui-preview.html`（2026-08-14 清理删除——仅历史参考，实现已全部落地）为基准的**全面换肤与布局重构**（验收：388 用例全绿，HomePage 新增空态卡 3 用例）：
 
 - **暖色浅色主题**：全局 CSS 变量由深色切换为米纸暖色系（`#e2dccb` 底、绿色强调），3D 渲染同步换肤——场景背景/网格线/家具与走廊中性色（`palette.ts` 按浅底可辨性重调）/选中高亮/门窗符号/平面图标注与罗盘；
 - **移除侧边栏**：品牌「言筑 WordCraft」入顶栏左侧，首页/设置导航入顶栏右侧图标（NavLink + tooltip）；设置页顶部加「← 首页」返回入口；
@@ -218,7 +218,7 @@ README 路线图「移动端基础适配」以**横屏限定**方式落地（验
 - **i18n 补漏与死代码清理**：语言切换按钮（HomeToolbar/LanguageToggle 双份硬编码）与 schema 错误文案入词典（`lang.switchToZh/En`、`error.noOps`、`error.unknownFormat`）；删除 7 个死 key（nav.footer/home.viewTitle/home.pan*Title/home.resetView）与死 CSS（`.api-hint__link`、`--danger-soft`）。
 - **HomePage 再瘦身（~480 → ~390 行）**：对话生成链路（send/撤销生成/生成计时/竞态防护）抽为 `hooks/useGeneration.ts`，脏标记订阅抽为 `hooks/useDirtyTracking.ts`。
 - **测试补齐**：PlanToolbar（桌面工具行/移动端弹出面板）、LanguageToggle、lib 薄测试（viewport/palette/sampleModel/watermark）、migration 畸形 v3、useProjectStore 快照与 syncDirtyWithSaved。
-- **文档同步**：README 双版技术栈 Axios→fetch 修正、design.md §9 验收表补行与数字统一、notes.md 坑号重排、ui-preview.html 补"仅供参考"标注。
+- **文档同步**：README 双版技术栈 Axios→fetch 修正、design.md §9 验收表补行与数字统一、notes.md 坑号重排、ui-preview.html 补"仅供参考"标注（该文件 2026-08-14 随坑 116 批次清理删除）。
 
 ### 房屋造型材质层（2026-08-13，M1 材质 + M2 造型细节）
 
@@ -251,7 +251,7 @@ README 路线图「移动端基础适配」以**横屏限定**方式落地（验
 - **v2 快照容错路径补全字段透传（坑 82）**：`diffSceneV2` 的 addRoom 构造丢弃 `position`/`relativeTo`（custom 快照按 position 布局的新房间全部落"排东侧"兜底，静默几何错误），家具规格丢 `rotationY`/`description`。修复：`addRoom` op 契约补 `position` 贯通 type/schema/执行器（落点优先级 footprint > position > relativeTo > 东侧），`roomSpecFromV2` 全字段透传；提示词同步。
 - **setOpenings.side 契约一致化（坑 83）**：schema 强索 side 而执行器支持 edgeIndex-only，UI 靠 `as Op` 绕过校验。修复：side 改可选（discriminatedUnion 不接受 refine 包装，跨字段约束放执行器兜底），`PlanEditLayer` 四处 `as Op` 删除。
 - **RoomShell 地板几何内容签名 memo（坑 84）**：`floorShape` 每 render 新建 → ExtrudeGeometry 每帧每房间重建 + 分配/GC。难点是预览每帧新 WallPlan 引用（坑 72 引用键缓存对组件 memo 无效）——`wallPlanKey` 按 floorPolygon 实际消费字段（axis/line/shared/dir）做内容签名（WeakMap 缓存字符串实例），memo 依赖 `[footprint, key]` 内容命中。
-- **工程化（坑 85）**：format 门修复（审查发现 HEAD 上 6 文件未格式化、CI 实际是红的——`npm run format` 收敛）；ci.yml 补 build 门、deploy.yml 补测试门（此前并行跑，测试红照样部署）；`three-stdlib` 声明为直接依赖（幽灵依赖）；`npm audit` 清零 high（nanoid 链，`npm audit fix`）；react-router v6 线 2 个 Moderate 待升 v7（破坏性变更，另行规划）。
+- **工程化（坑 85）**：format 门修复（审查发现 HEAD 上 6 文件未格式化、CI 实际是红的——`npm run format` 收敛）；ci.yml 补 build 门、deploy.yml 补测试门（此前并行跑，测试红照样部署）；`three-stdlib` 声明为直接依赖（幽灵依赖）；`npm audit` 清零 high（nanoid 链，`npm audit fix`）；react-router v6 线 2 个 Moderate 已升 v7 清零（坑 115）。
 - **文档同步**：architecture（版本 v2.13、§2.1 契约、§6 持久化策略、§9 测试数）、design（进度块、§4.1、§9 验收表）、notes（3.19 节坑 80-85 + 文件地图）、README 双版测试数 490→497。
 
 ### 用户反馈修复批次（2026-08-13 晚，坑 86-87）
@@ -289,6 +289,20 @@ README 路线图「移动端基础适配」以**横屏限定**方式落地（验
 - **资源上限**：messages 100 条 + toChatHistory 最近 30 条；口令还原后清空旧分享口令/截图。
 - **a11y 与样式**：segmented/工具行 aria-pressed、输入框焦点环、非左键不启动平面图拖拽、color-mix 派生色令牌化、属性面板偏移钳制、调试下载 revoke 延迟。
 - **文档同步**：architecture（v2.18、i18n 边界改写、§9 测试数）、design（进度块）、notes（3.25 节坑 105-114）、CHANGELOG、README 双版 FAQ 改写 + 601→614。
+
+### react-router v7 升级（2026-08-14，坑 115：review-followup C1 排期落地，704 用例全绿）
+
+- **依赖线 EOL 风险收尾**：v6 线 2 个 moderate（CVE-2025-68470 open redirect、GHSA-337j SSR deserializeErrors）无修复版本，`npm audit --omit=dev` 无法清零。`react-router-dom` 升 `^7`（v7 起为 `react-router` 的再导出包，声明式模式 API 零改动）；**删除全部 `future={{ v7_startTransition: true, v7_relativeSplatPath: true }}`**（`main.tsx` BrowserRouter + 两处测试 MemoryRouter——v7 已默认且不再接受该 prop）；全门（lint/format/typecheck/test/build）绿 + 生产构建深链接回归（`/WordCraft/settings` 与 `/WordCraft/?/settings` 均正常回退 index.html，坑 89 约定）；`npm audit --omit=dev` 清零。
+- **文档同步**：notes（3.26 节坑 115）、CHANGELOG（Unreleased 新增 v7 升级节）。
+
+### 灶台闪烁根因 + 地面材质 + 清理（2026-08-14，坑 116-118，704 用例全绿）
+
+用户反馈驱动的三件事（坑 116-118，详见 notes 3.27 节）：
+
+- **灶台炉头平视闪烁根因（坑 116）**：坑 88 的「炉头底面嵌入台面 1mm」在近水平视角下与台面顶面投影重叠同一像素带且深度相同——深度缓冲无法区分，移动摄像头时片元胜负抖动（闪烁）、停止后视角固定才稳定。修复：炉头**悬浮台面上方 3mm**（投影偏移 >1px 无重叠带）；**共面审计纳入圆柱顶/底盖圆面**（"圆柱跳过"是漏网根因），顺带修复圆桌中柱底盖与底座底盖同平面互掐（中柱底面抬 1mm）。
+- **室外草地材质重写（坑 117，两轮）**：一轮去颗粒化（细草叶 + 色差）；二轮按"春天感"重调——GROUND_COLOR 灰绿 → 春草嫩绿（tint 乘算色相主导，饱和度 0.19 → 0.45）、去枯草 + 阳光冷暖色差 + 淡黄小花点缀、雾色米黄 → 淡绿白；新增 mock canvas 渲染的草地回归防线测试（饱和度/绿感/花色断言）。
+- **删除 `docs/ui-preview.html`（坑 118）**：UI 改版的历史视觉稿，实现已落地，用户确认无用。
+- **文档同步**：notes（3.27 节坑 116-118）、CHANGELOG（坑 116-118 批次）、design.md/history.md 的 ui-preview.html 引用标注。
 
 ## 给后来者的三条主线经验
 
