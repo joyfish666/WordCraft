@@ -58,10 +58,10 @@
 
 | Doc | Content |
 |-----|---------|
-| [docs/design.md](docs/design.md) | Current design plan: v3 architecture (operation contract + footprint geometry + bidirectional sync + free plan editing, P1/P2/P3/P4 implemented) |
-| [docs/architecture.md](docs/architecture.md) | Technical architecture of the current implementation (v3 footprint model + ops operation contract) |
+| [docs/architecture.md](docs/architecture.md) | Technical architecture of the current implementation — single source of truth for "current facts" (v3 footprint model + ops operation contract) |
+| [docs/design.md](docs/design.md) | Design decision record (historical): the v3 "free design" plan and rationale — all phases implemented |
 | [docs/history.md](docs/history.md) | Key decisions across three generations of the architecture |
-| [docs/notes.md](docs/notes.md) | Dev notes and pitfalls — read before touching the code |
+| [docs/notes.md](docs/notes.md) | Pitfall log (坑) — root causes and "don't regress" warnings; read before touching the code |
 
 ## Local Development
 
@@ -79,8 +79,8 @@ Pushing to the `main` branch triggers `.github/workflows/deploy.yml` to build an
 
 1. **First-time setup**: repo Settings → Pages → Source → **GitHub Actions**;
 2. The bundle deploys at the project-site base path (`base=/WordCraft/` in `vite.config.ts`, repo name WordCraft);
-3. Deep links (e.g. opening/refreshing `/WordCraft/settings` directly) are restored by `public/404.html` + the inline script in `index.html` (pitfall 89);
-4. **When changing the repo name or `base`**, update `pathSegmentsToKeep` in `public/404.html` accordingly (segment count = repo-name prefix segments; see docs/notes.md pitfall 89).
+3. Deep links (e.g. opening/refreshing `/WordCraft/settings` directly) are restored by `public/404.html` + the inline script in `index.html` (pitfalls 89/130); the restore keeps the base prefix (`BrowserRouter basename` derives from `import.meta.env.BASE_URL`), so the URL survives repeated refreshes;
+4. **When changing the repo name or `base`**, update `pathSegmentsToKeep` in `public/404.html` accordingly (segment count = repo-name prefix segments; the `basename` in `src/main.tsx` follows `BASE_URL` automatically; see docs/notes.md pitfall 89/130).
 
 Preview the production build locally: `npm run build && npm run preview`.
 

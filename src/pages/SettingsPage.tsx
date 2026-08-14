@@ -145,17 +145,20 @@ export function SettingsPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t('settings.keyNamePlaceholder')}
+            aria-label={t('settings.keyNamePlaceholder')}
           />
           <Input
             type="password"
             value={key}
             onChange={(e) => setKey(e.target.value)}
             placeholder={t('settings.keyPlaceholder')}
+            aria-label={t('settings.keyPlaceholder')}
           />
           <Input
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
             placeholder={t('settings.keyBaseUrlPlaceholder')}
+            aria-label={t('settings.keyBaseUrlPlaceholder')}
           />
           <Button onClick={submit} disabled={!name.trim() || !key.trim()}>
             {t('settings.addKey')}

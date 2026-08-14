@@ -42,23 +42,14 @@ export interface ExecuteResult {
   skipped: string[]
 }
 
-/** 会新增/修改/移动房间或家具的 op（macro 之外的增量操作）。
- *  判断「批内是否还有 macro 未覆盖的家具来源」用：若批内含非 custom macro，
- *  其自身家具已由 resolveLayout 跑过常理摆放（layout.ts auto 分支），
- *  此时末尾的 conventions 只应为「macro 之后新引入的家具」兜底，
- *  纯 macro（或 macro + setOpenings/setHouse 等不触家具的 op）批次应跳过。 */
-const FURNITURE_AFFECTING_OPS: ReadonlySet<Op['op']> = new Set([
-  'addRoom',
-  'updateRoom',
-  'removeRoom',
-  'moveRoom',
-  'nestRoom',
-  'splitRoom',
-  'mergeRoom',
-  'addFurniture',
-  'updateFurniture',
-  'removeFurniture',
-])
+/** 批内会**新增**家具（或新增带家具的房间）的 op——末尾常理摆放只应为这些来源兜底。
+ *  触发语义与 chat.ts 的 `addsFurniture` 同口径（审查批次修复）：auto macro 的家具已由
+ *  resolveLayout 摆过，批内只有 updateRoom/moveRoom/nestRoom/splitRoom/mergeRoom 等
+ *  「改已有房间/家具」的 op 时不重复跑——旧集合误纳 updateRoom/moveRoom，导致
+ *  auto macro + updateRoom 批次把刚摆好的整屋家具再推一遍（多余重算，且可能把
+ *  LLM 显式微调过的家具重新贴墙）。splitRoom/mergeRoom 只重排已有家具，由
+ *  normalizeContainment 保证不越界，无需常理摆放。 */
+const FURNITURE_AFFECTING_OPS: ReadonlySet<Op['op']> = new Set(['addRoom', 'addFurniture'])
 
 /** 批内是否有非 custom 的 macro（corridor/living：其家具由 resolveLayout 统一摆放） */
 function hasAutoMacro(ops: Op[]): boolean {

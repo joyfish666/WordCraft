@@ -101,6 +101,7 @@ export function ShareDialog({ open, onClose, code, screenshot, onRestore }: Shar
               className="input"
               readOnly
               value={code}
+              aria-label={t('share.codeLabel')}
               onFocus={(e) => e.currentTarget.select()}
             />
             <Button variant="ghost" onClick={() => void copyCode()}>
@@ -117,6 +118,7 @@ export function ShareDialog({ open, onClose, code, screenshot, onRestore }: Shar
             className="input"
             value={paste}
             placeholder={t('share.placeholder')}
+            aria-label={t('share.restoreTitle')}
             onChange={(e) => setPaste(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && paste.trim()) tryRestore(paste)

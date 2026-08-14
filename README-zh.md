@@ -58,10 +58,10 @@
 
 | 文档 | 内容 |
 |------|------|
-| [docs/design.md](docs/design.md) | 当前设计方案：v3 架构（操作契约 + 足迹几何 + 双向同步 + 平面图自由编辑，P1/P2/P3/P4 已实施） |
-| [docs/architecture.md](docs/architecture.md) | 现行实现的技术架构与数据契约（v3 足迹模型 + ops 操作契约） |
+| [docs/architecture.md](docs/architecture.md) | 现行实现的技术架构与数据契约——「现行事实」单一职责（v3 足迹模型 + ops 操作契约） |
+| [docs/design.md](docs/design.md) | 设计方案决策记录（历史）：v3「自由设计」的规划与决策，各阶段均已实施 |
 | [docs/history.md](docs/history.md) | 三代架构演进的关键决策记录 |
-| [docs/notes.md](docs/notes.md) | 开发注意事项与踩坑记录，改代码前必读 |
+| [docs/notes.md](docs/notes.md) | 踩坑记录（坑）：根因与「别退回」警告，改代码前必读 |
 
 ## 本地开发
 
@@ -79,8 +79,8 @@ npm run build    # 类型检查 + 构建
 
 1. **首次配置**：仓库 Settings → Pages → Source 选择 **GitHub Actions**；
 2. 构建产物以项目站点路径部署（`vite.config.ts` 的 `base=/WordCraft/`，仓库名为 WordCraft）；
-3. 深链接（如直接访问 `/WordCraft/settings` 刷新）由 `public/404.html` + `index.html` 内联脚本自动还原（坑 89）；
-4. **改仓库名或 `base` 时**需同步 `public/404.html` 的 `pathSegmentsToKeep`（段数 = 仓库名前缀段数，见 docs/notes.md 坑 89）。
+3. 深链接（如直接访问 `/WordCraft/settings` 刷新）由 `public/404.html` + `index.html` 内联脚本自动还原（坑 89/130）；还原保留 base 前缀（`BrowserRouter basename` 由 `import.meta.env.BASE_URL` 派生），地址栏 URL 可反复刷新；
+4. **改仓库名或 `base` 时**需同步 `public/404.html` 的 `pathSegmentsToKeep`（段数 = 仓库名前缀段数；`src/main.tsx` 的 `basename` 随 `BASE_URL` 自动生效，见 docs/notes.md 坑 89/130）。
 
 本地预览构建产物：`npm run build && npm run preview`。
 

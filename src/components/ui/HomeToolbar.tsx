@@ -140,7 +140,7 @@ export function HomeToolbar({
       <button
         type="button"
         className="toolbar__btn"
-        title={t('share.title')}
+        title={t('home.share')}
         aria-label={t('home.share')}
         onClick={onShare}
       >

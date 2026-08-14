@@ -2072,6 +2072,53 @@ describe('executeOps - setHouse / 约束兜底 / 楼层高度', () => {
       spy.mockRestore()
     }
   })
+
+  it('auto macro + updateRoom 混合批次不再重复跑常理摆放（updateRoom 不引入新家具，审查批次修复）', () => {
+    const spy = vi.spyOn(furniturePlacement, 'applyFurnitureConventions')
+    try {
+      const result = executeOps(
+        emptyScene(),
+        [
+          {
+            op: 'macro',
+            name: 'corridor',
+            params: {
+              name: '示例房',
+              corridor: { width: 1.2, entranceRoomId: 'living' },
+              rooms: [
+                {
+                  id: 'living',
+                  name: '客厅',
+                  dimensions: { length: 5, width: 4, height: 2.8 },
+                  side: 'left',
+                  furniture: [
+                    {
+                      id: 'sofa',
+                      name: '沙发',
+                      dimensions: { length: 2, width: 0.9, height: 0.8 },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          {
+            op: 'updateRoom',
+            id: 'living',
+            patch: { dimensions: { length: 6 } },
+          },
+        ],
+        { furnitureConventions: true },
+      )
+      // 仅 resolveLayout（applyMacro 内部）跑一次；updateRoom 只是改已有房间，
+      // 末尾不再全屋重摆（旧集合误纳 updateRoom 导致二次摆放，审查批次修复）
+      expect(spy).toHaveBeenCalledTimes(1)
+      const room = findNodeById(result.scene.root, 'living') as RoomNode
+      expect(footprintBounds(room.footprint).maxX - footprintBounds(room.footprint).minX).toBe(6)
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })
 
 describe('diffSceneV2 - 快照容错路径', () => {
@@ -2215,6 +2262,83 @@ describe('diffSceneV2 - 快照容错路径', () => {
     const target = v2Scene([roomV2('a', '房A')])
     const ops = diffSceneV2(base, target)
     expect(ops).toEqual([])
+  })
+
+  it('快照移动既有房间（仅 position 变）→ 产出 updateRoom.patch.footprint，位移不再静默丢弃（审查批次修复）', () => {
+    const base = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          name: '示例房',
+          rooms: [
+            {
+              id: 'a',
+              name: '房A',
+              dimensions: { length: 3, width: 3, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+            },
+            {
+              id: 'b',
+              name: '房B',
+              dimensions: { length: 3, width: 3, height: 2.8 },
+              position: { x: 4, y: 1.4, z: 0 },
+            },
+          ],
+        },
+      },
+    ])
+    // 快照把房A 从 (0,0) 移到 (6,0)：名称/尺寸均不变，只有 position 变化
+    const target = v2Scene([
+      { ...roomV2('a', '房A'), position: { x: 6, y: 1.4, z: 0 } },
+      roomV2('b', '房B'),
+    ])
+    const ops = diffSceneV2(base, target)
+    const moveOp = ops.find(
+      (o): o is Extract<Op, { op: 'updateRoom' }> => o.op === 'updateRoom' && o.id === 'a',
+    )
+    expect(moveOp).toBeDefined()
+    expect(moveOp!.patch.footprint).toBeDefined()
+    const scene = executeOps(base, ops).scene
+    const a = findNodeById(scene.root, 'a') as RoomNode
+    const c = footprintCenter(a.footprint)
+    // 纯平移：足迹形状保持（4 点、尺寸不变），中心落在目标位置
+    expect(c.x).toBeCloseTo(6, 6)
+    expect(c.z).toBeCloseTo(0, 6)
+    expect(footprintBounds(a.footprint).maxX - footprintBounds(a.footprint).minX).toBeCloseTo(3, 6)
+    expect(footprintBounds(a.footprint).maxZ - footprintBounds(a.footprint).minZ).toBeCloseTo(3, 6)
+    // 房B 不受影响（整屋居中后 b 中心在 (2,0)，快照未给 b 新 position → 无 op）
+    const b = findNodeById(scene.root, 'b') as RoomNode
+    expect(footprintCenter(b.footprint).x).toBeCloseTo(2, 6)
+  })
+
+  it('快照移动 + 改尺寸同时发生时一步到位（footprint 含目标中心与尺寸，尺寸补丁不被覆盖）', () => {
+    const base = run([
+      {
+        op: 'macro',
+        name: 'custom',
+        params: {
+          name: '示例房',
+          rooms: [
+            {
+              id: 'a',
+              name: '房A',
+              dimensions: { length: 3, width: 3, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+            },
+          ],
+        },
+      },
+    ])
+    const target = v2Scene([{ ...roomV2('a', '房A', 5, 4), position: { x: 8, y: 1.4, z: 2 } }])
+    const ops = diffSceneV2(base, target)
+    const scene = executeOps(base, ops).scene
+    const a = findNodeById(scene.root, 'a') as RoomNode
+    const c = footprintCenter(a.footprint)
+    expect(c.x).toBeCloseTo(8, 6)
+    expect(c.z).toBeCloseTo(2, 6)
+    expect(footprintBounds(a.footprint).maxX - footprintBounds(a.footprint).minX).toBeCloseTo(5, 6)
+    expect(footprintBounds(a.footprint).maxZ - footprintBounds(a.footprint).minZ).toBeCloseTo(4, 6)
   })
 
   it('快照新增房间时 addRoom 透传 position（修复按 position 布局的 custom 快照全部落到东侧）', () => {
