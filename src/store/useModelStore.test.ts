@@ -124,7 +124,6 @@ describe('useModelStore', () => {
     const bed = furnitureById('bed-master')
     expect(bed.position.x).toBeGreaterThanOrEqual(-1.6)
     expect(bed.position.x).toBeLessThanOrEqual(1.1)
-    const master = findNodeById(useModelStore.getState().scene!.root, 'room-master') as RoomNode
     const bath = findNodeById(useModelStore.getState().scene!.root, 'bath-master') as RoomNode
     const kb = footprintBounds(bath.footprint)
     const overlapsBath =
@@ -133,7 +132,6 @@ describe('useModelStore', () => {
       bed.position.z + bed.dimensions.width / 2 > kb.minZ + 1e-6 &&
       bed.position.z - bed.dimensions.width / 2 < kb.maxZ - 1e-6
     expect(overlapsBath).toBe(false)
-    void master
   })
 
   it('undo / redo 回退与重做编辑', () => {

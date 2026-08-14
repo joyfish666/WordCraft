@@ -10,8 +10,14 @@ import type {
 } from '../types/model'
 import { footprintBounds, footprintCenter, resizeFootprint, translateFootprint } from './footprint'
 import { doorZoneRect } from './furniturePlacement'
-import { halfRectOverlaps, translateRoom, type Rect } from './geometry'
-import { WALL_THICKNESS, computeDoorZones, type DoorZoneInfo } from './roomGeometry'
+import {
+  halfRectOverlaps,
+  nestedKeepOutRect,
+  roomInnerBounds,
+  translateRoom,
+  type Rect,
+} from './geometry'
+import { computeDoorZones, type DoorZoneInfo } from './roomGeometry'
 
 /**
  * 深度优先遍历树中的所有节点。
@@ -85,6 +91,13 @@ export function countNodes(root: ModelNode): number {
 /** 平移房间（足迹 + 家具 + 嵌套房间，递归），保持内部相对关系。同源实现见 geometry.translateRoom */
 export { translateRoom as translateRoomContents } from './geometry'
 
+/**
+ * 纯平移校验容差（米）：同一足迹平移前后逐顶点位移应完全一致（同一批算术，
+ * 浮点误差 ~1e-13 量级），用比 EPSILON 更紧的 1e-9 区分「纯平移」与「改形状」——
+ * 判定错误会导致编辑日志把改形状误记为平移（回放错位）。
+ */
+const TRANSLATION_EPSILON = 1e-9
+
 /** 判断新足迹是否为旧足迹的纯平移（每顶点位移一致）；非纯平移（改形状/缩放）返回 null */
 function footprintTranslation(
   before: Point2D[],
@@ -95,8 +108,8 @@ function footprintTranslation(
   const dz = after[0]!.z - before[0]!.z
   if (dx === 0 && dz === 0) return null
   for (let i = 1; i < before.length; i++) {
-    if (Math.abs(after[i]!.x - before[i]!.x - dx) > 1e-9) return null
-    if (Math.abs(after[i]!.z - before[i]!.z - dz) > 1e-9) return null
+    if (Math.abs(after[i]!.x - before[i]!.x - dx) > TRANSLATION_EPSILON) return null
+    if (Math.abs(after[i]!.z - before[i]!.z - dz) > TRANSLATION_EPSILON) return null
   }
   return { dx, dz }
 }
@@ -304,17 +317,7 @@ function clampTo(value: number, min: number, max: number): number {
 // 真·内嵌嵌套房间：父房间内嵌套子房间（如主卧卫生间）占用一块空间，
 // 父房间家具须被推出其占地（足迹 + 墙厚外扩），而非只约束进父墙内。
 // ---------------------------------------------------------------------------
-
-/** 嵌套房间的禁止进入区：足迹包围盒 + 墙厚外扩 */
-function nestedKeepOut(room: RoomNode): Rect {
-  const b = footprintBounds(room.footprint)
-  return {
-    minX: b.minX - WALL_THICKNESS,
-    maxX: b.maxX + WALL_THICKNESS,
-    minZ: b.minZ - WALL_THICKNESS,
-    maxZ: b.maxZ + WALL_THICKNESS,
-  }
-}
+// （嵌套禁入区/墙内活动区的共享实现见 geometry.nestedKeepOutRect / roomInnerBounds）
 
 /**
  * 推出禁区（≤4 次迭代）：对每个禁区生成候选 = 沿 X/Z 最小穿透推出 + 四个方向
@@ -405,15 +408,10 @@ function containChildren(
 }
 
 function containRoom(room: RoomNode, doorZones: Map<string, DoorZoneInfo[]>): RoomNode {
-  const b = footprintBounds(room.footprint)
-  const minX = b.minX + WALL_THICKNESS
-  const maxX = b.maxX - WALL_THICKNESS
-  const minZ = b.minZ + WALL_THICKNESS
-  const maxZ = b.maxZ - WALL_THICKNESS
-  const bounds: Rect = { minX, maxX, minZ, maxZ }
+  const bounds: Rect = roomInnerBounds(room)
 
   // 嵌套子房间的禁止进入区：父房间家具须避开
-  const nestedKeepOuts: Rect[] = room.nestedRooms.map(nestedKeepOut)
+  const nestedKeepOuts: Rect[] = room.nestedRooms.map(nestedKeepOutRect)
   // 房间门口通道的禁止进入区（与渲染/常理摆放同源）；嵌套房间无门区条目（computeDoorZones 只遍历顶层）
   const doorKeepOuts: Rect[] = (doorZones.get(room.id) ?? []).map((z) => doorZoneRect(room, z))
   const keepOuts = [...nestedKeepOuts, ...doorKeepOuts]
@@ -421,8 +419,8 @@ function containRoom(room: RoomNode, doorZones: Map<string, DoorZoneInfo[]>): Ro
   const furniture = room.furniture.map((child) => {
     const hx = child.dimensions.length / 2
     const hz = child.dimensions.width / 2
-    let x = clampTo(child.position.x, minX + hx, maxX - hx)
-    let z = clampTo(child.position.z, minZ + hz, maxZ - hz)
+    let x = clampTo(child.position.x, bounds.minX + hx, bounds.maxX - hx)
+    let z = clampTo(child.position.z, bounds.minZ + hz, bounds.maxZ - hz)
     // 真·内嵌：把家具推出嵌套子房间占地与门口通道（生成时由 furniturePlacement 负责，这里兜底手动编辑/加载）
     if (keepOuts.length > 0) {
       const pushed = pushOutOfRects(x, z, hx, hz, keepOuts, bounds)
@@ -440,8 +438,8 @@ function containRoom(room: RoomNode, doorZones: Map<string, DoorZoneInfo[]>): Ro
     const hz = (cb.maxZ - cb.minZ) / 2
     const moved = containRoom(child, doorZones)
     const nc = footprintCenter(moved.footprint)
-    const targetX = clampTo(nc.x, minX + hx, maxX - hx)
-    const targetZ = clampTo(nc.z, minZ + hz, maxZ - hz)
+    const targetX = clampTo(nc.x, bounds.minX + hx, bounds.maxX - hx)
+    const targetZ = clampTo(nc.z, bounds.minZ + hz, bounds.maxZ - hz)
     const dx = targetX - c.x
     const dz = targetZ - c.z
     if (dx === 0 && dz === 0) return moved

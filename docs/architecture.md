@@ -335,7 +335,7 @@ src/
 └── vite-env.d.ts              # __APP_VERSION__ 声明（vite.config.ts 从 package.json 注入，2026-08-13）
 ```
 
-## 9. 测试（Vitest，614 用例）
+## 9. 测试（Vitest，654 用例）
 
 - `lib/planEdit.test.ts`【P4 新增】：网格吸附/足迹校验（非正交/过短/自交拒绝）、正交顶点拖拽（矩形滑行/L 形内凹角/退化与自交拒绝/最近顶点）、平移贴墙吸附（线差阈值/网格先行/无重叠不吸附）、拆房布局（家具/嵌套/开洞归属重映射）、合并布局（unionRectOf 面积守恒/开洞重映射）、墙命中（实心墙/入户门/门段/邻屋共墙）。
 - `lib/editOps.test.ts`【新增】：editDiffToOps 纯函数——家具位移（相对房间中心换算）/房间位移与改尺寸（footprint 顶点环）/层高（dimensions.height）/家具改名改尺寸/约束后位置变化/normalize 提交一致性/无变化与节点缺失返回空/整屋改名（setHouse）/嵌套房间内家具归属最内层房间。

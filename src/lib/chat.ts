@@ -2,7 +2,7 @@ import { t } from '../i18n'
 import { sceneModelV2Schema } from '../schemas/model.schema'
 import { opSchema } from '../schemas/ops.schema'
 import { useSettingsStore } from '../store/useSettingsStore'
-import { ADJACENCY_GAP } from './constants'
+import { ADJACENCY_GAP, EPSILON } from './constants'
 import { logDebug } from './debugLog'
 import { diffSceneV2, emptyScene, executeOps } from './executor'
 import { footprintCenter, roomDims } from './footprint'
@@ -177,7 +177,7 @@ function topLevelAdjacency(
     for (let i = 0; i < fp.length; i++) {
       const p = fp[i]!
       const q = fp[(i + 1) % fp.length]!
-      if (Math.abs(p.z - q.z) < 1e-6) {
+      if (Math.abs(p.z - q.z) < EPSILON) {
         out.push({ axis: 'x', line: p.z, a: Math.min(p.x, q.x), b: Math.max(p.x, q.x) })
       } else {
         out.push({ axis: 'z', line: p.x, a: Math.min(p.z, q.z), b: Math.max(p.z, q.z) })
@@ -209,8 +209,8 @@ function topLevelAdjacency(
               (e2) =>
                 e1.axis === e2.axis &&
                 Math.abs(e1.line - e2.line) <= ADJACENCY_GAP &&
-                e1.a < e2.b - 1e-6 &&
-                e1.b > e2.a + 1e-6,
+                e1.a < e2.b - EPSILON &&
+                e1.b > e2.a + EPSILON,
             ),
         )
       if (!shared) continue

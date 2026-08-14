@@ -52,7 +52,7 @@
 | 口令压缩 | **lz-string** | 高效的 JSON 数据压缩算法 |
 | HTTP 请求 | **fetch（SSE 流式）** | OpenAI 兼容 chat/completions，统一 fetch 栈 |
 | 构建工具 | **Vite** | 快速的开发构建工具 |
-| 测试框架 | **Vitest + Testing Library** | 单元测试与组件测试（614 用例，CI 强制执行） |
+| 测试框架 | **Vitest + Testing Library** | 单元测试与组件测试（654 用例，CI 强制执行） |
 
 ## 项目文档
 
@@ -72,6 +72,17 @@ npm run test     # Vitest 单元测试
 npm run lint     # ESLint
 npm run build    # 类型检查 + 构建
 ```
+
+## 部署（GitHub Pages）
+
+推送到 `main` 分支即触发 `.github/workflows/deploy.yml` 自动构建并部署到 GitHub Pages（构建前先跑测试，测试失败不会部署）：
+
+1. **首次配置**：仓库 Settings → Pages → Source 选择 **GitHub Actions**；
+2. 构建产物以项目站点路径部署（`vite.config.ts` 的 `base=/WordCraft/`，仓库名为 WordCraft）；
+3. 深链接（如直接访问 `/WordCraft/settings` 刷新）由 `public/404.html` + `index.html` 内联脚本自动还原（坑 89）；
+4. **改仓库名或 `base` 时**需同步 `public/404.html` 的 `pathSegmentsToKeep`（段数 = 仓库名前缀段数，见 docs/notes.md 坑 89）。
+
+本地预览构建产物：`npm run build && npm run preview`。
 
 ## 路线图
 

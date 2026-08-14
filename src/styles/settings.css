@@ -156,24 +156,3 @@
 .test-result--error {
   color: var(--danger);
 }
-
-.segmented {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-
-.segmented__btn {
-  padding: 7px 16px;
-  border: none;
-  background: var(--bg);
-  color: var(--text-dim);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.segmented__btn--active {
-  background: var(--accent-soft);
-  color: var(--accent);
-}

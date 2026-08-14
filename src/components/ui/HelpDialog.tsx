@@ -1,4 +1,5 @@
 import { useT, type TKey } from '../../i18n'
+import { Button } from './Button'
 import { Dialog } from './Dialog'
 
 interface HelpDialogProps {
@@ -39,9 +40,9 @@ export function HelpDialog({ open, onClose }: HelpDialogProps) {
         ))}
       </ul>
       <div className="dialog__actions">
-        <button className="btn btn--primary" onClick={onClose}>
+        <Button variant="primary" onClick={onClose}>
           {t('help.close')}
-        </button>
+        </Button>
       </div>
     </Dialog>
   )

@@ -4,6 +4,37 @@
 
 ## Unreleased（2026-08-14 全面审查批次，版本号未升）
 
+### 2026-08-14 审查落地批次（P0/P1/P2：几何收拢 / 性能 / 测试补缺 / UI 一致性 / 文档工程，654 用例全绿）
+
+#### 修复与健壮性
+
+- **属性面板拖拽右边界钳制读实际宽度**：`clampOffset` 不再硬编码 270px——`.wc-compact` 紧凑模式下面板宽 240px，硬编码会把右边界算宽 30px（面板可拖出视口/复位被错误回拉）；现读面板 `offsetWidth`，CSS 调宽不再与 JS 脱节。
+- **macro 批次不再重复跑家具常理摆放**：`executeOps` 对「非 custom macro 且批内无新增家具来源」的批次跳过末尾 `applyFurnitureConventions + normalizeContainment`——`applyMacro → resolveLayout`（auto 分支）已摆放过一次，贪心摆放二次执行有再推窗口 + 全量开销；`macro + addRoom/addFurniture` 等混合批次仍跑（为新家具兜底）。回归测试断言 conventions 只跑一次 / 混合批次两次。
+- **编辑日志只记录实际执行的 op**：`ExecuteResult` 新增 `appliedOps`（成功执行列表），`applyPlanOps` 改用 `result.appliedOps` 追加编辑日志——executor 逐条容错跳过失败条目时，LLM 上下文不再出现「并未生效的操作」。
+- **足迹边解析统一收拢（`geometry.edgeMetaOf`）**：footprintEdges / edgeByRingIndex / edgeDirIndex / findEdgeBySide / edgeByIndex / edgeDirOf / ringIndexOf 七处各自实现的「环边 → axis/line/start/length/dir」判定合并为单一纯函数——此前容差写法与方向比较基准已分歧（内联 1e-6 vs EPSILON、非轴对齐边处理不一），收拢后杜绝「一处修容差、另一处漏修」的漂移；`edgeByRingIndex`/`ringIndexOf` 互逆映射同容差。
+- **v2 快照 diff 逐维下发 dimensions**：仅层高变化时不再下发 length/width——`updateNodeFields` 收到 length/width 会触发无谓的 `resizeFootprint`。
+- **ChatDrawer 生成计时不再高频朗读**：逐秒变化的「已 N 秒」文本 `aria-hidden`，由静态 `.sr-only` 行在插入时向读屏器播报一次（新增 `.sr-only` 工具类）。
+
+#### 性能
+
+- **ModelNodeView / RoomShell memo 化**：此前仅家具叶子（FurnitureView）memo，房间外壳与全部墙段 JSX 在拖拽预览期间逐帧重建；现房间子树按引用 memo（`childAncestors`/`material`/`roomCenterPos`/`ORIGIN_CENTER` 引用全部 useMemo 稳定），未变房间不再逐帧协调。
+
+#### 测试补缺（614 → 654，新增 40 用例）
+
+- `lib/geometry.test.ts`（19 用例）：rectsOverlap/halfRectOverlaps 贴边与浮点边界、translateRoom 递归平移、sameFootprint、findRoomInList id→name 回退优先级、edgeMetaOf（矩形四向/下标回绕/斜边/退化边/L 形）。
+- `hooks/useKeyboardShortcuts.test.tsx`（10 用例）：Ctrl+Z/Ctrl+Shift+Z/Ctrl+Y、R 复位、方向键/WASD 平移、INPUT/TEXTAREA/`role="dialog"` 让位（坑 110）、Ctrl+R 不劫持、卸载移除监听。
+- `hooks/useGeneration.test.tsx`（9 用例）：无 key 保留草稿、成功替换场景与历史基线、冲突确认 cancel/apply、失败不清场景、卸载中止、撤销生成。
+
+#### 可维护性
+
+- 常量收拢：内联 `1e-6` 统一引用 `constants.EPSILON`（chat/footprint/openings/diff/planEdit/roomGeometry）；`layout` 的 `DEFAULT_ROOM_HEIGHT` → `DEFAULT_HEIGHT`；`doorDirection` 的 0.5 阈值与 `hitWallOnEdge` 的 0.15 容差命名化；`modelTree` 的 1e-9 平移校验命名 `TRANSLATION_EPSILON`。
+- 几何公式收拢：嵌套房间角点偏移 `(父-子)/2 - 墙厚` 三处复制 → `geometry.nestedCornerHalf`；嵌套禁入区/墙内活动区（furniturePlacement/modelTree 各两处复制）→ `geometry.nestedKeepOutRect`/`roomInnerBounds`；`applyOpenings` 内联切分循环 → 复用 `splitSegments`。
+- UI 一致性：`HelpDialog` 改用统一 `<Button>` 组件；「3D」视图切换按钮补 `title`（新增 i18n key `home.view3dTitle`，中英对称）；`.segmented` 样式从 settings.css 移入 base.css（通用组件类被首页组件共用）。
+
+#### 文档与工程
+
+- 测试数 614 → 654（architecture §9、README 双语）；「6 张贴图」→ 7 张并补 `plasterWall`（design.md/history.md）；notes.md 文件地图修正（生成竞态防护 → `hooks/useGeneration.ts` + `useConfirm`）；README 双语补「部署（GitHub Pages）」章节；**CI 补 `npm audit --audit-level=high` 门**（audit 清零不再是一次性动作）；删除 `useModelStore.test.ts` 死代码 `void master`。
+
 ### 2026-08-14 追加（坑 105-114：重试语义 / 缓存键 / 提交语义 / 契约透传 / a11y）
 
 #### 修复与健壮性
