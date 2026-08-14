@@ -44,8 +44,8 @@ export const TRIM_COLOR = '#8a6f4f'
 export const ROOF_COLOR = '#56503f'
 /** 屋顶女儿墙略浅一档 */
 export const ROOF_PARAPET_COLOR = '#605a48'
-/** 室外地面（灰绿草地，与米色建筑形成冷暖对比） */
-export const GROUND_COLOR = '#a8b795'
+/** 室外地面（春草嫩绿，坑 119：原灰绿 #a8b795 乘算后如冬天枯草，改鲜亮嫩绿配暖色建筑） */
+export const GROUND_COLOR = '#8ec96e'
 /** 入户石板小径色（暖砂岩，与草地冷暖对比） */
 export const GROUND_PATH_COLOR = '#c7bda1'
 /** 地板厚度侧面（外露处）深色 */
