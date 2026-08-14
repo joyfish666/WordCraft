@@ -52,7 +52,7 @@
 | Code compression | **lz-string** | Efficient JSON compression |
 | HTTP | **fetch (streaming SSE)** | OpenAI-compatible chat completions, unified fetch stack |
 | Build | **Vite** | Fast dev/build tooling |
-| Testing | **Vitest + Testing Library** | Unit and component tests (614 cases, run in CI) |
+| Testing | **Vitest + Testing Library** | Unit and component tests (654 cases, run in CI) |
 
 ## Project Docs
 
@@ -72,6 +72,17 @@ npm run test     # Vitest unit tests
 npm run lint     # ESLint
 npm run build    # type check + build
 ```
+
+## Deployment (GitHub Pages)
+
+Pushing to the `main` branch triggers `.github/workflows/deploy.yml` to build and deploy to GitHub Pages (tests run before the build; a red test suite blocks the deploy):
+
+1. **First-time setup**: repo Settings → Pages → Source → **GitHub Actions**;
+2. The bundle deploys at the project-site base path (`base=/WordCraft/` in `vite.config.ts`, repo name WordCraft);
+3. Deep links (e.g. opening/refreshing `/WordCraft/settings` directly) are restored by `public/404.html` + the inline script in `index.html` (pitfall 89);
+4. **When changing the repo name or `base`**, update `pathSegmentsToKeep` in `public/404.html` accordingly (segment count = repo-name prefix segments; see docs/notes.md pitfall 89).
+
+Preview the production build locally: `npm run build && npm run preview`.
 
 ## Roadmap
 

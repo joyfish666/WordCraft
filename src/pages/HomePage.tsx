@@ -281,6 +281,7 @@ export function HomePage() {
               type="button"
               className={`view-toggle__btn ${!planMode ? 'view-toggle__btn--active' : ''}`}
               onClick={() => setViewMode('3d')}
+              title={t('home.view3dTitle')}
               aria-pressed={!planMode}
             >
               3D

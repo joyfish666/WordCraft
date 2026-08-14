@@ -1,10 +1,16 @@
 import { logDebug } from './debugLog'
 import { footprintBounds, footprintCenter, levelHeight, rectFootprint } from './footprint'
 import { applyFurnitureConventions, doorZoneRect } from './furniturePlacement'
-import { DEFAULT_CORRIDOR_WIDTH } from './constants'
-import { findRoomInList, halfRectOverlaps, NEST_CORNER_ORDER, translateRoom } from './geometry'
+import { DEFAULT_CORRIDOR_WIDTH, DEFAULT_HEIGHT } from './constants'
+import {
+  findRoomInList,
+  halfRectOverlaps,
+  NEST_CORNER_ORDER,
+  nestedCornerHalf,
+  translateRoom,
+} from './geometry'
 import { normalizeContainment } from './modelTree'
-import { WALL_THICKNESS, computeDoorZones, isCorridorName } from './roomGeometry'
+import { computeDoorZones, isCorridorName } from './roomGeometry'
 import type {
   FurnitureNode,
   FurnitureNodeV2,
@@ -17,7 +23,6 @@ import type {
   SceneModel,
   SceneModelV2,
 } from '../types/model'
-const DEFAULT_ROOM_HEIGHT = 2.8
 
 const SIDES = ['north', 'south', 'east', 'west'] as const
 type LivingSide = (typeof SIDES)[number]
@@ -78,8 +83,8 @@ function avoidNestedDoorZones(model: SceneModel): SceneModel {
     const pc = footprintCenter(room.footprint)
     const fixed = nested.map((n) => {
       const nb = footprintBounds(n.footprint)
-      const halfX = Math.max(0, (pb.maxX - pb.minX - (nb.maxX - nb.minX)) / 2 - WALL_THICKNESS)
-      const halfZ = Math.max(0, (pb.maxZ - pb.minZ - (nb.maxZ - nb.minZ)) / 2 - WALL_THICKNESS)
+      const halfX = nestedCornerHalf(pb.maxX - pb.minX, nb.maxX - nb.minX)
+      const halfZ = nestedCornerHalf(pb.maxZ - pb.minZ, nb.maxZ - nb.minZ)
       const hw = (nb.maxX - nb.minX) / 2
       const hd = (nb.maxZ - nb.minZ) / 2
       const overlap = (cx: number, cz: number): boolean =>
@@ -166,8 +171,8 @@ function placeNested(
   parentLen: number,
   parentWid: number,
 ): { x: number; z: number } {
-  const halfX = Math.max(0, (parentLen - n.dimensions.length) / 2 - WALL_THICKNESS)
-  const halfZ = Math.max(0, (parentWid - n.dimensions.width) / 2 - WALL_THICKNESS)
+  const halfX = nestedCornerHalf(parentLen, n.dimensions.length)
+  const halfZ = nestedCornerHalf(parentWid, n.dimensions.width)
 
   let x = 0
   let z = 0
@@ -359,7 +364,7 @@ function resolveCorridor(house: HouseNodeV2): HouseNode {
   })
 
   const totalLength = Math.max(cursor.left, cursor.right)
-  const corridorH = Math.max(...ordered.map((r) => r.dimensions.height), DEFAULT_ROOM_HEIGHT)
+  const corridorH = Math.max(...ordered.map((r) => r.dimensions.height), DEFAULT_HEIGHT)
 
   const corridor: RoomNode = {
     id: 'corridor',

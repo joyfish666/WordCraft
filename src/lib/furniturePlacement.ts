@@ -2,7 +2,7 @@ import { footprintBounds } from './footprint'
 import { completeRoomFurniture } from './furnitureCompleteness'
 import { furnitureKind } from './furniturePresets'
 import { EPSILON } from './constants'
-import { halfRectOverlaps } from './geometry'
+import { halfRectOverlaps, nestedKeepOutRect, roomInnerBounds, type Rect } from './geometry'
 import {
   DOOR_CLEARANCE,
   DOOR_WIDTH,
@@ -42,34 +42,10 @@ export function isWallAnchored(name: string): boolean {
   return !FREE_STANDING_RE.test(name)
 }
 
-/** 房间内缩墙厚后的可活动范围（足迹包围盒内缩） */
-interface InnerBounds {
-  minX: number
-  maxX: number
-  minZ: number
-  maxZ: number
-}
+/** 房间墙内可活动区（内缩墙厚）与嵌套禁入区：共享实现见 geometry.roomInnerBounds / nestedKeepOutRect */
 
-function innerBounds(room: RoomNode): InnerBounds {
-  const b = footprintBounds(room.footprint)
-  return {
-    minX: b.minX + WALL_THICKNESS,
-    maxX: b.maxX - WALL_THICKNESS,
-    minZ: b.minZ + WALL_THICKNESS,
-    maxZ: b.maxZ - WALL_THICKNESS,
-  }
-}
-
-/** 嵌套子房间的禁止进入区：房间足迹包围盒 + 墙厚外扩，家具不得与之重叠 */
-function keepOutRect(room: RoomNode): InnerBounds {
-  const b = footprintBounds(room.footprint)
-  return {
-    minX: b.minX - WALL_THICKNESS,
-    maxX: b.maxX + WALL_THICKNESS,
-    minZ: b.minZ - WALL_THICKNESS,
-    maxZ: b.maxZ + WALL_THICKNESS,
-  }
-}
+/** 墙内可活动区/嵌套禁入区的矩形类型（与 geometry.Rect 同构） */
+type InnerBounds = Rect
 
 /** 房间门口的禁入区：从门所在墙内壁向室内 DOOR_CLEARANCE 深、门宽（含少量余量）宽。
  *  导出供 executor 的 nestRoom 落点避让门口复用（坑 47）。 */
@@ -284,11 +260,11 @@ function placeWallAnchored(
 function visitRoom(node: RoomNode, doorZones: Map<string, DoorZoneInfo[]>): RoomNode {
   const keepOuts: InnerBounds[] = []
   const nestedRooms = node.nestedRooms.map((child) => {
-    keepOuts.push(keepOutRect(child))
+    keepOuts.push(nestedKeepOutRect(child))
     return visitRoom(child, doorZones)
   })
 
-  const bounds = innerBounds(node)
+  const bounds = roomInnerBounds(node)
   const roomDoors = (doorZones.get(node.id) ?? []).map((z) => doorZoneRect(node, z))
   const placedBoxes: InnerBounds[] = []
   // 常配套件补全（坑 87）：书桌→椅、餐桌→餐椅、床→床头柜、沙发→茶几；

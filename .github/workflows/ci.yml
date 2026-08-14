@@ -25,6 +25,11 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Audit production dependencies
+        # 依赖安全门（2026-08-14 审查补）：此前 npm audit 清零只是历史一次性动作，
+        # 未来升级引入新高危依赖时 CI 必须拦截（react-router v6 线 2 个 moderate 已知，
+        # audit-level=high 不拦截，待升 v7 规划见 notes 坑 85）
+        run: npm audit --omit=dev --audit-level=high
       - name: Lint
         run: npm run lint
       - name: Format check

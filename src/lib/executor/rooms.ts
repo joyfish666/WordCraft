@@ -1,7 +1,12 @@
 import { ROOM_SPACING } from '../constants'
 import { footprintBounds, footprintCenter, houseLevelsBounds } from '../footprint'
 import { doorZoneRect } from '../furniturePlacement'
-import { NEST_CORNER as GEOMETRY_NEST_CORNER, rectsOverlap, translateRoom } from '../geometry'
+import {
+  NEST_CORNER as GEOMETRY_NEST_CORNER,
+  nestedCornerHalf,
+  rectsOverlap,
+  translateRoom,
+} from '../geometry'
 import { createId } from '../id'
 import { makeRoom, resolveLayout } from '../layout'
 import {
@@ -290,8 +295,8 @@ export function applyNestRoom(scene: SceneModel, op: Extract<Op, { op: 'nestRoom
   const removed = { ...scene, root: removeNode(scene.root, room.id) as SceneModel['root'] }
   const rb = footprintBounds(room.footprint)
   const pb = footprintBounds(parent.footprint)
-  const halfX = Math.max(0, (pb.maxX - pb.minX - (rb.maxX - rb.minX)) / 2 - WALL_THICKNESS)
-  const halfZ = Math.max(0, (pb.maxZ - pb.minZ - (rb.maxZ - rb.minZ)) / 2 - WALL_THICKNESS)
+  const halfX = nestedCornerHalf(pb.maxX - pb.minX, rb.maxX - rb.minX)
+  const halfZ = nestedCornerHalf(pb.maxZ - pb.minZ, rb.maxZ - rb.minZ)
   // 父房间门口禁区（与渲染同源）：嵌套落点不得压住门
   const doorZoneRects = (
     computeDoorZones(removed.root.levels[0]!.rooms, {

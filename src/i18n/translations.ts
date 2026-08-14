@@ -82,6 +82,7 @@ export const zh = {
 
   // ---------- 视图切换 ----------
   'home.viewModeAria': '视图模式',
+  'home.view3dTitle': '切换至 3D 视图',
   'home.viewPlan': '平面图',
   'home.viewPlanTitle': '切换至俯视平面图',
   'plan.tools': '工具',
@@ -409,6 +410,7 @@ export const en: Record<TKey, string> = {
 
   // ---------- View toggle ----------
   'home.viewModeAria': 'View mode',
+  'home.view3dTitle': 'Switch to 3D view',
   'home.viewPlan': 'Plan',
   'home.viewPlanTitle': 'Switch to top-down plan view',
   'plan.tools': 'Tools',

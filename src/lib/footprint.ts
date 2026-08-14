@@ -6,7 +6,7 @@ import type {
   Position,
   RoomNode,
 } from '../types/model'
-import { DEFAULT_HEIGHT } from './constants'
+import { DEFAULT_HEIGHT, EPSILON } from './constants'
 
 /**
  * v3 足迹几何（footprint）纯函数：包围盒 / 中心 / 平移 / 缩放 / 矩形构造。
@@ -72,8 +72,8 @@ export function resizeFootprint(footprint: Point2D[], length: number, width: num
   const b = footprintBounds(footprint)
   const cx = (b.minX + b.maxX) / 2
   const cz = (b.minZ + b.maxZ) / 2
-  const len = Math.max(b.maxX - b.minX, 1e-6)
-  const wid = Math.max(b.maxZ - b.minZ, 1e-6)
+  const len = Math.max(b.maxX - b.minX, EPSILON)
+  const wid = Math.max(b.maxZ - b.minZ, EPSILON)
   return footprint.map((p) => ({
     x: cx + ((p.x - cx) * length) / len,
     z: cz + ((p.z - cz) * width) / wid,

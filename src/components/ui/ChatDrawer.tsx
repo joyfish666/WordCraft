@@ -123,12 +123,15 @@ export const ChatDrawer = forwardRef<ChatDrawerHandle, ChatDrawerProps>(function
             <div className="chat-msg chat-msg--assistant chat-msg--generating">
               <span className="chat-msg__label">{t('chat.roleAssistant')}</span>
               <div className="chat-msg__body">
-                <span className="generating-dots">
+                <span className="generating-dots" aria-hidden="true">
                   <span />
                   <span />
                   <span />
                 </span>
-                {t('chat.generating', { elapsed })}
+                {/* 逐秒变化的计时对读屏器是高频噪音：可见文本 aria-hidden，
+                    由静态 sr-only 行在插入时播报一次（坑 105-114 审查批次后续 a11y 补全） */}
+                <span aria-hidden="true">{t('chat.generating', { elapsed })}</span>
+                <span className="sr-only">{t('chat.generating', { elapsed: 0 })}</span>
               </div>
             </div>
           )}
