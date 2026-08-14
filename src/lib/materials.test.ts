@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import {
   boxWallGeometry,
@@ -12,6 +12,109 @@ import {
   skirtingMaterial,
   TEXTURE_TILE_METERS,
 } from './materials'
+import { GROUND_COLOR } from './palette'
+
+// ---------------------------------------------------------------------------
+// 草地「春天感」回归防线（坑 117 二轮，2026-08-14）：mock canvas 渲染草地纹理，
+// 乘 GROUND_COLOR tint 后断言——嫩绿（饱和度/绿感）与花色点缀。
+// 注意：必须放在最前（getTexture 是缓存单例，先于其他测试执行才能拿到真实绘制结果）。
+// ---------------------------------------------------------------------------
+describe('grassGround 草地纹理（春天感回归防线，坑 117）', () => {
+  const SIZE = 256
+  const px = new Uint8Array(SIZE * SIZE * 4)
+  const origCreate = document.createElement.bind(document)
+
+  function makeMockCtx() {
+    let alpha = 1
+    let fill: [number, number, number] = [0, 0, 0]
+    const ctx: Record<string, unknown> = {
+      get globalAlpha() {
+        return alpha
+      },
+      set globalAlpha(v: number) {
+        alpha = v
+      },
+      set fillStyle(v: string) {
+        const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(v)
+        if (m) fill = [Number(m[1]), Number(m[2]), Number(m[3])]
+        else if (v.startsWith('#'))
+          fill = [
+            parseInt(v.slice(1, 3), 16),
+            parseInt(v.slice(3, 5), 16),
+            parseInt(v.slice(5, 7), 16),
+          ]
+      },
+      fillRect(x: number, y: number, w: number, h: number) {
+        for (let dy = 0; dy < h; dy++) {
+          for (let dx = 0; dx < w; dx++) {
+            const ix = Math.floor(x) + dx
+            const iy = Math.floor(y) + dy
+            if (ix < 0 || iy < 0 || ix >= SIZE || iy >= SIZE) continue
+            const i = (iy * SIZE + ix) * 4
+            px[i] = Math.round(px[i]! * (1 - alpha) + fill[0]! * alpha)
+            px[i + 1] = Math.round(px[i + 1]! * (1 - alpha) + fill[1]! * alpha)
+            px[i + 2] = Math.round(px[i + 2]! * (1 - alpha) + fill[2]! * alpha)
+            px[i + 3] = 255
+          }
+        }
+      },
+    }
+    return ctx
+  }
+
+  it('tint 乘算后为鲜嫩绿（高饱和度、G 主导）且带花色点缀——不是灰绿/枯黄', () => {
+    document.createElement = ((tag: string, ...args: unknown[]) => {
+      if (tag === 'canvas') {
+        return {
+          width: SIZE,
+          height: SIZE,
+          getContext: () => makeMockCtx(),
+        } as unknown as HTMLCanvasElement
+      }
+      return origCreate(tag as 'div', ...(args as []))
+    }) as typeof document.createElement
+
+    getTexture('grassGround')
+    const tint = [
+      parseInt(GROUND_COLOR.slice(1, 3), 16) / 255,
+      parseInt(GROUND_COLOR.slice(3, 5), 16) / 255,
+      parseInt(GROUND_COLOR.slice(5, 7), 16) / 255,
+    ]
+    let sumR = 0
+    let sumG = 0
+    let sumB = 0
+    let flowers = 0
+    for (let i = 0; i < SIZE * SIZE; i++) {
+      const r = Math.round(px[i * 4]! * tint[0]!)
+      const g = Math.round(px[i * 4 + 1]! * tint[1]!)
+      const b = Math.round(px[i * 4 + 2]! * tint[2]!)
+      sumR += r
+      sumG += g
+      sumB += b
+      // 淡黄小花（tint 后亮黄绿点）：G 高、R 明显高于 B（黄感）
+      if (r > 130 && g > 170 && r - b > 60) flowers++
+    }
+    const n = SIZE * SIZE
+    const avgR = sumR / n
+    const avgG = sumG / n
+    const avgB = sumB / n
+    const max = Math.max(avgR, avgG, avgB)
+    const min = Math.min(avgR, avgG, avgB)
+    const sat = max === 0 ? 0 : (max - min) / max
+    // 春天嫩绿：饱和度明显高于旧灰绿 tint（#a8b795 的 S≈0.19）、G 通道主导
+    expect(sat).toBeGreaterThan(0.35)
+    expect(avgG).toBeGreaterThan(avgR + 15)
+    expect(avgG).toBeGreaterThan(avgB + 40)
+    // 花色点缀存在但稀疏（不喧宾夺主）
+    expect(flowers).toBeGreaterThan(100)
+    expect(flowers / n).toBeLessThan(0.02)
+  })
+
+  afterAll(() => {
+    // 恢复原 createElement（后续测试的 getTexture 走 jsdom 原生路径）
+    document.createElement = origCreate
+  })
+})
 
 describe('materials（程序化材质层）', () => {
   describe('roomFloorKind 房间类型 → 地板类别', () => {

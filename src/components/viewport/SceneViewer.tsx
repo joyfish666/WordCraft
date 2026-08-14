@@ -203,7 +203,7 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
             up={[0, 0, 1]}
           />
         )}
-        {/* 程序化天空 + 地平线雾：雾色取天际线暖白，地面边缘融进地平线（平面图模式保持纯净） */}
+        {/* 程序化天空 + 地平线雾：雾色取淡绿白（坑 119 春天化，原暖白米黄让远景如冬日），地面边缘融进地平线（平面图模式保持纯净） */}
         {!planMode && (
           <>
             <Sky
@@ -217,7 +217,7 @@ export const SceneViewer = forwardRef<SceneViewerHandle, SceneViewerProps>(funct
               mieCoefficient={0.003}
               mieDirectionalG={0.75}
             />
-            <fog attach="fog" args={['#e8e3d4', 30, 120]} />
+            <fog attach="fog" args={['#e7ecd9', 30, 120]} />
           </>
         )}
         <ambientLight intensity={0.35} />

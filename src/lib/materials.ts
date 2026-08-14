@@ -208,25 +208,33 @@ function drawFabric(ctx: CanvasRenderingContext2D): void {
   }
 }
 
-/** 草地（室外地面）：中性灰调（绿色由 tint 乘算）+ 低频起伏 + 中频碎叶噪声 + 草丛斑块 + 草叶短划 */
+/**
+ * 草地（室外地面）：中性色供 tint 乘算——低频大尺度冷暖色差（阳光区偏暖黄绿、阴影区
+ * 偏冷蓝绿）+ 中频柔和起伏 + 高密度细草叶竖划 + 稀疏淡黄小花点缀（坑 119 春天化：
+ * 坑 116 版本仍有枯草短划与灰调，乘灰绿 tint 后如冬天地面——去枯草、草色鲜亮、
+ * 亮区阳光感，配嫩绿 GROUND_COLOR 呈春天草坪）。
+ */
 function drawGrass(ctx: CanvasRenderingContext2D, rand: () => number): void {
-  const low = makeNoise(23, 40)
-  const mid = makeNoise(29, 10)
+  const low = makeNoise(23, 48) // 大尺度色差（阳光/阴影区域）
+  const mid = makeNoise(29, 12) // 中频起伏
+  const fine = makeNoise(31, 5) // 高频细颗粒（低对比，不颗粒化）
   const BASE = 182
   for (let x = 0; x < SIZE; x++) {
     for (let y = 0; y < SIZE; y++) {
-      const v = BASE + (low(x, y) - 0.5) * 20 + (mid(x, y) - 0.5) * 22
-      ctx.fillStyle = rgb(v, v, v)
+      const v = BASE + (low(x, y) - 0.5) * 26 + (mid(x, y) - 0.5) * 10 + (fine(x, y) - 0.5) * 6
+      // 冷暖草色：亮区偏暖（阳光黄绿）、暗区偏冷（阴影蓝绿），tint 乘算后呈春草斑驳
+      const t = low(x, y) - 0.5
+      ctx.fillStyle = rgb(v + t * 12, v + t * 4, v - t * 8)
       ctx.fillRect(x, y, 1, 1)
     }
   }
-  // 草丛斑块：半透明加深，跨边回绕保持平铺无缝
-  ctx.globalAlpha = 0.45
-  for (let i = 0; i < 16; i++) {
+  // 草丛斑块：半透明加深（深绿丛），跨边回绕保持平铺无缝
+  ctx.globalAlpha = 0.38
+  for (let i = 0; i < 12; i++) {
     const cx = Math.floor(rand() * SIZE)
     const cy = Math.floor(rand() * SIZE)
-    const r = 6 + Math.floor(rand() * 10)
-    const d = -10 - Math.floor(rand() * 10)
+    const r = 8 + Math.floor(rand() * 12)
+    const d = -10 - Math.floor(rand() * 8)
     for (let x = cx - r; x <= cx + r; x++) {
       for (let y = cy - r; y <= cy + r; y++) {
         const dx = x - cx
@@ -240,13 +248,23 @@ function drawGrass(ctx: CanvasRenderingContext2D, rand: () => number): void {
     }
   }
   ctx.globalAlpha = 1
-  // 草叶短划：1×2 亮/暗竖划，模拟叶片受光与阴影
-  for (let i = 0; i < 2600; i++) {
+  // 高密度细草叶：1px 宽 × 3~5px 长竖划，亮划偏多（阳光草尖）
+  for (let i = 0; i < 9000; i++) {
     const x = Math.floor(rand() * SIZE)
     const y = Math.floor(rand() * SIZE)
-    const d = rand() < 0.5 ? 20 : -14
+    const h = 3 + Math.floor(rand() * 3)
+    const d = rand() < 0.55 ? 12 : -8
     ctx.fillStyle = rgb(BASE + d, BASE + d, BASE + d)
-    ctx.fillRect(x, y, 1, 1 + Math.floor(rand() * 2))
+    ctx.fillRect(x, y, 1, h)
+  }
+  // 稀疏淡黄小花：1~2px 亮点，乘算 tint 后呈亮黄绿（远处如春天小野花；纹理 R 通道
+  // 取 255 上限——乘算 tint 的 R 系数 ~0.56，255 是花点能"最亮"的极限）
+  for (let i = 0; i < 240; i++) {
+    const x = Math.floor(rand() * SIZE)
+    const y = Math.floor(rand() * SIZE)
+    const s = rand() < 0.4 ? 2 : 1
+    ctx.fillStyle = rgb(255, 232, 150)
+    ctx.fillRect(x, y, s, 1)
   }
 }
 
