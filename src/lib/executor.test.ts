@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   footprintBounds,
   footprintCenter,
@@ -7,6 +7,7 @@ import {
   roomDims,
 } from './footprint'
 import { doorZoneRect } from './furniturePlacement'
+import * as furniturePlacement from './furniturePlacement'
 import { diffSceneV2, emptyScene, executeOps, findRoom } from './executor'
 import { opSchema } from '../schemas/ops.schema'
 import { findNodeById } from './modelTree'
@@ -1920,6 +1921,85 @@ describe('executeOps - setHouse / 约束兜底 / 楼层高度', () => {
       Math.abs(bed.position.z - (b.maxZ - 0.15 - bed.dimensions.width / 2)) < 1e-6
     expect(flush).toBe(true)
   })
+
+  it('macro corridor 批次不再重复跑家具常理摆放（resolveLayout 已处理，坑 105-114 审查批次后续）', () => {
+    const spy = vi.spyOn(furniturePlacement, 'applyFurnitureConventions')
+    try {
+      executeOps(
+        emptyScene(),
+        [
+          {
+            op: 'macro',
+            name: 'corridor',
+            params: {
+              name: '示例房',
+              corridor: { width: 1.2, entranceRoomId: 'living' },
+              rooms: [
+                {
+                  id: 'living',
+                  name: '客厅',
+                  dimensions: { length: 5, width: 4, height: 2.8 },
+                  side: 'left',
+                  furniture: [
+                    {
+                      id: 'sofa',
+                      name: '沙发',
+                      dimensions: { length: 2, width: 0.9, height: 0.8 },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+        { furnitureConventions: true },
+      )
+      // 仅 resolveLayout（applyMacro 内部）跑一次；executeOps 末尾不再重复跑
+      expect(spy).toHaveBeenCalledTimes(1)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('macro corridor + 增量家具 op 的混合批次仍跑一次末尾摆放（为新家具兜底）', () => {
+    const spy = vi.spyOn(furniturePlacement, 'applyFurnitureConventions')
+    try {
+      const result = executeOps(
+        emptyScene(),
+        [
+          {
+            op: 'macro',
+            name: 'corridor',
+            params: {
+              name: '示例房',
+              corridor: { width: 1.2, entranceRoomId: 'living' },
+              rooms: [
+                {
+                  id: 'living',
+                  name: '客厅',
+                  dimensions: { length: 5, width: 4, height: 2.8 },
+                  side: 'left',
+                },
+              ],
+            },
+          },
+          {
+            op: 'addFurniture',
+            roomId: 'living',
+            name: '沙发',
+            dimensions: { length: 2, width: 0.9, height: 0.8 },
+          },
+        ],
+        { furnitureConventions: true },
+      )
+      // resolveLayout 一次 + 末尾为新家具再跑一次
+      expect(spy).toHaveBeenCalledTimes(2)
+      const room = findNodeById(result.scene.root, 'living') as RoomNode
+      expect(room.furniture.some((f) => f.name === '沙发')).toBe(true)
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })
 
 describe('diffSceneV2 - 快照容错路径', () => {
@@ -2014,12 +2094,12 @@ describe('diffSceneV2 - 快照容错路径', () => {
       '新名字',
     )
     const ops = diffSceneV2(base, target)
-    // 改名 + 更新
+    // 改名 + 更新（逐维下发：层高未变不重复下发 height，避免无谓 resizeFootprint——坑 105-114 审查批次后续）
     expect(ops).toContainEqual({ op: 'setHouse', name: '新名字' })
     expect(ops).toContainEqual({
       op: 'updateRoom',
       id: 'a',
-      patch: { name: '房A改名', dimensions: { length: 5, width: 4, height: 2.8 } },
+      patch: { name: '房A改名', dimensions: { length: 5, width: 4 } },
     })
     // 家具：f1 改名（相对位置未变则无 position 补丁）、f2 新增
     expect(ops).toContainEqual({
