@@ -52,7 +52,7 @@
 | Code compression | **lz-string** | Efficient JSON compression |
 | HTTP | **fetch (streaming SSE)** | OpenAI-compatible chat completions, unified fetch stack |
 | Build | **Vite** | Fast dev/build tooling |
-| Testing | **Vitest + Testing Library** | Unit and component tests (654 cases, run in CI) |
+| Testing | **Vitest + Testing Library** | Unit and component tests (704 cases, run in CI) |
 
 ## Project Docs
 

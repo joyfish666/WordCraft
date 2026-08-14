@@ -4,6 +4,21 @@
 
 ## Unreleased（2026-08-14 全面审查批次，版本号未升）
 
+### 2026-08-14 遗留任务批次（A/B 组测试补缺，704 用例全绿）
+
+#### 测试补缺（654 → 704，新增 50 用例）
+
+- `lib/safeStorage.test.ts`（12 用例）：`createDedupeStorage` 去重命中底层只 setItem 一次 / 不同键独立去重 / 底层被外部清空或改写后缓存失效真正写回 / removeItem 清缓存 / getItem 透传 / 底层读失败不阻塞写入；`safeLocalStorage` setItem 抛错静默降级 + 一次性警告、getItem 抛错返回 null、removeItem 抛错静默、正常读写删透传（存储层「拖拽预览不写 localStorage」承重墙直测，坑 80/91）。
+- `store/useModelStore.test.ts` / `useChatStore.test.ts` persist 迁移 rehydrate 端到端（各 2 用例）：v1 盒子存档 → v3（`levels[0].rooms`/4 点足迹/wall 并入家具）且 v3 存档原样读入；v2 消息带 `model` 存档 → rehydrate 后内存与持久化均无 model 并回写 version 3。
+- `hooks/useDirtyTracking.test.tsx`（5 用例）：挂载首帧基线不误标脏 / 干净→变化置脏 / 脏后连续变化只置脏一次（spy 计数，坑 75）/ 移回已保存内容清脏 / 游离场景不跟踪。
+- `hooks/useMobileCompact.test.tsx`（4 用例）：桌面 false / 窄屏 resize 转 true / 高度 ≤480 判紧凑 / 阈值边界 760 / 卸载移除监听。
+- `pages/SettingsPage.test.tsx`（8 用例）：API Key 增删与首条自动激活 / 空表单按钮禁用 / radio 切换 / 默认 Base URL 与模型输入 / 连通性检测成功失败文案（mock `testConnection`）/ 语言切换英文界面。
+- `components/ui/Dialog.test.tsx`（7 用例）+ `Button.test.tsx`（5 用例）+ `Input.test.tsx`（4 用例）：聚焦首元素 / Tab 焦点陷阱 / Escape 与遮罩点击关闭 / 内容区不冒泡 / 焦点归还 / 滚动锁 / portal 卸载；变体类名与禁用态。
+
+#### 文档与工程
+
+- 测试数 654 → 704（architecture §9、README 双语）；README 双语 FAQ 修正 Key 存储描述为仅 localStorage（IndexedDB 是项目库）；`.gitignore` 补 `.env*`（防御性）；`docs/review-followup.md` 勾选 A/B 组全部项并记录提交号（A1 `b8b6d78` / A2 `a77097b` / A3 `ccbd440` / A4 `7bf40e0` / B1 `612be91` / B2 `d543bc9` / B3 `b8e0a34`）；C1（react-router v7）单独排期未执行，C3（Compass/PlanEditLayer 组件测试）确认不做（jsdom 无 WebGL，硬测只得「渲染不崩」低价值断言，纯几何已由 planGeometry/planEdit 测试覆盖）。
+
 ### 2026-08-14 审查落地批次（P0/P1/P2：几何收拢 / 性能 / 测试补缺 / UI 一致性 / 文档工程，654 用例全绿）
 
 #### 修复与健壮性

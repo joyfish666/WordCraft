@@ -335,7 +335,7 @@ src/
 └── vite-env.d.ts              # __APP_VERSION__ 声明（vite.config.ts 从 package.json 注入，2026-08-13）
 ```
 
-## 9. 测试（Vitest，654 用例）
+## 9. 测试（Vitest，704 用例）
 
 - `lib/planEdit.test.ts`【P4 新增】：网格吸附/足迹校验（非正交/过短/自交拒绝）、正交顶点拖拽（矩形滑行/L 形内凹角/退化与自交拒绝/最近顶点）、平移贴墙吸附（线差阈值/网格先行/无重叠不吸附）、拆房布局（家具/嵌套/开洞归属重映射）、合并布局（unionRectOf 面积守恒/开洞重映射）、墙命中（实心墙/入户门/门段/邻屋共墙）。
 - `lib/editOps.test.ts`【新增】：editDiffToOps 纯函数——家具位移（相对房间中心换算）/房间位移与改尺寸（footprint 顶点环）/层高（dimensions.height）/家具改名改尺寸/约束后位置变化/normalize 提交一致性/无变化与节点缺失返回空/整屋改名（setHouse）/嵌套房间内家具归属最内层房间。
@@ -369,6 +369,7 @@ src/
 - 【2026-08-13 审查批次后续（坑 80-84）】：**useModelStore 拖拽预览不写 localStorage**（preview 后 storage 保持提交时场景、commitDrag 恢复持久化，坑 80）；**useChatStore 持久化消息剥离 model**（partialize 与 migrate 均无 `model` 字段、内存中保留，坑 81）；**executor 快照 diff 新增房间透传 position/footprint/家具 rotationY·description**（此前 custom 快照按 position 布局的新房间落东侧兜底，坑 82）+ **addRoom position 落点**（绝对位置生效、优先级高于 relativeTo、显式 footprint 优先于 position）+ **setOpenings edgeIndex-only 通过 zod 校验并可执行/删除、side 与 edgeIndex 均缺省时执行器兜底跳过**（坑 83）。
 - 【2026-08-13 用户反馈修复（坑 86-87）】：**唯一卫生间公共语义**（`roomGeometry.test.ts`：唯一卫生间邻客厅+主卧 → 门开向客厅而非主卧 / 只邻私密房间退化为 id 最小 / 多卫生间不特判，坑 86）；**家具常配套件补全**（`furnitureCompleteness.test.ts` 11 用例：书桌→椅位置/幂等/餐桌长边两侧 2 椅/圆桌直径两侧/床头柜床两侧/已有不补/沙发→茶几/description 排除词整房间跳过/空房间返回原引用/多主家具各补各的；`furniturePlacement.test.ts` 集成：补全件经摆放后全部在房间内且两两不重叠、description 排除不补，坑 87）；`modelTree.test.ts` countNodes 27 → 31（示例模型随 auto 路径获得 4 件补全）。
 - 【2026-08-13 渲染共面审计（坑 88）】：**`furniturePresets.test.ts` 共面审计 61 用例**（全种类 × 全档尺寸 × 四朝向，枚举所有 box 部件 6 面，断言任意两部件无「同法向 + 同平面 + 区间重叠」——沙发扶手/靠背、灶台控制条/炉头、浴缸内胆/龙头、书架背板、梳妆镜、床头板、水箱、电视屏的端盖/顶面/底面互掐全部修复并锁死回归）。
+- 【2026-08-14 遗留任务批次（A/B 组测试补缺）】：**`lib/safeStorage.test.ts`（12 用例）**：createDedupeStorage 去重命中底层只 setItem 一次 / 不同键独立去重 / 底层被外部清空或改写后缓存失效真正写回 / 底层同值但缓存为空时写入 / removeItem 清缓存 / getItem 透传 / 底层读失败不阻塞写入；safeLocalStorage 的 setItem 抛错静默降级 + 一次性警告、getItem 抛错返回 null、removeItem 抛错静默、正常读写删透传（坑 80/91 存储层直测）。**store persist 迁移 rehydrate 端到端**（`useModelStore.test.ts`：v1 盒子存档 → 迁移为 v3——`levels[0].rooms`/4 点足迹/wall 并入家具；v3 存档原样读入。`useChatStore.test.ts`：v2 存档消息带 model → rehydrate 后内存与持久化均无 model、version 回写 3；v3 存档保持原样）。**`hooks/useDirtyTracking.test.tsx`（5 用例）**：挂载时已有项目无快照 → 以当前场景为基线不误标脏 / 干净→变化置脏且 savedJson 不被覆盖 / 脏后连续变化只置脏一次（spy 计数 markDirty，坑 75 语义）/ 变化后移回已保存内容清脏 / 游离场景不跟踪。**`hooks/useMobileCompact.test.tsx`（4 用例）**：桌面 false / 窄屏 resize 转 true / 高度 ≤480 判紧凑 / 阈值边界 760 与 761 / 卸载移除 resize 监听（坑 61 视口模拟同款）。**`pages/SettingsPage.test.tsx`（8 用例）**：API Key 表单提交与首条自动激活 + 掩码展示 / 空表单按钮禁用 / 删除后激活回退 / radio 切换 / 默认 Base URL 与模型输入同步 store / 连通性检测成功与失败文案（mock `lib/api.testConnection`，runTest 异步用 findBy）/ 语言切换英文界面（mock api 模块）。**`components/ui/Dialog.test.tsx`（7 用例）**：打开聚焦首个可聚焦元素 / Tab 焦点陷阱首尾循环 / Escape 关闭 / 遮罩点击关闭且内容区不冒泡 / 关闭焦点归还触发元素 / body 滚动锁与恢复 / 关闭后 portal 卸载（断言查 body，createPortal 语义）。**`components/ui/Button.test.tsx`（5 用例）+ `Input.test.tsx`（4 用例）**：变体类名 / 自定义 className 追加 / 禁用态不触发 onClick（jsdom 下 disabled 输入控件不派发 change 为浏览器原生行为，仅验证属性）/ 属性透传。
 
 ## 10. 调试模式
 
