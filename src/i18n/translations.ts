@@ -115,6 +115,8 @@ export const zh = {
   'home.noApiKey': '尚未配置 API Key，请先前往设置页配置后再试。',
   'home.genFailed': '生成失败，请重试',
   'home.genCancelled': '已取消生成',
+  // 空场景默认整屋名（chat.ts resolveRawOutput 边界按界面语言取用，坑 124）
+  'home.unnamedHouse': '未命名房屋',
   'home.genConflictTitle': '生成结果与当前编辑冲突',
   'home.genConflictApply':
     '生成期间你手动编辑了场景。仍要应用生成结果覆盖当前编辑吗？（建议选「取消」以保留你的修改）',
@@ -232,6 +234,10 @@ export const zh = {
   'property.nudgeSouth': '向南移',
   'property.nudgeUp': '向上移',
   'property.nudgeDown': '向下移',
+  // 房间的 Y 坐标由层高派生、上下微调无几何语义（updateNodeFields 对 room 忽略 position.y，坑 125）
+  'property.yRoomDisabled': '房间高度由层高决定，不可单独调整',
+  'property.nudgeUpRoomDisabled': '房间不可上下移动（高度由层高决定）',
+  'property.nudgeDownRoomDisabled': '房间不可上下移动（高度由层高决定）',
   'property.west': '◀ 西',
   'property.north': '▲ 北',
   'property.east': '▶ 东',
@@ -445,6 +451,7 @@ export const en: Record<TKey, string> = {
   'home.noApiKey': 'No API Key configured yet. Configure one on the Settings page first.',
   'home.genFailed': 'Generation failed, please try again',
   'home.genCancelled': 'Generation cancelled',
+  'home.unnamedHouse': 'Unnamed House',
   'home.genConflictTitle': 'Generation conflicts with your current edits',
   'home.genConflictApply':
     'The scene was edited while generating. Apply the generated result anyway and overwrite your edits? (Choose "Cancel" to keep your edits)',
@@ -569,6 +576,9 @@ export const en: Record<TKey, string> = {
   'property.nudgeSouth': 'Move south',
   'property.nudgeUp': 'Move up',
   'property.nudgeDown': 'Move down',
+  'property.yRoomDisabled': 'Room height is derived from its ceiling height',
+  'property.nudgeUpRoomDisabled': 'Rooms cannot be moved vertically (height comes from ceiling)',
+  'property.nudgeDownRoomDisabled': 'Rooms cannot be moved vertically (height comes from ceiling)',
   'property.west': '◀ W',
   'property.north': '▲ N',
   'property.east': '▶ E',

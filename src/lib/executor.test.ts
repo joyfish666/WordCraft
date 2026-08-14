@@ -1922,6 +1922,78 @@ describe('executeOps - setHouse / 约束兜底 / 楼层高度', () => {
     expect(flush).toBe(true)
   })
 
+  it('furnitureComplete: false 时只摆放不补全配套（坑 119：增量批次语义）', () => {
+    const result = executeOps(
+      emptyScene(),
+      [
+        {
+          op: 'macro',
+          name: 'custom',
+          params: {
+            rooms: [
+              {
+                id: 'r',
+                name: '卧室',
+                dimensions: { length: 5, width: 4, height: 2.8 },
+                position: { x: 0, y: 1.4, z: 0 },
+              },
+            ],
+          },
+        },
+        {
+          op: 'addFurniture',
+          roomId: 'r',
+          name: '双人床',
+          dimensions: { length: 2, width: 1.5, height: 0.5 },
+        },
+      ],
+      { furnitureConventions: true, furnitureComplete: false },
+    )
+    const room = findNodeById(result.scene.root, 'r') as RoomNode
+    // 摆放仍生效（贴墙）
+    const bed = room.furniture.find((f) => f.name === '双人床')!
+    const b = houseLevelsBoundsOf(room)
+    const flush =
+      Math.abs(bed.position.x - (b.minX + 0.15 + bed.dimensions.length / 2)) < 1e-6 ||
+      Math.abs(bed.position.x - (b.maxX - 0.15 - bed.dimensions.length / 2)) < 1e-6 ||
+      Math.abs(bed.position.z - (b.minZ + 0.15 + bed.dimensions.width / 2)) < 1e-6 ||
+      Math.abs(bed.position.z - (b.maxZ - 0.15 - bed.dimensions.width / 2)) < 1e-6
+    expect(flush).toBe(true)
+    // 补全被关闭：床不自动带出床头柜
+    expect(room.furniture.some((f) => f.name === '床头柜')).toBe(false)
+  })
+
+  it('furnitureComplete 缺省时跟随 furnitureConventions（补全配套，兼容既有调用）', () => {
+    const result = executeOps(
+      emptyScene(),
+      [
+        {
+          op: 'macro',
+          name: 'custom',
+          params: {
+            rooms: [
+              {
+                id: 'r',
+                name: '卧室',
+                dimensions: { length: 5, width: 4, height: 2.8 },
+                position: { x: 0, y: 1.4, z: 0 },
+              },
+            ],
+          },
+        },
+        {
+          op: 'addFurniture',
+          roomId: 'r',
+          name: '双人床',
+          dimensions: { length: 2, width: 1.5, height: 0.5 },
+        },
+      ],
+      { furnitureConventions: true },
+    )
+    const room = findNodeById(result.scene.root, 'r') as RoomNode
+    expect(room.furniture.filter((f) => f.name === '床头柜')).toHaveLength(2)
+  })
+
   it('macro corridor 批次不再重复跑家具常理摆放（resolveLayout 已处理，坑 105-114 审查批次后续）', () => {
     const spy = vi.spyOn(furniturePlacement, 'applyFurnitureConventions')
     try {

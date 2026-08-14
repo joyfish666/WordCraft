@@ -120,11 +120,11 @@ interface Opening { edgeIndex: number; from: number; to: number; width: number }
 
 **布局惯例**：客厅近入口（南侧）、卧室沿走廊两侧、单间房无走廊、除入户门外房屋闭合。
 
-**家具常理摆放**（`furniturePlacement.ts`，仅 auto 模式 + 示例模型）：靠墙家具（衣柜/橱柜/书桌/沙发等，`isWallAnchored`）贴**最近墙**（保持平行于墙的坐标），**大面积贴墙**——长边（max(长,宽)）沿墙，必要时**交换长宽**实现 90° 旋转（`rotationY` 同步 +90°，渲染器暂不读 rotationY，视觉靠交换后的尺寸生效）；**床例外：短边（床头）贴墙**；再**沿墙滑动**避开三类禁止进入区：嵌套子房间（足迹包围盒 + 墙厚）、**房间门口通道**（`computeDoorZones` 从墙体方案提取门洞，含入户门，`DOOR_CLEARANCE=1m` 深 × 门宽）、已放置的其他家具。独立家具（茶几/餐桌/椅子等，`FREE_STANDING_RE`）保持原位，仅约束进墙内并避让上述禁区。custom 自由布局保留大模型的显式坐标。
+**家具常理摆放**（`furniturePlacement.ts`，auto 模板 + 快照路径 + 增量新增家具）：靠墙家具（衣柜/橱柜/书桌/沙发等，`isWallAnchored`）贴**最近墙**（保持平行于墙的坐标），**大面积贴墙**——长边（max(长,宽)）沿墙，必要时**交换长宽**实现 90° 旋转（`rotationY` 同步 +90°，渲染器暂不读 rotationY，视觉靠交换后的尺寸生效）；**床例外：短边（床头）贴墙**；再**沿墙滑动**避开三类禁止进入区：嵌套子房间（足迹包围盒 + 墙厚）、**房间门口通道**（`computeDoorZones` 从墙体方案提取门洞，含入户门，`DOOR_CLEARANCE=1m` 深 × 门宽）、已放置的其他家具。独立家具（茶几/餐桌/椅子等，`FREE_STANDING_RE`）保持原位，仅约束进墙内并避让上述禁区。custom 自由布局保留大模型的显式坐标。**触发条件（坑 119）**：`chat.ts` 按「批内引入需要摆放的新家具」传 `furnitureConventions`——auto macro（其家具已由 `resolveLayout` 摆过，执行器内部守卫避免双重摆放）、`addFurniture`、带家具的 `addRoom`；纯 `updateFurniture`/`moveRoom` 等「修改已有家具」的批次不触发（尊重 LLM/用户显式位置，"未明确才按常理"）。⚠️ 语言经 `lang` 参数下传（`executeOps` → `applyFurnitureConventions` → `completeRoomFurniture`，坑 120）——lib 为纯函数，不读全局 store。
 
 **2026-08-12 管线修复（坑 66）**：auto 分支**先常理摆放、后 normalize**（不再先 normalize——否则家具被推到"零重叠但位置差"的角落，后续"就近贴墙"被带偏，把本该留给其他家具的墙面占掉，复现"主卧衣柜与床重叠"）；`slideAlongWall` 改为**迭代滑动**（单趟"避开 A 撞上 B"：沿墙滑开卫生间时可能撞进已放家具），带 visited 震荡防护；重叠判定必须**逐禁区判断**（不可把"任一禁区重叠"的全集合结果复用于每个禁区）。
 
-**常配套件自动补全（2026-08-13 坑 87，`furnitureCompleteness.ts`）**：生成链路对 LLM 漏配的配套做兜底——书桌/梳妆台 → 使用者侧补 1 椅、餐桌/圆桌 → 两侧补 2 餐椅、床 → 床头两侧补 2 床头柜、沙发 → 前方补 1 茶几；**用户明确不要的通道**：该房间任一家具 `description` 含「不要|不需要|免配|别放」等排除词即整房间跳过（用户要求优先，提示词第 6 条已说明）；已有同类家具不补（幂等）。**范围边界**：随 `furnitureConventions` 选项生效——auto 模板（corridor/living）与 v2 快照路径补全，custom 自由布局与手动编辑不补全（custom 保留 LLM 显式清单、手动编辑是用户显式操作，均不应被侵入）。补全件初始位置由主家具当前位置推导（绝对坐标），最终由摆放流程确定（硬保证不越界不重叠，软目标贴合主家具）。
+**常配套件自动补全（2026-08-13 坑 87，`furnitureCompleteness.ts`）**：生成链路对 LLM 漏配的配套做兜底——书桌/梳妆台 → 使用者侧补 1 椅、餐桌/圆桌 → 两侧补 2 餐椅、床 → 床头两侧补 2 床头柜、沙发 → 前方补 1 茶几；**用户明确不要的通道**：该房间任一家具 `description` 含「不要|不需要|免配|别放」等排除词即整房间跳过（用户要求优先，提示词第 6 条已说明）；已有同类家具不补（幂等）。**范围边界（坑 119 起拆分为「摆放」与「补全」）**：补全随 `furnitureComplete` 选项生效——**auto 模板（corridor/living）与 v2 快照路径补全**（整屋生成语义）；custom 自由布局、手动编辑与**增量批次不补全**——custom 保留 LLM 显式清单、手动编辑是用户显式操作、增量批次补全会把用户已删除的配套件重新补回（补全的幂等检查只看「已有同类」，不记删除）。增量批次只走摆放兜底（`furnitureComplete: false`）。补全件名称随界面语言——**语言为纯函数参数 `lang`**（坑 120），由边界调用方注入，不读全局 store。补全件初始位置由主家具当前位置推导（绝对坐标），最终由摆放流程确定（硬保证不越界不重叠，软目标贴合主家具）。
 
 ## 4. 墙体模型（lib/roomGeometry.ts）
 
@@ -271,7 +271,7 @@ interface WallPlan { edges: WallEdge[] }   // 与 footprint 顶点环一一对�
 1. 构建 messages：系统提示词（**ops 操作序列契约**，P2 重写）+ 多轮历史（**P3 精简**：`toChatHistory` 剔除助手纯 JSON）+ **当前房屋状态摘要**（有场景时）+ **手动编辑日志**（`editOps` 非空时）+ 用户输入。
 2. **SSE 流式请求**（`streamChatCompletion`，lib/api.ts，fetch 实现）：`chat.ts` 侧 `GENERATION_TIMEOUT_MS = 180s` 兜底超时。
 3. 从回复提取 JSON，解析为操作序列（**解析容错链** `tryParseModelJson`，坑 93/94：原样 → `repairTruncatedJson` 按未闭合括号栈补全截断 → `repairLenientJson` 宽松括号修复（跳过错配/多余闭合符，坑 94——模型把 `]` 写成 `}` 或多打 `}` 时唯一能恢复的路径）→ 还原双编码（`unescapeDoubleEncodedJson`，只在解析失败后调用）→ 尾部修剪（截断残留，取最长可解析前缀）；`extractModelJson` 解包被包进字符串的 JSON；逐条 zod 校验，单条无效跳过）。
-4. `executeOps` 确定性执行：`macro` 走旧布局引擎；`addRoom/updateRoom/...` 增量修改；失败单条跳过；结束统一 `normalizeContainment`（auto 批次额外家具常理兜底）+ 楼层高度刷新。
+4. `executeOps` 确定性执行：`macro` 走旧布局引擎；`addRoom/updateRoom/...` 增量修改；失败单条跳过；结束统一 `normalizeContainment` + 楼层高度刷新。**常理摆放兜底（坑 119）**：批内引入新家具（auto macro / addFurniture / 带家具的 addRoom）时末尾跑 `applyFurnitureConventions`（`furnitureComplete` 区分摆放与补全，见 §3）；语言经 `lang` 参数注入（坑 120）。
 5. **快照容错路径**：输出为 v2 整屋快照时，auto → 映射 `macro`，custom → `diffSceneV2` 按 id diff 成 ops 再执行；v3 场景直接使用。
 6. 多轮：上下文 = 场景摘要 + 手动编辑日志（P3），提示词要求"基于当前状态输出必要操作、复用已有 id、不得原样重复（含编辑日志中的操作）"。
 7. **生成竞态防护**（2026-08-13，坑 70）：`send()` 发送时快照场景引用（HomePage `generationBaseRef`）；返回后若 `useModelStore.scene !== baseScene`（生成期间手动编辑/打开项目/加载示例/撤销），`window.confirm` 询问是否仍应用生成结果——取消则丢弃并提示，保留用户编辑。**改生成链路时别去掉这个确认环节**：模型基于旧版本场景生成的 ops 无条件覆盖会静默丢掉用户几分钟的编辑。
@@ -335,7 +335,9 @@ src/
 └── vite-env.d.ts              # __APP_VERSION__ 声明（vite.config.ts 从 package.json 注入，2026-08-13）
 ```
 
-## 9. 测试（Vitest，704 用例）
+## 9. 测试（Vitest，700+ 用例）
+
+> ⚠️ 精确用例数以 `npm test` 实时输出为准，本文档不再逐处维护精确数（坑 127：曾在同一文档内出现 614/704/705 三处漂移）。2026-08-15 实测 717 用例全绿。
 
 - `lib/planEdit.test.ts`【P4 新增】：网格吸附/足迹校验（非正交/过短/自交拒绝）、正交顶点拖拽（矩形滑行/L 形内凹角/退化与自交拒绝/最近顶点）、平移贴墙吸附（线差阈值/网格先行/无重叠不吸附）、拆房布局（家具/嵌套/开洞归属重映射）、合并布局（unionRectOf 面积守恒/开洞重映射）、墙命中（实心墙/入户门/门段/邻屋共墙）。
 - `lib/editOps.test.ts`【新增】：editDiffToOps 纯函数——家具位移（相对房间中心换算）/房间位移与改尺寸（footprint 顶点环）/层高（dimensions.height）/家具改名改尺寸/约束后位置变化/normalize 提交一致性/无变化与节点缺失返回空/整屋改名（setHouse）/嵌套房间内家具归属最内层房间。
@@ -377,4 +379,6 @@ src/
 
 ---
 
-**维护者**：JoyFish · 文档版本 v2.18**2026-08-14 追加落地（代码审查批次，坑 105-114）**：**流中途中断不再自动重试**（`StreamInterruptedError` 专属类型，与注释承诺一致——此前普通 Error 会被当作可重试错误，重复发起整次 POST 造成重复计费；坑 105）、**墙体方案内容签名补房间名**（`wallPlanContentKey` 此前不含 `r.name`，重命名房间后缓存返回陈旧门/墙方案——3D 渲染/平面图/墙命中三处同时出错；坑 106）、**家具独立词表双语化**（`FREE_STANDING_RE` 补英文，英文 UI 下 Coffee Table/Chair 等不再被误当靠墙家具；坑 107）、**settings migrate 保留线框偏好**（此前任何版本差都强制重置 wireframe，用户设置随每次升级静默丢失；仅 v<2 强制关；坑 108）、**提交语义收敛**（`commitEdit` 统一 commitDrag/commitPlanEdit：场景必收敛为约束后版本，但内容 diff 为空时不压历史——消除幽灵撤销条目；所有离散提交点调 `syncDirtyWithSaved`，拖回原位不再脏标记卡死；坑 109）、**快捷键对话框守卫**（`[role="dialog"]` 打开时 Ctrl+Z/R/方向键不再作用于背后场景；坑 110）、**v2 快照路径补 rotationY/relativeTo 透传**（此前家具旋转修改与贴靠定位在快照容错路径静默丢失；坑 111）、**applyOpenings 按足迹环几何取边**（退化边过滤后数组下标错位，开洞落到错误的墙；坑 112）、**ConfirmProvider 请求队列化**（重入不再悬挂前一个 Promise；坑 113）、**截图竞态防护**（flushSync 同步提交 + 请求序号防重叠复位；坑 114）、**对话消息与历史有上限**（messages 100 条 + toChatHistory 最近 30 条，防 5MB 配额逼近）、**a11y 补全**（segmented/工具行 aria-pressed、ChatDrawer aria-label、输入框 focus 环、非左键不启动平面图拖拽）、**样式派生色令牌化**（color-mix 派生色收敛到 variables.css）、**属性面板偏移随窗口钳制**。614 用例全绿。
+**维护者**：JoyFish · 文档版本 v2.19**2026-08-14 追加落地（代码审查批次，坑 105-114）**：**流中途中断不再自动重试**（`StreamInterruptedError` 专属类型，与注释承诺一致——此前普通 Error 会被当作可重试错误，重复发起整次 POST 造成重复计费；坑 105）、**墙体方案内容签名补房间名**（`wallPlanContentKey` 此前不含 `r.name`，重命名房间后缓存返回陈旧门/墙方案——3D 渲染/平面图/墙命中三处同时出错；坑 106）、**家具独立词表双语化**（`FREE_STANDING_RE` 补英文，英文 UI 下 Coffee Table/Chair 等不再被误当靠墙家具；坑 107）、**settings migrate 保留线框偏好**（此前任何版本差都强制重置 wireframe，用户设置随每次升级静默丢失；仅 v<2 强制关；坑 108）、**提交语义收敛**（`commitEdit` 统一 commitDrag/commitPlanEdit：场景必收敛为约束后版本，但内容 diff 为空时不压历史——消除幽灵撤销条目；所有离散提交点调 `syncDirtyWithSaved`，拖回原位不再脏标记卡死；坑 109）、**快捷键对话框守卫**（`[role="dialog"]` 打开时 Ctrl+Z/R/方向键不再作用于背后场景；坑 110）、**v2 快照路径补 rotationY/relativeTo 透传**（此前家具旋转修改与贴靠定位在快照容错路径静默丢失；坑 111）、**applyOpenings 按足迹环几何取边**（退化边过滤后数组下标错位，开洞落到错误的墙；坑 112）、**ConfirmProvider 请求队列化**（重入不再悬挂前一个 Promise；坑 113）、**截图竞态防护**（flushSync 同步提交 + 请求序号防重叠复位；坑 114）、**对话消息与历史有上限**（messages 100 条 + toChatHistory 最近 30 条，防 5MB 配额逼近）、**a11y 补全**（segmented/工具行 aria-pressed、ChatDrawer aria-label、输入框 focus 环、非左键不启动平面图拖拽）、**样式派生色令牌化**（color-mix 派生色收敛到 variables.css）、**属性面板偏移随窗口钳制**。614 用例全绿。
+
+**2026-08-15 追加落地（契约与工程审查批次，坑 119-127，详见 notes §3.28）**：**执行器契约接线修复**（chat.ts 的 `furnitureConventions` 改为「批内引入新家具」判定——增量批次（纯 addFurniture/custom macro + addFurniture）重新获得常理摆放兜底；新增 `furnitureComplete` 选项拆分「摆放」与「配套补全」——补全只属于整屋生成语义（auto 模板/快照路径），增量批次只摆放不补全，避免用户删掉的配套件被重新补回；坑 119）、**lib 纯函数化**（`executeOps`/`applyMacro`/`resolveLayout`/`applyFurnitureConventions`/`completeRoomFurniture` 全线增加 `lang` 参数——配套补全件名称不再直读全局 store，「确定性执行器」恢复确定性；边界调用方（chat.ts/HomePage）在入口注入界面语言；坑 120）、**解析性能**（`tryParseModelJson` 尾部修剪限窗 256 字符，消除 O(n²) 最坏路径——超长垃圾回复不再冻结主线程；坑 121）、**摘要邻接表单源化**（`topLevelAdjacency` 复用 `roomGeometry.footprintEdges + neighborsAlongEdge`，方位改用共享边外向法线，与墙体判定真正同源；坑 122）、**提示词一致性测试**（中英双份系统提示词的 op 白名单与规则序号集合断言相等；坑 123）、**空场景默认名 i18n**（`emptyScene` 默认名由 chat.ts 边界按语言注入，英文界面不再出现中文「未命名房屋」；坑 124）、**属性面板按节点类型裁剪无效字段**（整屋只留名称输入；房间禁用 Y 与上下微调——此前编辑静默无效；坑 125）、**首帧 lang 跟随系统**（index.html 内联脚本按 navigator.language 预置 html lang；坑 126）、**文档测试数防漂移**（不再写死精确用例数，以 `npm test` 输出为准；坑 127）。测试 700+ 全绿（2026-08-15 实测 717）。

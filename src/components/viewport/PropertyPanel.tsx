@@ -18,16 +18,29 @@ interface NumberFieldProps {
   value: number
   min?: number
   step?: number
+  /** 禁用（字段对当前节点类型无几何语义，如房间的 Y 坐标） */
+  disabled?: boolean
+  /** 禁用时的说明（title/aria） */
+  disabledTitle?: string
   /** Enter / blur 时提交 */
   onCommit: (value: number) => void
 }
 
 /** 数值输入框：本地草稿态，Enter/blur 提交；外部值变化（撤销/约束回弹）时同步回显 */
-function NumberField({ label, value, min, step = 0.1, onCommit }: NumberFieldProps) {
+function NumberField({
+  label,
+  value,
+  min,
+  step = 0.1,
+  disabled = false,
+  disabledTitle,
+  onCommit,
+}: NumberFieldProps) {
   const [text, setText] = useState(fmt(value))
   useEffect(() => setText(fmt(value)), [value])
 
   const commit = () => {
+    if (disabled) return
     const n = parseFloat(text)
     if (!Number.isFinite(n) || (min !== undefined && n < min)) {
       setText(fmt(value))
@@ -45,6 +58,8 @@ function NumberField({ label, value, min, step = 0.1, onCommit }: NumberFieldPro
         value={text}
         step={step}
         min={min}
+        disabled={disabled}
+        title={disabled ? disabledTitle : undefined}
         onChange={(e) => setText(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -257,117 +272,139 @@ export function PropertyPanel({ node }: PropertyPanelProps) {
         />
       </div>
 
-      <div className="prop-panel__section">
-        <span className="prop-panel__section-title">{t('property.dimSection')}</span>
-        <div className="prop-panel__grid">
-          <NumberField
-            label={t('property.length')}
-            value={dims.length}
-            min={0.1}
-            onCommit={(v) => patchDim('length', v)}
-          />
-          <NumberField
-            label={t('property.width')}
-            value={dims.width}
-            min={0.1}
-            onCommit={(v) => patchDim('width', v)}
-          />
-          <NumberField
-            label={t('property.height')}
-            value={dims.height}
-            min={0.1}
-            onCommit={(v) => patchDim('height', v)}
-          />
-        </div>
-      </div>
+      {/* 尺寸/位置/微调只对 房间/家具 有意义（坑 125）：
+          整屋仅 name 可编辑（updateNodeFields 对 house 忽略其余字段）——
+          此前整屋选中时尺寸/坐标输入可编辑但提交静默无效；房间的 Y 坐标由层高派生
+          （updateNodeFields 对 room 忽略 position.y），禁用输入与 ↑/↓ 微调。 */}
+      {node.type !== 'house' && (
+        <>
+          <div className="prop-panel__section">
+            <span className="prop-panel__section-title">{t('property.dimSection')}</span>
+            <div className="prop-panel__grid">
+              <NumberField
+                label={t('property.length')}
+                value={dims.length}
+                min={0.1}
+                onCommit={(v) => patchDim('length', v)}
+              />
+              <NumberField
+                label={t('property.width')}
+                value={dims.width}
+                min={0.1}
+                onCommit={(v) => patchDim('width', v)}
+              />
+              <NumberField
+                label={t('property.height')}
+                value={dims.height}
+                min={0.1}
+                onCommit={(v) => patchDim('height', v)}
+              />
+            </div>
+          </div>
 
-      <div className="prop-panel__section">
-        <span className="prop-panel__section-title">{t('property.posSection')}</span>
-        <div className="prop-panel__grid">
-          <NumberField label="X" value={pos.x} onCommit={(v) => patchPos('x', v)} />
-          <NumberField label="Y" value={pos.y} onCommit={(v) => patchPos('y', v)} />
-          <NumberField label="Z" value={pos.z} onCommit={(v) => patchPos('z', v)} />
-        </div>
-        <Button
-          variant="ghost"
-          className="prop-panel__reset"
-          onClick={resetSelectedPosition}
-          disabled={!canReset}
-          title={canReset ? t('property.resetTitle') : t('property.resetUnavailable')}
-        >
-          {t('property.reset')}
-        </Button>
-      </div>
-
-      <div className="prop-panel__section">
-        <span className="prop-panel__section-title">{t('property.nudgeSection')}</span>
-        <div className="prop-panel__step" role="group" aria-label={t('property.nudgeSection')}>
-          {STEP_OPTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={`step-btn ${stepSize === s ? 'step-btn--active' : ''}`}
-              onClick={() => setStepSize(s)}
-              aria-pressed={stepSize === s}
+          <div className="prop-panel__section">
+            <span className="prop-panel__section-title">{t('property.posSection')}</span>
+            <div className="prop-panel__grid">
+              <NumberField label="X" value={pos.x} onCommit={(v) => patchPos('x', v)} />
+              <NumberField
+                label="Y"
+                value={pos.y}
+                disabled={node.type === 'room'}
+                disabledTitle={t('property.yRoomDisabled')}
+                onCommit={(v) => patchPos('y', v)}
+              />
+              <NumberField label="Z" value={pos.z} onCommit={(v) => patchPos('z', v)} />
+            </div>
+            <Button
+              variant="ghost"
+              className="prop-panel__reset"
+              onClick={resetSelectedPosition}
+              disabled={!canReset}
+              title={canReset ? t('property.resetTitle') : t('property.resetUnavailable')}
             >
-              {s}m
-            </button>
-          ))}
-        </div>
-        {/* 方向与罗盘一致（世界锚定罗盘）：东=世界 +x、西=世界 -x、北=+z、南=-z。
-            3D 内容整体沿 X 镜像（坑 26），南视角下东在屏幕右侧（上北下南、左西右东），
-            与 2D 平面图（标准地图）一致。内部墙/走廊代码的 east=+x 与罗盘一致，无需镜像。 */}
-        <div className="prop-nudge">
-          <button
-            type="button"
-            className="prop-nudge__btn"
-            title={t('property.nudgeEast')}
-            onClick={() => translateSelected(stepSize, 0, 0)}
-          >
-            {t('property.east')}
-          </button>
-          <button
-            type="button"
-            className="prop-nudge__btn"
-            title={t('property.nudgeNorth')}
-            onClick={() => translateSelected(0, 0, stepSize)}
-          >
-            {t('property.north')}
-          </button>
-          <button
-            type="button"
-            className="prop-nudge__btn"
-            title={t('property.nudgeUp')}
-            onClick={() => translateSelected(0, stepSize, 0)}
-          >
-            {t('property.up')}
-          </button>
-          <button
-            type="button"
-            className="prop-nudge__btn"
-            title={t('property.nudgeWest')}
-            onClick={() => translateSelected(-stepSize, 0, 0)}
-          >
-            {t('property.west')}
-          </button>
-          <button
-            type="button"
-            className="prop-nudge__btn"
-            title={t('property.nudgeSouth')}
-            onClick={() => translateSelected(0, 0, -stepSize)}
-          >
-            {t('property.south')}
-          </button>
-          <button
-            type="button"
-            className="prop-nudge__btn"
-            title={t('property.nudgeDown')}
-            onClick={() => translateSelected(0, -stepSize, 0)}
-          >
-            {t('property.down')}
-          </button>
-        </div>
-      </div>
+              {t('property.reset')}
+            </Button>
+          </div>
+
+          <div className="prop-panel__section">
+            <span className="prop-panel__section-title">{t('property.nudgeSection')}</span>
+            <div className="prop-panel__step" role="group" aria-label={t('property.nudgeSection')}>
+              {STEP_OPTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className={`step-btn ${stepSize === s ? 'step-btn--active' : ''}`}
+                  onClick={() => setStepSize(s)}
+                  aria-pressed={stepSize === s}
+                >
+                  {s}m
+                </button>
+              ))}
+            </div>
+            {/* 方向与罗盘一致（世界锚定罗盘）：东=世界 +x、西=世界 -x、北=+z、南=-z。
+                3D 内容整体沿 X 镜像（坑 26），南视角下东在屏幕右侧（上北下南、左西右东），
+                与 2D 平面图（标准地图）一致。内部墙/走廊代码的 east=+x 与罗盘一致，无需镜像。 */}
+            <div className="prop-nudge">
+              <button
+                type="button"
+                className="prop-nudge__btn"
+                title={t('property.nudgeEast')}
+                onClick={() => translateSelected(stepSize, 0, 0)}
+              >
+                {t('property.east')}
+              </button>
+              <button
+                type="button"
+                className="prop-nudge__btn"
+                title={t('property.nudgeNorth')}
+                onClick={() => translateSelected(0, 0, stepSize)}
+              >
+                {t('property.north')}
+              </button>
+              <button
+                type="button"
+                className="prop-nudge__btn"
+                title={
+                  node.type === 'room' ? t('property.nudgeUpRoomDisabled') : t('property.nudgeUp')
+                }
+                disabled={node.type === 'room'}
+                onClick={() => translateSelected(0, stepSize, 0)}
+              >
+                {t('property.up')}
+              </button>
+              <button
+                type="button"
+                className="prop-nudge__btn"
+                title={t('property.nudgeWest')}
+                onClick={() => translateSelected(-stepSize, 0, 0)}
+              >
+                {t('property.west')}
+              </button>
+              <button
+                type="button"
+                className="prop-nudge__btn"
+                title={t('property.nudgeSouth')}
+                onClick={() => translateSelected(0, 0, -stepSize)}
+              >
+                {t('property.south')}
+              </button>
+              <button
+                type="button"
+                className="prop-nudge__btn"
+                title={
+                  node.type === 'room'
+                    ? t('property.nudgeDownRoomDisabled')
+                    : t('property.nudgeDown')
+                }
+                disabled={node.type === 'room'}
+                onClick={() => translateSelected(0, -stepSize, 0)}
+              >
+                {t('property.down')}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </aside>
   )
 }

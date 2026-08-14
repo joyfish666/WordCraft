@@ -43,6 +43,7 @@ import type {
   RoomNodeV2,
   SceneModel,
 } from '../../types/model'
+import type { Language } from '../../types/settings'
 
 // ---------------------------------------------------------------------------
 // 整屋
@@ -78,7 +79,11 @@ export function applySetHouse(scene: SceneModel, op: Extract<Op, { op: 'setHouse
 // macro：整屋重建（复用旧布局引擎）
 // ---------------------------------------------------------------------------
 
-export function applyMacro(scene: SceneModel, op: Extract<Op, { op: 'macro' }>): SceneModel {
+export function applyMacro(
+  scene: SceneModel,
+  op: Extract<Op, { op: 'macro' }>,
+  lang?: Language,
+): SceneModel {
   const params = op.params ?? { rooms: [] }
   const rooms = params.rooms ?? []
   const houseV2: HouseNodeV2 = {
@@ -107,7 +112,7 @@ export function applyMacro(scene: SceneModel, op: Extract<Op, { op: 'macro' }>):
     children: rooms.map((r) => specToRoomV2(r)),
   }
   // 布局引擎重建整屋：保留用户设置的入户门方向（整屋属性，不随重排重置为南）
-  const laid = resolveLayout({ version: 2, root: houseV2 })
+  const laid = resolveLayout({ version: 2, root: houseV2 }, lang)
   if (scene.root.entranceDir && laid.root.entranceDir !== scene.root.entranceDir) {
     return { ...laid, root: { ...laid.root, entranceDir: scene.root.entranceDir } }
   }

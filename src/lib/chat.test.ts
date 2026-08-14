@@ -3,6 +3,7 @@ import {
   ChatGenerationError,
   buildEditOpsLog,
   buildSceneSummary,
+  buildSystemPrompt,
   extractModelJson,
   generateModelFromChat,
   repairLenientJson,
@@ -280,6 +281,26 @@ describe('tryParseModelJson（解析容错链）', () => {
     expect(tryParseModelJson('{{{')).toBeNull()
     expect(tryParseModelJson('垃圾文本')).toBeNull()
   })
+
+  it('尾部垃圾在修剪窗口内恢复（>窗口长度的垃圾放弃，返回 null）', () => {
+    // 窗口内（≤256 字符尾部垃圾）：修剪恢复
+    const junk200 = '{"version":3,"ops":[]}' + 'x'.repeat(200)
+    const parsed = tryParseModelJson(junk200)
+    expect(parsed?.recovery).toBe('trim')
+    expect(parsed?.value).toEqual({ version: 3, ops: [] })
+    // 窗口外（超长垃圾）：不逐位扫描，直接失败（坑 121：O(n²) 全量扫描会冻结主线程）
+    const junk300 = '{"version":3,"ops":[]}' + 'x'.repeat(300)
+    expect(tryParseModelJson(junk300)).toBeNull()
+  })
+
+  it('超长纯垃圾回复在有限时间内返回 null（trim 扫描有界，坑 121 回归）', () => {
+    // 100KB 垃圾：修复链各步 O(n)，trim 只尝试末尾 256 个裁剪点——
+    // 旧实现全长逐位 slice+parse 是 O(n²)，此测试会挂到超时
+    const garbage = 'x'.repeat(100_000)
+    const start = Date.now()
+    expect(tryParseModelJson(garbage)).toBeNull()
+    expect(Date.now() - start).toBeLessThan(5_000)
+  })
 })
 
 describe('repairLenientJson（宽松括号修复，坑 94）', () => {
@@ -503,6 +524,125 @@ describe('generateModelFromChat', () => {
     const body = JSON.parse(init.body) as { messages: { role: string; content: string }[] }
     expect(body.messages.map((m) => m.role)).toEqual(['system', 'user'])
     expect(body.messages[1]!.content).not.toContain('手动编辑历史')
+  })
+
+  /** 单房间场景（5×4 卧室，无家具）供增量批次测试 */
+  function bedroomScene(): SceneModel {
+    return {
+      version: 3,
+      root: {
+        id: 'h1',
+        type: 'house',
+        name: '示例房',
+        levels: [
+          {
+            id: 'level-h1',
+            height: 2.8,
+            rooms: [
+              {
+                id: 'bedroom',
+                type: 'room',
+                name: '主卧',
+                footprint: [
+                  { x: -2.5, z: -2 },
+                  { x: 2.5, z: -2 },
+                  { x: 2.5, z: 2 },
+                  { x: -2.5, z: 2 },
+                ],
+                height: 2.8,
+                doors: [],
+                windows: [],
+                furniture: [],
+                nestedRooms: [],
+              },
+            ],
+          },
+        ],
+      },
+    }
+  }
+
+  it('增量批次（纯 addFurniture）触发常理摆放贴墙、但不补全配套（坑 119 回归）', async () => {
+    // 多轮修改：LLM 只输出 addFurniture（无 macro）——此前 furnitureConventions 按
+    // 「批内有 auto macro」计算为 false，新家具只被约束进墙、不贴墙摆放（与执行器契约脱节）
+    respondWith(
+      JSON.stringify({
+        version: 3,
+        ops: [
+          {
+            op: 'addFurniture',
+            roomId: 'bedroom',
+            name: '双人床',
+            dimensions: { length: 2, width: 1.5, height: 0.5 },
+          },
+        ],
+      }),
+    )
+    const result = await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: '在主卧加一张双人床',
+      currentScene: bedroomScene(),
+    })
+    const room = result.model.root.levels[0]!.rooms.find((r) => r.id === 'bedroom')!
+    const bed = room.furniture.find((f) => f.name === '双人床')!
+    // 床贴某面墙（内壁，墙厚 0.15）
+    const minX = -2.5 + 0.15
+    const maxX = 2.5 - 0.15
+    const minZ = -2 + 0.15
+    const maxZ = 2 - 0.15
+    const flush =
+      Math.abs(bed.position.x - (minX + bed.dimensions.length / 2)) < 1e-6 ||
+      Math.abs(bed.position.x - (maxX - bed.dimensions.length / 2)) < 1e-6 ||
+      Math.abs(bed.position.z - (minZ + bed.dimensions.width / 2)) < 1e-6 ||
+      Math.abs(bed.position.z - (maxZ - bed.dimensions.width / 2)) < 1e-6
+    expect(flush).toBe(true)
+    // 增量批次不补全配套（furnitureComplete=false）：床不自动带出床头柜——
+    // 否则用户删掉的配套件会在下一次任意 addFurniture 批次被重新补回
+    expect(room.furniture.some((f) => f.name === '床头柜')).toBe(false)
+  })
+
+  it('整屋生成批次（macro auto）仍执行配套补全（furnitureComplete=true）', async () => {
+    respondWith(validOpsJson())
+    const result = await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: '设计一个带走廊的两居室',
+    })
+    const master = result.model.root.levels[0]!.rooms.find((r) => r.id === 'master')!
+    // 主卧有床 → 补 2 个床头柜（整屋生成语义）
+    expect(master.furniture.filter((f) => f.name === '床头柜')).toHaveLength(2)
+  })
+
+  it('英文界面空场景默认整屋名为英文（坑 124）', async () => {
+    // LLM 只输出 addRoom（未给整屋名）：英文界面不应出现中文「未命名房屋」
+    useSettingsStore.setState({ language: 'en' })
+    respondWith(
+      JSON.stringify({
+        version: 3,
+        ops: [{ op: 'addRoom', id: 'a', name: 'Living Room' }],
+      }),
+    )
+    const result = await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: 'a living room',
+    })
+    expect(result.model.root.name).toBe('Unnamed House')
+    // 中文界面保持原默认名
+    useSettingsStore.setState({ language: 'zh' })
+    respondWith(
+      JSON.stringify({
+        version: 3,
+        ops: [{ op: 'addRoom', id: 'a', name: '客厅' }],
+      }),
+    )
+    const zhResult = await generateModelFromChat({
+      apiKey: 'sk-test',
+      history: [],
+      userInput: '一个客厅',
+    })
+    expect(zhResult.model.root.name).toBe('未命名房屋')
   })
 
   it('思考模式为 default 时不发送 thinking 字段', async () => {
@@ -830,5 +970,22 @@ describe('buildEditOpsLog', () => {
     const lines = log.split('\n')
     expect(lines[1]).toMatch(/^- \{/)
     expect(lines[2]).toMatch(/^- \{/)
+  })
+})
+
+describe('系统提示词中英一致性（坑 123）', () => {
+  it('中英文提示词包含相同的操作白名单（14 种 op）', () => {
+    const opNames = (s: string): Set<string> =>
+      new Set([...s.matchAll(/\{"op":"([a-zA-Z]+)"/g)].map((m) => m[1]!))
+    const zhOps = opNames(buildSystemPrompt('zh'))
+    const enOps = opNames(buildSystemPrompt('en'))
+    expect(enOps).toEqual(zhOps)
+    expect(zhOps.size).toBe(14) // setHouse/macro/addRoom/updateRoom/removeRoom/moveRoom/nestRoom/splitRoom/mergeRoom/addFurniture/updateFurniture/removeFurniture/setOpenings/addAdjacency
+  })
+
+  it('中英文提示词规则序号一致（新增/删改规则时双份必须同步）', () => {
+    const ruleNums = (s: string): Set<string> =>
+      new Set([...s.matchAll(/^\s*(\d+)\./gm)].map((m) => m[1]!))
+    expect(ruleNums(buildSystemPrompt('en'))).toEqual(ruleNums(buildSystemPrompt('zh')))
   })
 })

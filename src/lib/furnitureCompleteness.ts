@@ -1,6 +1,5 @@
 import { furnitureKind, type FurnitureKind } from './furniturePresets'
 import { createId } from './id'
-import { useSettingsStore } from '../store/useSettingsStore'
 import type { Dimensions, FurnitureNode, RoomNode } from '../types/model'
 import type { Language } from '../types/settings'
 
@@ -37,7 +36,12 @@ const FRONT_GAP = 0.6
 const EXCLUDE_RE =
   /不要|不配|不需要|无需|无须|去掉|去除|免配|免了|别放|不加|不设|免置|no chair|no nightstand|no table|no stool|without|do not add|don't add|do not include|skip|exclude|omit/i
 
-/** 补全家具的名称按界面语言产出（中文提示词→中文名，英文提示词→英文名，保证家具分类/展示一致） */
+/**
+ * 补全家具的名称按界面语言产出（中文提示词→中文名，英文提示词→英文名，保证家具分类/展示一致）。
+ * ⚠️ 语言由调用方沿调用链传入（executeOps → applyFurnitureConventions → completeRoomFurniture），
+ * 本模块为纯函数、不读任何全局状态——此前直读 useSettingsStore 会让「确定性执行器」的输出
+ * 随界面语言变化，且测试必须预先摆全局状态（坑 120）。
+ */
 const COMPANION_NAMES: Record<
   Language,
   { chair: string; diningChair: string; nightstand: string; coffeeTable: string }
@@ -51,8 +55,8 @@ const COMPANION_NAMES: Record<
   },
 }
 
-function companionName(): (typeof COMPANION_NAMES)[Language] {
-  return COMPANION_NAMES[useSettingsStore.getState().language]
+function companionNames(lang: Language): (typeof COMPANION_NAMES)[Language] {
+  return COMPANION_NAMES[lang]
 }
 
 /** 房间家具描述里是否出现明确排除配套的意图（用户要求优先级最高的通道） */
@@ -76,8 +80,9 @@ function makeFurniture(name: string, dimensions: Dimensions, x: number, z: numbe
 /**
  * 房间家具配套补全：返回补全后的清单（无补全时返回原数组引用，便于调用方短路）。
  * 只做"缺了就补"的硬配套；摆放位置交给 applyFurnitureConventions 的常理摆放流程。
+ * @param lang 补全件名称语言（由调用方显式传入，默认中文）
  */
-export function completeRoomFurniture(room: RoomNode): FurnitureNode[] {
+export function completeRoomFurniture(room: RoomNode, lang: Language = 'zh'): FurnitureNode[] {
   const furniture = room.furniture
   if (furniture.length === 0 || hasExcludedCompleteness(room)) return furniture
   const kinds = new Set<FurnitureKind>(furniture.map((f) => furnitureKind(f.name)))
@@ -90,7 +95,7 @@ export function completeRoomFurniture(room: RoomNode): FurnitureNode[] {
 
   for (const f of furniture) {
     const kind = furnitureKind(f.name)
-    const names = companionName()
+    const names = companionNames(lang)
     // 书桌/梳妆台：使用者侧（背侧反方向，桌/台背面朝墙时椅子自然落在房间中部）补椅子
     if ((kind === 'desk' || kind === 'dressingTable') && !has('chair')) {
       push(makeFurniture(names.chair, CHAIR_DIMS, f.position.x, f.position.z - FRONT_GAP))

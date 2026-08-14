@@ -304,6 +304,21 @@ README 路线图「移动端基础适配」以**横屏限定**方式落地（验
 - **删除 `docs/ui-preview.html`（坑 118）**：UI 改版的历史视觉稿，实现已落地，用户确认无用。
 - **文档同步**：notes（3.27 节坑 116-118）、CHANGELOG（坑 116-118 批次）、design.md/history.md 的 ui-preview.html 引用标注。
 
+### 契约与工程审查批次（2026-08-15，坑 119-127，700+ 用例全绿）
+
+框架/实现/UI/文档四视角全面审查后的落地批次（详见 notes 3.28 节）：
+
+- **执行器契约接线修复（坑 119）**：chat.ts 的 `furnitureConventions` 传参与执行器内部守卫（坑 105-114 批次加入）脱节——纯增量批次（多轮 addFurniture / custom macro + addFurniture）从不触发常理摆放，执行器侧契约（executor 测试）却明确支持。修复：触发条件改为「批内引入需要摆放的新家具」；新增 `furnitureComplete` 选项拆分「摆放」与「配套补全」——补全只属于整屋生成语义（auto 模板/快照路径），增量批次只摆放不补全（避免用户删掉的配套件被重新补回）。
+- **lib 纯函数化（坑 120）**：`executeOps`/`applyMacro`/`resolveLayout`/`applyFurnitureConventions`/`completeRoomFurniture` 全线增加 `lang` 参数——配套补全件名称不再直读全局 store，「确定性执行器」恢复「同一输入同一输出」；边界调用方（chat.ts/HomePage）注入界面语言。测试不再依赖环境语言。
+- **解析性能（坑 121）**：`tryParseModelJson` 尾部修剪限窗 256 字符，消除 O(n²) 最坏路径（超长垃圾回复不再冻结主线程）。
+- **摘要邻接表单源化（坑 122）**：`topLevelAdjacency` 复用 `roomGeometry.footprintEdges + neighborsAlongEdge`（导出），方位改用共享边外向法线——摘要与墙体判定真正同源（此前是两套独立实现）。
+- **提示词一致性测试（坑 123）**：中英双份系统提示词的 op 白名单（=14）与规则序号集合断言相等。
+- **空场景默认名 i18n（坑 124）**：`emptyScene` 默认名由 chat.ts 边界按语言注入 `home.unnamedHouse`。
+- **属性面板按节点类型裁剪（坑 125）**：整屋只留名称输入；房间禁用 Y 与 ↑/↓ 微调（此前编辑静默无效）。
+- **首帧 lang 跟随系统（坑 126）**：index.html 内联脚本按 navigator.language 预置 html lang。
+- **文档测试数防漂移（坑 127）**：不再写死精确用例数（用「700+」，精确数以 `npm test` 为准）；design.md 补坑 115-118 进度块。
+- **文档同步**：architecture（v2.19、§3 摆放/补全范围、§7 生成链路、§9 防漂移注记）、design（进度块）、notes（3.28 节坑 119-127 + 文件地图）、CHANGELOG（本批次）、README 双版 704 → 700+。
+
 ## 给后来者的三条主线经验
 
 1. **不要回到"LLM 直接给绝对坐标"**：几何确定性是一切（撤销/测试/分享/多轮）的基石；

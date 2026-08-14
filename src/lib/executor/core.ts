@@ -3,6 +3,7 @@ import { DEFAULT_HEIGHT } from '../constants'
 import { normalizeContainment } from '../modelTree'
 import type { Op } from '../../types/ops'
 import type { SceneModel } from '../../types/model'
+import type { Language } from '../../types/settings'
 import { refreshLevelHeight } from './shared'
 import {
   applyAddAdjacency,
@@ -64,11 +65,14 @@ function hasAutoMacro(ops: Op[]): boolean {
   return ops.some((o) => o.op === 'macro' && o.name !== 'custom')
 }
 
-/** 执行一批操作：逐条容错，结束统一约束；返回最终场景与失败明细 */
+/** 执行一批操作：逐条容错，结束统一约束；返回最终场景与失败明细。
+ *  @param options.lang 配套补全件名称语言（纯函数参数，调用方在边界传入界面语言，见坑 120）
+ *  @param options.furnitureComplete 常理摆放时是否执行常配套件补全（默认跟随 furnitureConventions）；
+ *         增量批次传 false——只摆放新家具、不补全全屋（坑 119） */
 export function executeOps(
   scene: SceneModel,
   ops: Op[],
-  options?: { furnitureConventions?: boolean },
+  options?: { furnitureConventions?: boolean; furnitureComplete?: boolean; lang?: Language },
 ): ExecuteResult {
   let current = scene
   const skipped: string[] = []
@@ -79,7 +83,7 @@ export function executeOps(
     // 先安全取操作名，避免 catch 内二次解引用 op.op 导致整批崩溃。
     const opName = op && typeof op === 'object' ? String((op as { op?: unknown }).op ?? '?') : '?'
     try {
-      current = applyOp(current, op)
+      current = applyOp(current, op, options?.lang)
       applied++
       appliedOps.push(op)
     } catch (error) {
@@ -96,7 +100,9 @@ export function executeOps(
     options?.furnitureConventions &&
     (!hasAutoMacro(ops) || ops.some((o) => FURNITURE_AFFECTING_OPS.has(o.op)))
   ) {
-    result = applyFurnitureConventions(result)
+    result = applyFurnitureConventions(result, options.lang, {
+      complete: options.furnitureComplete ?? true,
+    })
     result = normalizeContainment(result)
   }
   result = refreshLevelHeight(result)
@@ -104,12 +110,12 @@ export function executeOps(
 }
 
 /** 执行单条操作；失败抛错（由 executeOps 捕获跳过），成功返回新场景 */
-export function applyOp(scene: SceneModel, op: Op): SceneModel {
+export function applyOp(scene: SceneModel, op: Op, lang?: Language): SceneModel {
   switch (op.op) {
     case 'setHouse':
       return applySetHouse(scene, op)
     case 'macro':
-      return applyMacro(scene, op)
+      return applyMacro(scene, op, lang)
     case 'addRoom':
       return applyAddRoom(scene, op)
     case 'updateRoom':

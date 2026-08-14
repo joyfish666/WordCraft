@@ -1,14 +1,19 @@
 import { t } from '../i18n'
+import { translate } from '../i18n/translations'
 import { sceneModelV2Schema } from '../schemas/model.schema'
 import { opSchema } from '../schemas/ops.schema'
 import { useSettingsStore } from '../store/useSettingsStore'
-import { ADJACENCY_GAP, EPSILON } from './constants'
 import { logDebug } from './debugLog'
 import { diffSceneV2, emptyScene, executeOps } from './executor'
-import { footprintCenter, roomDims } from './footprint'
+import { roomDims } from './footprint'
 import { normalizeContainment } from './modelTree'
 import { migrateModel } from './migration'
-import type { DoorDirection } from './roomGeometry'
+import {
+  footprintEdges,
+  neighborsAlongEdge,
+  type DoorDirection,
+  type WallEdge,
+} from './roomGeometry'
 import type { SceneModel } from '../types/model'
 import type { Op } from '../types/ops'
 import type { Language } from '../types/settings'
@@ -106,8 +111,10 @@ All room names and furniture names must be in English.`
  * 当前房屋状态摘要（供多轮对话上下文，design.md §5.2）：
  * 房间/家具的 id、名称与尺寸 + 顶层房间**邻接表**（邻居与方位）+ 入户门信息——
  * LLM 靠 id 引用节点、靠邻接信息判断方位（relativeTo/moveRoom 的 dir 选择）、
- * 靠入口信息响应"移动入户门"需求。邻接判定与墙体方案同源：
- * 任一边共线（|线差| ≤ 0.4，同 ADJACENCY_GAP）且区间重叠即相邻，方位 = 邻居相对本房间的方向。
+ * 靠入口信息响应"移动入户门"需求。邻接判定与墙体方案**真正同源**（坑 122）：
+ * 复用 roomGeometry 的 footprintEdges + neighborsAlongEdge——边解析（edgeMetaOf 统一收拢）
+ * 与「共线 + 区间重叠」判定与 computeWallPlan 完全同一份实现，杜绝摘要与渲染分歧。
+ * 方位 = 本房间该共享边的外向法线（与墙体门向同源），不再用中心点比较。
  * 语言随界面语言（英文 UI 下 LLM 产出英文名，方位词与提示词语言保持一致）。
  */
 export function buildSceneSummary(scene: SceneModel, lang: Language = 'zh'): string {
@@ -160,69 +167,45 @@ const DIR_WORD_ZH: Record<DoorDirection, string> = {
   west: '西',
 }
 
-/** 顶层房间邻接表：roomId → 「（邻接：邻居名-方位、…）」/「(adjacent: name-dir, ...)」；无邻居的房间无条目 */
+/**
+ * 顶层房间邻接表：roomId → 「（邻接：邻居名-方位、…）」/「(adjacent: name-dir, ...)」；无邻居的房间无条目。
+ * 与墙体方案同源（坑 122）：footprintEdges + neighborsAlongEdge 与 computeWallPlan 共用同一份
+ * 边解析与「共线 + 区间重叠」判定；方位 = 本房间共享边的外向法线。邻居按房间列表顺序排序
+ * （与旧「房间对遍历」的输出顺序一致，保证摘要稳定）。
+ */
 function topLevelAdjacency(
   rooms: SceneModel['root']['levels'][0]['rooms'],
   lang: Language,
 ): Map<string, string> {
-  interface Edge {
-    axis: 'x' | 'z'
-    line: number
-    a: number
-    b: number
-  }
-  const edgesOf = (r: SceneModel['root']['levels'][0]['rooms'][number]): Edge[] => {
-    const fp = r.footprint
-    const out: Edge[] = []
-    for (let i = 0; i < fp.length; i++) {
-      const p = fp[i]!
-      const q = fp[(i + 1) % fp.length]!
-      if (Math.abs(p.z - q.z) < EPSILON) {
-        out.push({ axis: 'x', line: p.z, a: Math.min(p.x, q.x), b: Math.max(p.x, q.x) })
-      } else {
-        out.push({ axis: 'z', line: p.x, a: Math.min(p.z, q.z), b: Math.max(p.z, q.z) })
-      }
-    }
-    return out
-  }
   const isZh = lang === 'zh'
-  const edgeMap = new Map(rooms.map((r) => [r.id, edgesOf(r)]))
-  const center = new Map(rooms.map((r) => [r.id, footprintCenter(r.footprint)]))
-  const list = new Map<string, string[]>()
-  const dirOf = (axis: 'x' | 'z', from: string, to: string): string => {
-    const cFrom = center.get(from)!
-    const cTo = center.get(to)!
-    if (axis === 'x')
-      return isZh ? (cTo.z > cFrom.z ? '北' : '南') : cTo.z > cFrom.z ? 'north' : 'south'
-    return isZh ? (cTo.x > cFrom.x ? '东' : '西') : cTo.x > cFrom.x ? 'east' : 'west'
-  }
-  for (let i = 0; i < rooms.length; i++) {
-    for (let j = i + 1; j < rooms.length; j++) {
-      const A = rooms[i]!
-      const B = rooms[j]!
-      const shared = edgeMap
-        .get(A.id)!
-        .find((e1) =>
-          edgeMap
-            .get(B.id)!
-            .some(
-              (e2) =>
-                e1.axis === e2.axis &&
-                Math.abs(e1.line - e2.line) <= ADJACENCY_GAP &&
-                e1.a < e2.b - EPSILON &&
-                e1.b > e2.a + EPSILON,
-            ),
-        )
-      if (!shared) continue
-      list.set(A.id, [...(list.get(A.id) ?? []), `${B.name}-${dirOf(shared.axis, A.id, B.id)}`])
-      list.set(B.id, [...(list.get(B.id) ?? []), `${A.name}-${dirOf(shared.axis, B.id, A.id)}`])
+  // 边须带 roomId（neighborsAlongEdge 按 roomId 排除自身；computeWallPlan 同款构造）
+  const edgesByRoom = new Map<string, WallEdge[]>(
+    rooms.map((r) => [r.id, footprintEdges(r).map((e) => ({ ...e, roomId: r.id }))]),
+  )
+  const order = new Map(rooms.map((r, i) => [r.id, i]))
+  const list = new Map<string, Array<{ id: string; text: string }>>()
+  for (const R of rooms) {
+    for (const edge of edgesByRoom.get(R.id) ?? []) {
+      for (const nb of neighborsAlongEdge(edge, rooms, edgesByRoom)) {
+        // 方位 = 本房间该边的外向法线：邻居必然在该方向（与墙体门向判定同源）
+        const text = `${nb.room.name}-${isZh ? DIR_WORD_ZH[edge.dir] : edge.dir}`
+        const cur = list.get(R.id)
+        if (cur && cur.some((x) => x.id === nb.room.id)) continue // 同一邻居多条共享边只记一次
+        list.set(R.id, [...(cur ?? []), { id: nb.room.id, text }])
+      }
     }
   }
   const prefix = isZh ? '（邻接：' : ' (adjacent: '
   const sep = isZh ? '、' : ', '
   const suffix = isZh ? '）' : ')'
   return new Map(
-    [...list.entries()].map(([id, texts]) => [id, `${prefix}${texts.join(sep)}${suffix}`]),
+    [...list.entries()].map(([id, neighbors]) => [
+      id,
+      `${prefix}${neighbors
+        .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+        .map((x) => x.text)
+        .join(sep)}${suffix}`,
+    ]),
   )
 }
 
@@ -457,8 +440,13 @@ export function tryParseModelJson(json: string): { value: unknown; recovery: str
     }
   }
 
-  // 尾部垃圾：模型偶发多打闭合符（如 }]}} 后多余的 }）或截断残留，从后往前取最长可解析前缀
-  for (let i = json.length - 1; i > 0; i--) {
+  // 尾部垃圾：模型偶发多打闭合符（如 }]}} 后多余的 }）或截断残留，从后往前取最长可解析前缀。
+  // ⚠️ 只尝试修剪末尾 MAX_TRIM_WINDOW 个字符内的裁剪点（坑 121）——真实尾部垃圾只有
+  // 几个到几十个字符；全长逐位扫描是 O(n²)（每次 slice+JSON.parse 全量），超长垃圾回复
+  // 会在解析容错链的最后一级冻结主线程数十秒（此前 5 级容错全部失败才会走到这里）。
+  const MAX_TRIM_WINDOW = 256
+  const start = Math.max(1, json.length - MAX_TRIM_WINDOW)
+  for (let i = json.length - 1; i >= start; i--) {
     const value = tryParse(json.slice(0, i))
     if (value !== undefined) return { value, recovery: 'trim' }
   }
@@ -569,7 +557,7 @@ export async function generateModelFromChat(options: GenerateOptions): Promise<G
     logDebug('模型回复 JSON 解析结果', raw, 'info')
   }
 
-  const model = resolveRawOutput(raw, currentScene ?? null)
+  const model = resolveRawOutput(raw, currentScene ?? null, lang)
   return { reply: content, model }
 }
 
@@ -578,9 +566,16 @@ export async function generateModelFromChat(options: GenerateOptions): Promise<G
  * 1. 操作序列（ops）：白名单校验，逐条容错执行；
  * 2. 旧式整屋快照（v2）：按 id diff 成 ops 再执行（快照容错路径）；
  * 3. 已是 v3 场景：直接使用（迁移幂等），normalize 兜底。
+ * @param lang 界面语言：空场景默认名（坑 124）与配套补全件名称（坑 120）随语言，
+ *        executor 保持语言无关，由本边界统一注入。
  */
-function resolveRawOutput(raw: unknown, currentScene: SceneModel | null): SceneModel {
-  const base = currentScene ?? emptyScene()
+function resolveRawOutput(
+  raw: unknown,
+  currentScene: SceneModel | null,
+  lang: Language,
+): SceneModel {
+  // 空场景默认名走 i18n（英文界面不再出现中文「未命名房屋」，坑 124）
+  const base = currentScene ?? emptyScene(translate(lang, 'home.unnamedHouse'))
 
   // 路径 1：操作序列（逐条容错：单条无效只跳过该条，其余照常执行）
   const ops = parseOps(raw)
@@ -589,8 +584,22 @@ function resolveRawOutput(raw: unknown, currentScene: SceneModel | null): SceneM
       count: ops.length,
       kinds: ops.map((o) => o.op),
     })
-    const furnitureConventions = ops.some((o) => o.op === 'macro' && o.name !== 'custom')
-    const result = executeOps(base, ops, { furnitureConventions })
+    // 常理摆放触发条件（坑 119）：批内引入了需要摆放的新家具——auto macro（其家具由
+    // resolveLayout 摆过，core 内部守卫避免双重摆放）、addFurniture、带家具的 addRoom。
+    // 纯 updateFurniture/moveRoom 等「修改已有家具」的批次不触发——避免把 LLM/用户
+    // 显式调整过的位置重新贴墙（"未明确才按常理"）。
+    const hasAutoMacro = ops.some((o) => o.op === 'macro' && o.name !== 'custom')
+    const addsFurniture = ops.some(
+      (o) => o.op === 'addFurniture' || (o.op === 'addRoom' && (o.furniture?.length ?? 0) > 0),
+    )
+    const furnitureConventions = hasAutoMacro || addsFurniture
+    // 配套补全只属于「整屋生成」语义（auto 模板/快照路径，design.md 范围边界）：
+    // 增量批次只摆放不补全，避免把用户已删除的配套件重新补回（坑 119）
+    const result = executeOps(base, ops, {
+      furnitureConventions,
+      furnitureComplete: hasAutoMacro,
+      lang,
+    })
     if (result.skipped.length > 0) {
       logDebug('部分操作失败已跳过', result.skipped, 'warn')
     }
@@ -604,7 +613,8 @@ function resolveRawOutput(raw: unknown, currentScene: SceneModel | null): SceneM
       rooms: v2.data.root.children.map((r) => r.id),
     })
     const ops2 = diffSceneV2(base, v2.data)
-    const result = executeOps(base, ops2, { furnitureConventions: true })
+    // 快照路径是整屋重建语义：常理摆放 + 配套补全都执行（design.md 范围边界）
+    const result = executeOps(base, ops2, { furnitureConventions: true, lang })
     return result.scene
   }
 
