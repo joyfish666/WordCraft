@@ -471,3 +471,70 @@ describe('useModelStore 平面图编辑（P4）', () => {
     expect(useChatStore.getState().editOps[0]).toMatchObject({ op: 'splitRoom' })
   })
 })
+
+describe('useModelStore persist 迁移（rehydrate 端到端）', () => {
+  /** 一个完整的最小 v1 盒子模型存档（含墙类型家具），形态与 migration.test.ts 的 fixture 一致 */
+  const v1Scene = {
+    version: 1,
+    root: {
+      id: 'house1',
+      type: 'house',
+      name: '旧屋',
+      dimensions: { length: 6, width: 5, height: 2.8 },
+      position: { x: 0, y: 0, z: 0 },
+      children: [
+        {
+          id: 'living',
+          type: 'room',
+          name: '客厅',
+          dimensions: { length: 4, width: 3, height: 2.8 },
+          position: { x: 0, y: 1.4, z: 0 },
+          children: [
+            {
+              id: 'sofa',
+              type: 'furniture',
+              name: '沙发',
+              dimensions: { length: 2, width: 0.9, height: 0.8 },
+              position: { x: 0, y: 0.4, z: 0 },
+            },
+            {
+              id: 'wall1',
+              type: 'wall',
+              name: '隔断',
+              dimensions: { length: 1, width: 0.2, height: 2.8 },
+              position: { x: 0, y: 1.4, z: 0 },
+            },
+          ],
+        },
+      ],
+    },
+  }
+
+  it('v1 盒子模型存档 rehydrate 后迁移为 v3（levels[0].rooms 存在）', async () => {
+    // 直接覆写 localStorage 存档，绕过 setState 重置（模拟旧版本留下的持久化数据）
+    localStorage.setItem(
+      'wordcraft.model',
+      JSON.stringify({ state: { scene: v1Scene }, version: 1 }),
+    )
+    await useModelStore.persist.rehydrate()
+    const scene = useModelStore.getState().scene!
+    expect(scene.version).toBe(3)
+    const rooms = scene.root.levels[0]!.rooms
+    expect(rooms.map((r) => r.id)).toEqual(['living'])
+    // v1 盒子 → v3 4 点足迹
+    expect(rooms[0]!.footprint).toHaveLength(4)
+    // v1 的 wall 类型并入 furniture
+    expect(rooms[0]!.furniture.map((f) => f.id)).toEqual(['sofa', 'wall1'])
+    expect(rooms[0]!.furniture.every((f) => f.type === 'furniture')).toBe(true)
+  })
+
+  it('已是 v3 的存档 rehydrate 原样读入（迁移幂等，不误伤新格式）', async () => {
+    const v3 = createSampleModel()
+    localStorage.setItem('wordcraft.model', JSON.stringify({ state: { scene: v3 }, version: 2 }))
+    await useModelStore.persist.rehydrate()
+    const scene = useModelStore.getState().scene
+    expect(scene!.version).toBe(3)
+    expect(scene!.root.levels).toHaveLength(1)
+    expect(scene!.root.name).toBe(v3.root.name)
+  })
+})

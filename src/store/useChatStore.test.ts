@@ -152,3 +152,46 @@ describe('toChatHistory（P3 上下文精简：整段 ops JSON 不再回传）',
     expect(messages[99]!.content).toBe('消息119')
   })
 })
+
+describe('useChatStore persist 迁移（rehydrate 端到端，v2 存档剥离 model）', () => {
+  it('v2 存档（消息带 model 整场景快照）rehydrate 后消息无 model 字段', async () => {
+    localStorage.setItem(
+      'wordcraft.chat',
+      JSON.stringify({
+        state: {
+          messages: [
+            { id: 'm1', role: 'user', content: '设计一个房子', createdAt: 1 },
+            { id: 'm2', role: 'assistant', content: '好的', model: modelA, createdAt: 2 },
+          ],
+        },
+        version: 2,
+      }),
+    )
+    await useChatStore.persist.rehydrate()
+    const messages = useChatStore.getState().messages
+    expect(messages).toHaveLength(2)
+    for (const m of messages) expect(m.model).toBeUndefined()
+    // 迁移结果回写持久化：localStorage 中同样不再携带 model（version 升至 3）
+    const persisted = JSON.parse(localStorage.getItem('wordcraft.chat')!) as {
+      version: number
+      state: { messages: Array<Record<string, unknown>> }
+    }
+    expect(persisted.version).toBe(3)
+    for (const m of persisted.state.messages) expect(m.model).toBeUndefined()
+  })
+
+  it('v3 存档（本就不带 model）rehydrate 保持原样', async () => {
+    const archive = {
+      state: {
+        messages: [
+          { id: 'm1', role: 'user', content: 'hi', createdAt: 1 },
+          { id: 'm2', role: 'assistant', content: 'ok', createdAt: 2 },
+        ],
+      },
+      version: 3,
+    }
+    localStorage.setItem('wordcraft.chat', JSON.stringify(archive))
+    await useChatStore.persist.rehydrate()
+    expect(useChatStore.getState().messages).toEqual(archive.state.messages)
+  })
+})
