@@ -434,8 +434,13 @@ interface RoomShellProps {
   colorMode: ColorMode
 }
 
-/** 房间外壳：足迹实体地板（外扩覆盖墙脚）+ 沿足迹边分段实心墙（门洞/窗洞留空） */
-function RoomShell({
+/**
+ * 房间外壳：足迹实体地板（外扩覆盖墙脚）+ 沿足迹边分段实心墙（门洞/窗洞留空）。
+ * memo 化（坑 75 绩效热路径延续）：拖拽预览期间未变房间的 props 引用全部稳定
+ * （room/plan/material/roomColor 等），浅比较短路后墙段 JSX 不再逐帧重建；
+ * 选中/虚化/截图等派生状态由父级 ModelNodeView 的 store 订阅驱动重渲染。
+ */
+const RoomShell = memo(function RoomShell({
   room,
   material,
   isSelected,
@@ -524,7 +529,7 @@ function RoomShell({
       )}
     </>
   )
-}
+})
 
 interface ModelNodeViewProps {
   node: ModelNode
@@ -640,8 +645,16 @@ const FurnitureView = memo(function FurnitureView({
  * - 整屋视图：房间为足迹地板 + 沿边分段墙（门洞/窗洞/开放段），开放空间连通，外墙完整
  * - 聚焦视图（focusId 指向某房间）：该房间外壳透明化以便查看内部实体家具，
  *   其他房间外壳虚化；家具仍遵循 实体/虚化 两态
+ *
+ * ⚠️ memo 化（坑 75 性能热路径的延续，2026-08-14 审查）：
+ * 拖拽预览每帧产生新 scene 引用 → Viewport3D 重渲染 → 整棵树 JSX 重建。家具叶子
+ * 已 memo（FurnitureView），但房间外壳（RoomShell）此前每帧重建全部墙段 JSX——
+ * 未变房间的 node/plan/wallPlan 引用在不可变更新中保持稳定，memo 短路后拖拽期间
+ * 房间子树不再逐帧协调。祖先数组/父中心/材质对象必须 useMemo 稳定引用（否则 memo
+ * 浅比较每帧失效）；选中/聚焦/截图等派生状态直接订阅 store（原子 selector，
+ * hook 触发的更新不受 memo 影响，语义不变）。
  */
-export function ModelNodeView({
+export const ModelNodeView = memo(function ModelNodeView({
   node,
   siblingIndex = 0,
   ancestors = [],
@@ -662,7 +675,44 @@ export function ModelNodeView({
   const inFocusedRoom = focusId !== null && ancestors.includes(focusId)
   const ghosted = focusId !== null && !isFocusedRoom && !inFocusedRoom
 
-  const childAncestors = [...ancestors, node.id]
+  // 祖先链数组保持引用稳定（memo 浅比较依赖）：父节点未变则数组不重建
+  const childAncestors = useMemo(() => [...ancestors, node.id], [ancestors, node.id])
+
+  // 房间外壳材质/父中心在顶层计算（hooks 不可入条件分支）：
+  // 二者仅房间分支消费，但 memo 化子树要求引用稳定（拖拽预览期间 focusId/colorMode/
+  // wireframe/房间引用未变时不重建对象）；叶子节点不消费，计算开销可忽略。
+  const baseColor = roomFaceColor(node.name, siblingIndex, colorMode)
+  const material = useMemo<ShellMaterial>(() => {
+    if (isFocusedRoom) {
+      return {
+        color: baseColor,
+        transparent: true,
+        opacity: 0.1,
+        depthWrite: false,
+        wireframe: wireframeEnabled,
+      }
+    }
+    if (ghosted) {
+      return {
+        color: '#cfc8b8',
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false,
+        wireframe: wireframeEnabled,
+      }
+    }
+    return {
+      color: baseColor,
+      transparent: false,
+      opacity: 1,
+      depthWrite: true,
+      wireframe: wireframeEnabled,
+    }
+  }, [isFocusedRoom, ghosted, baseColor, wireframeEnabled])
+  const roomCenterPos = useMemo(
+    () => (isContainer(node) && node.type === 'room' ? roomCenter(node as RoomNode) : null),
+    [node],
+  )
 
   const handleClick = () => {
     selectNode(node.id)
@@ -692,7 +742,7 @@ export function ModelNodeView({
               siblingIndex={i}
               ancestors={childAncestors}
               wallPlan={wallPlan}
-              parentCenter={{ x: 0, y: 0, z: 0 }}
+              parentCenter={ORIGIN_CENTER}
               planMode={planMode}
             />
           ))}
@@ -701,35 +751,7 @@ export function ModelNodeView({
     }
 
     // 房间外壳材质：整屋视图实心；聚焦房间透明以便查看内部；其他房间聚焦时虚化
-    // 颜色与 2D 平面图共用 roomFaceColor，保证两种视图下房间颜色一致
-    const baseColor = roomFaceColor(node.name, siblingIndex, colorMode)
-    let material: ShellMaterial
-    if (isFocusedRoom) {
-      material = {
-        color: baseColor,
-        transparent: true,
-        opacity: 0.1,
-        depthWrite: false,
-        wireframe: wireframeEnabled,
-      }
-    } else if (ghosted) {
-      material = {
-        color: '#cfc8b8',
-        transparent: true,
-        opacity: 0.4,
-        depthWrite: false,
-        wireframe: wireframeEnabled,
-      }
-    } else {
-      material = {
-        color: baseColor,
-        transparent: false,
-        opacity: 1,
-        depthWrite: true,
-        wireframe: wireframeEnabled,
-      }
-    }
-
+    // （material 引用在顶层 useMemo，见上）
     const isNestedRoom = ancestors.length > 1
     // 嵌套房间：门朝向父房间中心（从父房间进嵌套房间）；顶层房间用共享墙方案或兜底
     const plan =
@@ -738,7 +760,6 @@ export function ModelNodeView({
         ? wallPlanWithDoor(node, nestedDoorDirection(node, parentCenter))
         : defaultWallPlan(node))
 
-    const roomCenterPos = roomCenter(node)
     return (
       <group
         onClick={(e) => {
@@ -775,14 +796,17 @@ export function ModelNodeView({
             siblingIndex={node.furniture.length + i}
             ancestors={childAncestors}
             wallPlan={wallPlan}
-            parentCenter={roomCenterPos}
+            parentCenter={roomCenterPos!}
             planMode={planMode}
           />
         ))}
       </group>
     )
   }
-}
+})
+
+/** 整屋子房间的父中心（世界原点；模块级常量避免每帧新建对象破坏 memo 浅比较） */
+const ORIGIN_CENTER: Position = { x: 0, y: 0, z: 0 }
 
 /** 房屋线框盒：所有房间足迹并集 + 最高层高 */
 function houseBoundsFor(node: Parameters<typeof houseLevelsBounds>[0]): {
